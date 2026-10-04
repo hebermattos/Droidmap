@@ -56,18 +56,33 @@ final class ScanReport {
         report.put("checks", checks); report.put("identificationNotices",new JSONArray(notices));
         JSONArray devices=new JSONArray();
         for(Map.Entry<String,List<DeviceEvidence.Observation>> host:identified.entrySet()) {
-            JSONObject device=new JSONObject(); device.put("ip",host.getKey());
-            device.put("dnsHostname",DeviceEvidence.first(host.getValue(),"dnsHostname"));
-            device.put("reportedName",DeviceEvidence.first(host.getValue(),"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
-            device.put("reportedMac",DeviceEvidence.first(host.getValue(),"reportedMac"));
-            device.put("reportedManufacturer",DeviceEvidence.first(host.getValue(),"manufacturer"));
-            device.put("reportedModel",DeviceEvidence.first(host.getValue(),"modelName","modelHint"));
-            device.put("probableType",DeviceEvidence.probableType(host.getValue())); DeviceProfile profile=new DeviceProfile(host.getValue()); device.put("identityConfidence",profile.confidence);
-            device.put("suggestedManufacturer",profile.manufacturer); device.put("identificationReasons",new JSONArray(profile.reasons));
-            JSONArray observations=new JSONArray();
-            for(DeviceEvidence.Observation item:host.getValue()) { JSONObject entry=new JSONObject(); entry.put("source",item.source); entry.put("field",item.field); entry.put("value",item.value); observations.put(entry); }
-            device.put("evidence",observations); devices.put(device);
+            devices.put(device(host.getKey(),host.getValue()));
         }
         report.put("devices",devices); return report.toString(2);
+    }
+    private static JSONObject device(String ip,List<DeviceEvidence.Observation> info) throws Exception {
+            JSONObject device=new JSONObject(); device.put("ip",ip);
+            device.put("dnsHostname",DeviceEvidence.first(info,"dnsHostname"));
+            device.put("reportedName",DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
+            device.put("reportedMac",DeviceEvidence.first(info,"reportedMac"));
+            device.put("reportedManufacturer",DeviceEvidence.first(info,"manufacturer"));
+            device.put("reportedModel",DeviceEvidence.first(info,"modelName","modelHint"));
+            device.put("probableType",DeviceEvidence.probableType(info)); DeviceProfile profile=new DeviceProfile(info); device.put("identityConfidence",profile.confidence);
+            device.put("suggestedManufacturer",profile.manufacturer); device.put("identificationReasons",new JSONArray(profile.reasons));
+            JSONArray observations=new JSONArray();
+            for(DeviceEvidence.Observation item:info) { JSONObject entry=new JSONObject(); entry.put("source",item.source); entry.put("field",item.field); entry.put("value",item.value); observations.put(entry); }
+            device.put("evidence",observations);
+            return device;
+    }
+    static String preview(String target,List<TcpScanner.Result> checks,List<TcpScanner.Result> extra,Map<String,List<DeviceEvidence.Observation>> identified) throws Exception {
+        Map<String,List<DeviceEvidence.Observation>> devices=new LinkedHashMap<>(identified);
+        JSONArray open=new JSONArray();
+        for(List<TcpScanner.Result> source:Arrays.asList(checks,extra)) for(TcpScanner.Result check:source) {
+            if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) devices.putIfAbsent(check.host,Collections.emptyList());
+            if(check.state==TcpScanner.State.OPEN) open.put(new JSONObject().put("ip",check.host).put("port",check.port).put("state","OPEN"));
+        }
+        JSONArray inventory=new JSONArray();
+        for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:devices.entrySet()) inventory.put(device(entry.getKey(),entry.getValue()));
+        return new JSONObject().put("partial",true).put("target",target).put("checks",open).put("devices",inventory).toString();
     }
 }

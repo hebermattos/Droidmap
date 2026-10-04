@@ -28,6 +28,9 @@ public final class ScanService extends Service {
     private boolean finishing;
     private long runId;
     private long lastNotification;
+    private int acceptedPreview;
+    private final AtomicInteger previewVersion=new AtomicInteger();
+    private final AtomicLong lastPreview=new AtomicLong();
 
     @Override public void onCreate() {
         super.onCreate(); store=new LatestScanStore(new File(getFilesDir(),"latest-scan.json"));
@@ -49,10 +52,10 @@ public final class ScanService extends Service {
         final ScanPlan plan;
         try {
             if(target==null) throw new IllegalArgumentException("Missing scan target");
-            plan=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",500),
+            plan=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
-        runId=System.currentTimeMillis(); finishing=false;
+        runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
             Notification notification=notification(latest);
@@ -61,6 +64,7 @@ public final class ScanService extends Service {
             scanner=new TcpScanner();
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
             identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
+            identifier.startDiscovery();
             discovery=new NsdDiscovery(this,evidence,plan.mode); discovery.start();
             TcpScanner tcp=scanner; DeviceIdentifier identity=identifier; NsdDiscovery nsd=discovery;
             long started=runId;
@@ -78,13 +82,18 @@ public final class ScanService extends Service {
             // Write the interruption marker before any network checks.
             store.save(latest);
             AtomicInteger completed=new AtomicInteger(); AtomicLong lastUpdate=new AtomicLong();
+            Queue<TcpScanner.Result> liveChecks=new ConcurrentLinkedQueue<>();
+            identity.setProgressListener(host -> preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
             List<TcpScanner.Result> results=tcp.scan(plan,(result,count,total) -> {
+                if(result.state==TcpScanner.State.OPEN || result.state==TcpScanner.State.CLOSED) liveChecks.add(result);
+                preview(target,tcp,evidence,liveChecks,Collections.emptyList(),false);
                 completed.accumulateAndGet(count,Math::max); long now=SystemClock.elapsedRealtime(),previous=lastUpdate.get();
                 if(now-previous>=250 && lastUpdate.compareAndSet(previous,now)) main.post(() -> {
                     if(destroyed || scanner!=tcp || tcp.isCancelled() || finishing) return;
                     publish("Checked "+completed.get()+" / "+total+" TCP connections",completed.get(),true);
                 });
             });
+            preview(target,tcp,evidence,liveChecks,Collections.emptyList(),true);
             main.post(() -> {if(!destroyed && scanner==tcp && !tcp.isCancelled()) publish("Identifying devices…",results.size(),true);});
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
             if(!tcp.isCancelled()) identity.identify(results);
@@ -130,9 +139,24 @@ public final class ScanService extends Service {
         try {store.save(failure);}catch(Exception ignored){}
         main.post(() -> finish(failure));
     }
+    private void preview(String target,TcpScanner tcp,DeviceEvidence evidence,Queue<TcpScanner.Result> checks,List<TcpScanner.Result> extra,boolean force) {
+        if(destroyed || tcp.isCancelled()) return;
+        long now=SystemClock.elapsedRealtime(),previous=lastPreview.get();
+        if(!force && (now-previous<1000 || !lastPreview.compareAndSet(previous,now))) return;
+        if(force) lastPreview.set(now);
+        int version=previewVersion.incrementAndGet();
+        try {
+            String json=ScanReport.preview(target,new ArrayList<>(checks),extra,evidence.snapshot());
+            main.post(() -> {
+                if(destroyed || scanner!=tcp || finishing || version<=acceptedPreview) return;
+                acceptedPreview=version; ScanSnapshot state=latest;
+                latest=new ScanSnapshot(runId,true,state.cancellable,state.done,state.total,state.target,state.message,json,"");
+            });
+        } catch(Exception ignored) { /* The final full report still validates and reports serialization errors. */ }
+    }
     private void publish(String message,int done,boolean cancellable) {
         ScanSnapshot previous=latest;
-        latest=new ScanSnapshot(runId,true,cancellable,done,previous.total,previous.target,message,"","");
+        latest=new ScanSnapshot(runId,true,cancellable,done,previous.total,previous.target,message,previous.report,previous.text);
         long now=SystemClock.elapsedRealtime();
         if(now-lastNotification>=1000 || !cancellable) {lastNotification=now; notifyState(latest);}
     }

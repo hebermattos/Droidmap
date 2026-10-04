@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.7.0 supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.7.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Features
 
@@ -37,12 +37,12 @@ The Android CI workflow can also be run manually on the feature branch. It build
 
 1. Connect your phone to the local Wi-Fi network.
 2. Enter a private IP address or network, or open **Options → Use Wi-Fi network**.
-3. Open **Options → Scan settings** to choose Fast/Complete mode, TCP ports, timeout and adaptive scanning. Tap **Save** to apply; settings persist between launches. Cancel discards edits.
+3. Open **Options → Scan settings** to choose Fast/Complete mode, TCP ports, timeout and adaptive scanning. The default timeout is **200 ms**; a one-time upgrade changes a saved legacy 500 ms value to 200 ms, preserving other customized values. Later explicit edits, including 500 ms, persist. Tap **Save** to apply; Cancel discards edits. Increase the timeout if your Wi-Fi or devices respond slowly.
 4. Tap **Start scan**. The same button becomes **Cancel scan** while running; cancellation retains partial results.
 5. Tap a device card to expand or collapse details directly in the list. Details group open ports, identity, identification reasons and evidence by source; values can be selected and copied. Expanded devices stay expanded when rotating a saved result. Open **Options → Full report** for the detailed scan and history comparison.
 6. Use **Options → History**, **Reanalyze a device** or **Export JSON**. Export uses Android's document picker and requires no broad storage permission.
 
-The main screen keeps the target, settings summary and one scan button above the results. Options that cannot run during a scan are disabled. The black background and white text are preserved.
+Devices and confirmed open ports appear during scanning; identification details update progressively, labeled as devices found so far until the full report is complete. Previews are limited to approximately one update per second and do not replace the durable final report. The main screen keeps the target, settings summary and one scan button above the results. Options that cannot run during a scan are disabled. The black background and white text are preserved.
 
 ## Background scans
 
@@ -78,7 +78,7 @@ The identification suite additionally tests target filtering, evidence bounds/de
 ## Identification details and limits
 
 - mDNS uses Android NSD to browse HTTP/HTTPS, Google Cast, AirPlay/RAOP, IPP/IPPS/printers, SMB, workstations, Android TV and ADB TLS services. It resolves serially for compatibility and stops after six seconds in Fast mode or twelve in Complete mode. The identification phase waits for this bounded discovery window before taking its endpoint snapshot. Out-of-target resolved addresses are ignored. Service names are advertised labels, not guaranteed hostnames.
-- SSDP listens for at most three seconds in Fast mode or five seconds in Complete mode / 512 packets. UPnP descriptions are requested only from a literal HTTP address matching the reply sender. No redirects or external description hosts are followed, and entity-bearing XML is rejected. Reported fields include friendly name, manufacturer, model name/number, device type and UDN when present.
+- SSDP starts alongside TCP scanning and its completed receive window is reused by identification. It listens for at most three seconds in Fast mode or five seconds in Complete mode / 512 packets. UPnP descriptions are requested only from a literal HTTP address matching the reply sender. No redirects or external description hosts are followed, and entity-bearing XML is rejected. Reported fields include friendly name, manufacturer, model name/number, device type and UDN when present.
 - NetBIOS sends one node-status request per target with a 250 ms receive timeout and validates sender, transaction ID and record bounds. Names/workgroups and nonzero MACs are included when reported; this is not a universal MAC discovery method.
 - TCP fingerprint reads are capped at four per responsive host in Fast mode or eight in Complete mode. Passive banners are read from selected open ports 21/22/23. HTTP requests use selected open ports 80/8000/8080/8888 or verified nonstandard ports explicitly advertised as `_http._tcp` and collect page titles and server headers. HTTPS is not fingerprinted and self-signed TLS validation is not bypassed.
 - Identification uses eight workers, a twenty-second identification budget in Fast mode or sixty seconds in Complete mode, read deadlines and byte limits. Cancellation closes active sockets. Results retain partial-identification notices if the budget is reached. Discovery failures are best effort and do not discard TCP results.
@@ -114,10 +114,12 @@ Names appear as fallback reported names and as `dnsHostname` with DNS source evi
 
 ## Identification and adaptive scanning
 
+Identification prioritizes TCP responders and independently announced devices, then still checks silent targets for NetBIOS evidence. An indexed responder set avoids repeatedly traversing all TCP checks for each IP. SSDP has one bounded discovery worker, starts before TCP checks and is joined within the identification budget; cancellation closes its socket and interrupts its worker.
+
 - Eighteen mDNS service types cover HTTP, printing, SMB, Cast, AirPlay, Android TV, ADB, HomeKit, Spotify, DAAP, MQTT, VNC and scanners. Discovery rotates batches of at most six active requests for older Android limits, within the mode window. TXT fields retain advertised names, model hints, manufacturer, UUID, OS version, location and printer resource paths.
 - Advertised plaintext IPP endpoints, or selected open TCP/631 endpoints with no conflicting advertisement, receive only **Get-Printer-Attributes**. No print jobs or configuration changes are sent. IPPS is never queried with plaintext. Responses require HTTP 200/application-ipp, matching request ID, successful IPP status, complete bounded attributes and valid HTTP framing. Printer resource paths are constrained to the target device.
 - Manufacturer suggestions use explicit brand tokens in service metadata/banners. Conflicting reported manufacturers suppress suggestions. Repeated matching identity values across protocol families are labeled **Corroborated, unverified**; this is agreement, not authenticated identity. DNS names alone do not infer a manufacturer or device type. JSON schema 4 includes reasons, suggestions and the adaptive setting.
-- Optional **Adaptive scan** first probes one selected port on every target, then prioritizes responders. It starts at 16 concurrent probes, adjusts between 4 and 32 using 32-result windows, and may increase subsequent timeouts using observed response latency, capped at 3000 ms. It never shortens the entered timeout or skips any selected host/port. Disable it for fixed concurrency/timeouts. Complete-mode retries remain bounded as before.
+- Optional **Adaptive scan** first probes one selected port on every target, then prioritizes responders. It starts at 32 concurrent probes, adjusts between 8 and 32 using 32-result windows based on connection errors or latency of confirmed responses (silence alone does not reduce concurrency), and may increase subsequent timeouts using observed response latency, capped at 3000 ms. It never shortens the entered timeout or skips any selected host/port. Disable it for fixed concurrency/timeouts. Complete-mode retries remain bounded as before.
 
 ## Reanalysis and history
 

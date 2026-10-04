@@ -24,9 +24,10 @@ public final class MainActivity extends Activity {
     private Button start;
     private TextView settingsSummary;
     private LinearLayout deviceList;
+    private ScrollView resultsScroll;
     private final Set<String> expandedDevices=new HashSet<>();
     private String selectedPorts=ScanPlan.FAST_PORTS;
-    private int timeoutMs=500;
+    private int timeoutMs=200;
     private ScanPlan.Mode selectedMode=ScanPlan.Mode.FAST;
     private boolean adaptiveScan=true;
     private String pendingExport="";
@@ -68,7 +69,11 @@ public final class MainActivity extends Activity {
         });
         android.content.SharedPreferences preferences=getPreferences(MODE_PRIVATE);
         selectedPorts=preferences.getString("ports",ScanPlan.FAST_PORTS);
-        timeoutMs=preferences.getInt("timeout",500);
+        timeoutMs=preferences.getInt("timeout",200);
+        if(!preferences.getBoolean("timeoutDefault200",false)) {
+            if(timeoutMs==500) timeoutMs=200;
+            preferences.edit().putInt("timeout",timeoutMs).putBoolean("timeoutDefault200",true).apply();
+        }
         selectedMode=preferences.getBoolean("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST;
         adaptiveScan=preferences.getBoolean("adaptive",true);
         LinearLayout header=new LinearLayout(this); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -90,7 +95,7 @@ public final class MainActivity extends Activity {
         });
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setVisibility(android.view.View.GONE); layout.addView(progress);
         status=new TextView(this); status.setText("Ready"); status.setPadding(0,pad/2,0,pad/2); status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE); layout.addView(status);
-        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
+        ScrollView scroll=new ScrollView(this); resultsScroll=scroll; scroll.setFillViewport(true);
         deviceList=new LinearLayout(this); deviceList.setOrientation(LinearLayout.VERTICAL); scroll.addView(deviceList);
         layout.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); setContentView(layout);
         if(state!=null) {
@@ -195,11 +200,12 @@ public final class MainActivity extends Activity {
         new android.app.AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Close",null).show();
     }
     private void renderDevices() {
+        int scrollPosition=resultsScroll.getScrollY();
         deviceList.removeAllViews(); lastDevices=new ArrayList<>();
         if(report.isEmpty()) { TextView empty=new TextView(this); empty.setText("Discover devices on your local network.\nUse Options to adjust the scan."); deviceList.addView(empty); return; }
         try {
             JSONObject data=new JSONObject(report); JSONArray devices=data.getJSONArray("devices");
-            TextView heading=new TextView(this); heading.setText(devices.length()+" devices • "+data.optString("target")); heading.setTextSize(18); deviceList.addView(heading);
+            TextView heading=new TextView(this); heading.setText(devices.length()+(data.optBoolean("partial")?" devices so far • ":" devices • ")+data.optString("target")); heading.setTextSize(18); deviceList.addView(heading);
             if(devices.length()==0) { TextView empty=new TextView(this); empty.setText("No devices identified. See Full report in Options for scan details."); deviceList.addView(empty); }
             Map<String,Set<Integer>> portsByIp=new HashMap<>();
             for(String key:new String[]{"checks","advertisedEndpointChecks"}) {
@@ -213,6 +219,7 @@ public final class MainActivity extends Activity {
             }
             TextView footer=new TextView(this); footer.setText("Tap a device to expand or collapse details.\nFull report and JSON export are in Options."); deviceList.addView(footer);
         } catch(Exception e) { TextView fallback=new TextView(this); fallback.setText("Summary unavailable. Open Full report in Options."); deviceList.addView(fallback); }
+        resultsScroll.post(() -> resultsScroll.scrollTo(0,scrollPosition));
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private String portList(Set<Integer> ports,int limit) {

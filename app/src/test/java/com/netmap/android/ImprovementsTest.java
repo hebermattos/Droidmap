@@ -47,8 +47,8 @@ public class ImprovementsTest {
         evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"));evidence.add("192.168.1.1","DNS PTR","dnsHostname","Samsung-TV.lan");assertEquals("",new DeviceProfile(evidence.observations("192.168.1.1")).manufacturer);
     }
     @Test public void adaptivePolicyLimitsAndCompleteInventory() throws Exception {
-        AdaptivePolicy policy=new AdaptivePolicy(500);for(int i=0;i<32;i++) policy.observe(TcpScanner.State.NO_RESPONSE,500);assertEquals(8,policy.concurrency());assertEquals(500,policy.timeout());
-        for(int i=0;i<64;i++) policy.observe(TcpScanner.State.OPEN,10);assertEquals(16,policy.concurrency());
+        AdaptivePolicy policy=new AdaptivePolicy(500);for(int i=0;i<32;i++) policy.observe(TcpScanner.State.NO_RESPONSE,500);assertEquals(32,policy.concurrency());assertEquals(500,policy.timeout());
+        for(int i=0;i<64;i++) policy.observe(TcpScanner.State.OPEN,10);assertEquals(32,policy.concurrency());
         policy.observe(TcpScanner.State.OPEN,10000);assertEquals(3000,policy.timeout());
         AtomicInteger active=new AtomicInteger(),maximum=new AtomicInteger(),count=new AtomicInteger();
         TcpScanner scanner=new TcpScanner((host,port,timeout)-> {int n=active.incrementAndGet();maximum.accumulateAndGet(n,Math::max);try{Thread.sleep(2);}catch(InterruptedException e){Thread.currentThread().interrupt();}finally{active.decrementAndGet();}count.incrementAndGet();return host.endsWith("1")?TcpScanner.State.OPEN:TcpScanner.State.NO_RESPONSE;});
