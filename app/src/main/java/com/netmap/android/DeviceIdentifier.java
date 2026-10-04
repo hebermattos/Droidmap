@@ -23,6 +23,28 @@ public final class DeviceIdentifier {
     private final List<TcpScanner.Result> endpointChecks=Collections.synchronizedList(new ArrayList<>());
     private Map<String,List<DeviceEvidence.Endpoint>> advertised=Collections.emptyMap();
     private final Map<String,TcpScanner.Result> initialChecks=new HashMap<>();
+    private final Set<String> respondingHosts=new HashSet<>();
+    private final Runnable discoveryTask;
+    private ExecutorService discoveryWorker;
+    private Future<?> discoveryFuture;
+    private volatile java.util.function.Consumer<String> progressListener;
+    public void setProgressListener(java.util.function.Consumer<String> listener) { progressListener=listener; }
+    public synchronized void startDiscovery() {
+        if(discoveryFuture!=null || cancelled.get()) return;
+        discoveryWorker=Executors.newSingleThreadExecutor();
+        ExecutorService executor=discoveryWorker;
+        discoveryFuture=executor.submit(() -> {try {discoveryTask.run();} finally {executor.shutdown();}});
+    }
+    boolean awaitDiscovery(long until) throws InterruptedException {
+        startDiscovery(); Future<?> future;
+        synchronized(this) {future=discoveryFuture;}
+        if(future==null) return false;
+        try {future.get(Math.max(1,until-System.nanoTime()),TimeUnit.NANOSECONDS); return !cancelled.get();}
+        catch(CancellationException e) {return false;}
+        catch(TimeoutException e) {timedOut=true; cancel(); return false;}
+        catch(ExecutionException e) {notices.add("SSDP discovery unavailable: "+e.getCause().getClass().getSimpleName()); return !cancelled.get();}
+        catch(InterruptedException e) {cancel(); throw e;}
+    }
     public List<TcpScanner.Result> endpointChecks() { synchronized(endpointChecks) { return new ArrayList<>(endpointChecks); } }
     private final Set<String> hosts;
     private final Set<Closeable> active = ConcurrentHashMap.newKeySet();
@@ -31,12 +53,18 @@ public final class DeviceIdentifier {
     private volatile long deadline=Long.MAX_VALUE;
     private final List<String> notices = Collections.synchronizedList(new ArrayList<>());
     public DeviceIdentifier(ScanPlan plan,DeviceEvidence evidence) { this(plan,evidence,null); }
-    DeviceIdentifier(ScanPlan plan,DeviceEvidence evidence,TcpScanner.Connector endpointConnector) {
+    DeviceIdentifier(ScanPlan plan,DeviceEvidence evidence,TcpScanner.Connector endpointConnector) {this(plan,evidence,endpointConnector,null);}
+    DeviceIdentifier(ScanPlan plan,DeviceEvidence evidence,TcpScanner.Connector endpointConnector,Runnable discoveryTask) {
+        this.discoveryTask=discoveryTask==null?this::discoverSsdp:discoveryTask;
         this.plan=plan; this.hosts=new HashSet<>(plan.hosts); this.evidence=evidence;
         this.endpointConnector=endpointConnector==null?endpointScanner::probe:endpointConnector;
     }
     public void cancel() {
         cancelled.set(true); endpointScanner.cancel();
+        synchronized(this) {
+            if(discoveryFuture!=null) discoveryFuture.cancel(true);
+            if(discoveryWorker!=null) discoveryWorker.shutdownNow();
+        }
         if(hostnameLookup!=null) hostnameLookup.cancel();
         for (Closeable socket : active) try { socket.close(); } catch (IOException ignored) { }
     }
@@ -46,15 +74,24 @@ public final class DeviceIdentifier {
     public void identify(List<TcpScanner.Result> checks) throws InterruptedException {
         deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(plan.mode.identificationSeconds);
         if (cancelled.get()) return;
-        discoverSsdp();
+        if(!awaitDiscovery(deadline)) return;
         advertised=evidence.endpoints();
-        for(TcpScanner.Result check:checks) initialChecks.put(check.host+":"+check.port,check);
+        for(TcpScanner.Result check:checks) {
+            initialChecks.put(check.host+":"+check.port,check);
+            if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) respondingHosts.add(check.host);
+        }
         ExecutorService workers=Executors.newFixedThreadPool(8);
         try {
             Map<String,List<Integer>> open=new LinkedHashMap<>();
             for (TcpScanner.Result check : checks) if (check.state==TcpScanner.State.OPEN) open.computeIfAbsent(check.host,k->new ArrayList<>()).add(check.port);
-            for(String host:hosts) open.computeIfAbsent(host,k->new ArrayList<>());
-            for (Map.Entry<String,List<Integer>> host : open.entrySet()) workers.submit(() -> fingerprint(host.getKey(),host.getValue()));
+            for(String host:identificationOrder(checks)) {
+                List<Integer> ports=open.getOrDefault(host,Collections.emptyList());
+                workers.submit(() -> {
+                    fingerprint(host,ports);
+                    java.util.function.Consumer<String> listener=progressListener;
+                    if(listener!=null && !cancelled.get()) listener.accept(host);
+                });
+            }
             workers.shutdown();
             while (!workers.awaitTermination(100,TimeUnit.MILLISECONDS)) {
                 if (stopped()) { timedOut=!cancelled.get() && System.nanoTime()>=deadline; cancel(); workers.shutdownNow(); }
@@ -62,6 +99,13 @@ public final class DeviceIdentifier {
             if(!cancelled.get() && System.nanoTime()>=deadline) timedOut=true;
         } catch (InterruptedException e) { cancel(); throw e;
         } finally { workers.shutdownNow(); cancel(); }
+    }
+    List<String> identificationOrder(List<TcpScanner.Result> checks) {
+        Set<String> responders=new HashSet<>();
+        for(TcpScanner.Result check:checks) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) responders.add(check.host);
+        List<String> ordered=new ArrayList<>(plan.hosts);
+        ordered.sort(Comparator.comparingInt(host -> responders.contains(host)||evidence.hasObservations(host)?0:1));
+        return ordered;
     }
     private void discoverSsdp() {
         Map<String,String> locations=new LinkedHashMap<>();
@@ -106,9 +150,7 @@ public final class DeviceIdentifier {
         netbios(host);
         // PTR records may be cached: query only responders or independently announced devices.
         boolean responding=!ports.isEmpty() || evidence.hasObservations(host);
-        if(!responding) for(TcpScanner.Result check:initialChecks.values()) {
-            if(check.host.equals(host) && check.state==TcpScanner.State.CLOSED) { responding=true; break; }
-        }
+        responding=responding || respondingHosts.contains(host);
         if(responding && hostnameLookup!=null && !stopped()) hostnameLookup.lookup(host,deadline,this::stopped);
         String location=descriptionLocations.get(host);
         if (location!=null) description(host,location);
