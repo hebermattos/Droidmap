@@ -4,6 +4,8 @@ A standalone Android app for private IPv4 device discovery, TCP connect scans an
 
 ## Features
 
+- A black-and-white radar/network launcher icon, with adaptive masks on Android 8+ and themed monochrome icons on Android 13+.
+
 - Scan a single private IPv4 address or a /24–/32 network.
 - Suggest the connected Wi-Fi IPv4 network (larger subnets are reduced to the local /24).
 - Edit ports as comma-separated values or ranges, and set a 100–3000 ms connection timeout.
