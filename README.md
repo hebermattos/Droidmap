@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.6.1 adds a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.7.0 supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Features
 
@@ -43,6 +43,14 @@ The Android CI workflow can also be run manually on the feature branch. It build
 6. Use **Options → History**, **Reanalyze a device** or **Export JSON**. Export uses Android's document picker and requires no broad storage permission.
 
 The main screen keeps the target, settings summary and one scan button above the results. Options that cannot run during a scan are disabled. The black background and white text are preserved.
+
+## Background scans
+
+Start a scan while the app is visible. A `connectedDevice` foreground service owns TCP scanning, discovery and identification, so switching apps, rotating the screen or dismissing the activity from Recents does not cancel it. The notification shows progress, opens the app and offers **Cancel**. Only one scan runs at a time. Notifications are requested on Android 13+; denying permission still allows the service to run, but hides drawer progress/cancellation (in-app controls remain available).
+
+Completed and normally cancelled scans save their full JSON and formatted report atomically in private app storage. Returning to the app restores the current progress or latest result, including reports too large for an activity Bundle. The latest-result file is bounded to 32 MiB; history remains separately bounded. If saving fails, the app reports it and keeps the current result in memory for export.
+
+The service does not restart scans after process termination, force-stop or reboot. A persisted running marker is restored as interrupted, with no completed report. Force-stop and manufacturer battery restrictions can still interrupt execution; screen-off/Doze networking is not guaranteed. No battery-optimization exemption or indefinite wake lock is requested. The scan begins from a visible user action, never automatically from boot or background scheduling.
 
 ## What the results mean
 

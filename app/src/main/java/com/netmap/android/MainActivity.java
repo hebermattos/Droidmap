@@ -8,7 +8,6 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.text.InputType;
 import android.widget.*;
 import org.json.JSONArray;
@@ -19,8 +18,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class MainActivity extends Activity {
     private EditText target;
@@ -33,13 +30,23 @@ public final class MainActivity extends Activity {
     private ScanPlan.Mode selectedMode=ScanPlan.Mode.FAST;
     private boolean adaptiveScan=true;
     private String pendingExport="";
+    private long pendingExportRunId;
     private ScanHistory history;
     private List<String> lastDevices=new ArrayList<>();
     private TextView status;
     private ProgressBar progress;
-    private TcpScanner scanner;
-    private DeviceIdentifier identifier;
-    private NsdDiscovery discovery;
+    private boolean scanRunning, startingScan;
+    private ScanSnapshot launchPrevious;
+    private Intent pendingScan;
+    private ScanSnapshot displayedSnapshot;
+    private final android.os.Handler uiHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable refreshScan=new Runnable() {
+        public void run() {
+            ScanSnapshot snapshot=ScanService.snapshot();
+            if(snapshot!=null && snapshot!=displayedSnapshot) applySnapshot(snapshot);
+            uiHandler.postDelayed(this,500);
+        }
+    };
     private final ExecutorService background = Executors.newSingleThreadExecutor();
     private volatile boolean destroyed;
     private String report = "";
@@ -74,9 +81,10 @@ public final class MainActivity extends Activity {
         layout.addView(settingsSummary); updateSettingsSummary();
         start=new Button(this); start.setText("Start scan"); layout.addView(start);
         start.setOnClickListener(v -> {
-            if(scanner==null) begin();
+            if(!scanRunning) begin();
             else {
-                scanner.cancel(); if(identifier!=null) identifier.cancel(); if(discovery!=null) discovery.stop();
+                ScanSnapshot snapshot=ScanService.snapshot();
+                if(snapshot!=null && snapshot.running) startService(new Intent(this,ScanService.class).setAction(ScanService.CANCEL).putExtra("runId",snapshot.runId));
                 start.setEnabled(false); status.setText("Cancelling…");
             }
         });
@@ -86,20 +94,43 @@ public final class MainActivity extends Activity {
         deviceList=new LinearLayout(this); deviceList.setOrientation(LinearLayout.VERTICAL); scroll.addView(deviceList);
         layout.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); setContentView(layout);
         if(state!=null) {
-            report=state.getString("report", ""); resultText=state.getString("results", "");
+            pendingScan=state.getParcelable("pendingScan");
             pendingExport=state.getString("pendingExport", "");
+            pendingExportRunId=state.getLong("pendingExportRunId",0);
             ArrayList<String> expanded=state.getStringArrayList("expandedDevices");
             if(expanded!=null) expandedDevices.addAll(expanded);
-            status.setText(state.getBoolean("running")?"Scan stopped after screen recreation. Start again to rescan.":"Ready");
+
         }
         renderDevices();
+        background.execute(() -> {
+            try {
+                ScanSnapshot saved=new LatestScanStore(new java.io.File(getFilesDir(),"latest-scan.json")).load();
+                runOnUiThread(() -> {
+                    if(destroyed) return;
+                    ScanSnapshot live=ScanService.snapshot(); applySnapshot(live==null?saved:live);
+                });
+            } catch(Exception e) { runOnUiThread(() -> {if(!destroyed && ScanService.snapshot()==null) status.setText("Saved result unavailable");}); }
+        });
+    }
+    @Override protected void onStart() { super.onStart(); uiHandler.post(refreshScan); }
+    @Override protected void onStop() { uiHandler.removeCallbacks(refreshScan); super.onStop(); }
+    private void applySnapshot(ScanSnapshot snapshot) {
+        if(startingScan && (snapshot==launchPrevious || ScanService.snapshot()==null)) return;
+        startingScan=false;
+        displayedSnapshot=snapshot; scanRunning=snapshot.running;
+        start.setText(scanRunning?"Cancel scan":"Start scan"); start.setEnabled(!scanRunning || snapshot.cancellable);
+        target.setEnabled(!scanRunning); progress.setVisibility(scanRunning?android.view.View.VISIBLE:android.view.View.GONE);
+        progress.setMax(snapshot.total); progress.setProgress(snapshot.done); status.setText(snapshot.message);
+        if(scanRunning) target.setText(snapshot.target);
+        if(!report.equals(snapshot.report)) { report=snapshot.report; resultText=snapshot.text; renderDevices(); }
+        else resultText=snapshot.text;
     }
     private void updateSettingsSummary() {
         int count=ScanPlan.parsePorts(selectedPorts).size();
         settingsSummary.setText((selectedMode==ScanPlan.Mode.FAST?"Fast":"Complete")+" • "+count+" ports • "+timeoutMs+" ms"+(adaptiveScan?" • Adaptive":""));
     }
     private void showOptions(android.view.View anchor) {
-        PopupMenu menu=new PopupMenu(this,anchor); boolean idle=scanner==null;
+        PopupMenu menu=new PopupMenu(this,anchor); boolean idle=!scanRunning;
         menu.getMenu().add(0,1,0,"Scan settings").setEnabled(idle);
         menu.getMenu().add(0,2,1,"Use Wi-Fi network").setEnabled(idle);
         menu.getMenu().add(0,3,2,"History").setEnabled(idle);
@@ -114,7 +145,7 @@ public final class MainActivity extends Activity {
                 case 4: chooseDevice(); break;
                 case 5: showText("Full report",resultText); break;
                 case 6:
-                    pendingExport=report;
+                    pendingExport=report; pendingExportRunId=displayedSnapshot==null?0:displayedSnapshot.runId;
                     Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
                     intent.putExtra(Intent.EXTRA_TITLE,"droidmap-scan.json"); startActivityForResult(intent,10); break;
                 default: return false;
@@ -123,7 +154,7 @@ public final class MainActivity extends Activity {
         }); menu.show();
     }
     private void showSettings() {
-        if(scanner!=null) return;
+        if(scanRunning) return;
         LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
         int pad=(int)(20*getResources().getDisplayMetrics().density); form.setPadding(pad,0,pad,0);
         TextView label=new TextView(this); label.setText("Scan mode"); form.addView(label);
@@ -260,20 +291,20 @@ public final class MainActivity extends Activity {
         return label.isEmpty()?"Observation":Character.toUpperCase(label.charAt(0))+label.substring(1);
     }
     private void chooseDevice() {
-        if(scanner!=null || lastDevices.isEmpty()) return;
+        if(scanRunning || lastDevices.isEmpty()) return;
         String[] ips=lastDevices.toArray(new String[0]);
         new android.app.AlertDialog.Builder(this).setTitle("Reanalyze a device")
             .setItems(ips,(dialog,index)-> {target.setText(ips[index]); selectedMode=ScanPlan.Mode.COMPLETE; selectedPorts=ScanPlan.COMPLETE_PORTS; saveSettings(); updateSettingsSummary(); begin();})
             .setNegativeButton("Cancel",null).show();
     }
     private void showHistory() {
-        if(scanner!=null) return;
+        if(scanRunning) return;
         background.execute(()-> {
             try {
                 JSONArray entries=history.load();String[] labels=new String[entries.length()];
                 for(int i=0;i<entries.length();i++) {JSONObject entry=entries.getJSONObject(i); labels[i]=new java.text.SimpleDateFormat("MM-dd HH:mm",Locale.US).format(new Date(entry.getLong("time")))+" • "+entry.getString("target");}
                 runOnUiThread(()-> {
-                    if(destroyed || scanner!=null) return;
+                    if(destroyed || scanRunning) return;
                     if(labels.length==0) {new android.app.AlertDialog.Builder(this).setMessage("No completed scans saved yet.").setPositiveButton("OK",null).show();return;}
                     new android.app.AlertDialog.Builder(this).setTitle("Recent scans")
                         .setItems(labels,(dialog,index)-> {try {new android.app.AlertDialog.Builder(this).setTitle("Scan summary").setMessage(ScanHistory.describe(entries.getJSONObject(index))).setPositiveButton("OK",null).show();}catch(Exception ignored){}})
@@ -302,166 +333,70 @@ public final class MainActivity extends Activity {
         status.setText("No private Wi-Fi IPv4 network found. Connect to Wi-Fi or enter a target manually.");
     }
     private void begin() {
-        final ScanPlan plan;
-        final String targetValue = target.getText().toString().trim();
-        try { plan = new ScanPlan(targetValue,selectedPorts,timeoutMs,selectedMode,adaptiveScan); }
-        catch (IllegalArgumentException e) { status.setText(e.getMessage()); return; }
+        String targetValue=target.getText().toString().trim();
+        try { new ScanPlan(targetValue,selectedPorts,timeoutMs,selectedMode,adaptiveScan); }
+        catch(IllegalArgumentException e) { target.setError(e.getMessage()); return; }
+        Intent request=new Intent(this,ScanService.class).setAction(ScanService.START)
+            .putExtra("target",targetValue).putExtra("ports",selectedPorts).putExtra("timeout",timeoutMs)
+            .putExtra("complete",selectedMode==ScanPlan.Mode.COMPLETE).putExtra("adaptive",adaptiveScan);
+        if(android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED
+            && !getPreferences(MODE_PRIVATE).getBoolean("notificationAsked",false)) {
+            pendingScan=request;
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},20); return;
+        }
+        launchScan(request);
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results) {
+        super.onRequestPermissionsResult(request,permissions,results);
+        if(request!=20) return;
+        getPreferences(MODE_PRIVATE).edit().putBoolean("notificationAsked",true).apply();
+        Intent scan=pendingScan; pendingScan=null;
+        if(scan!=null) launchScan(scan);
+        if(results.length==0 || results[0]!=android.content.pm.PackageManager.PERMISSION_GRANTED)
+            Toast.makeText(this,"Notifications are off. Scan progress and cancellation remain available in the app.",Toast.LENGTH_LONG).show();
+    }
+    private void launchScan(Intent request) {
         android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         if(keyboard!=null) keyboard.hideSoftInputFromWindow(target.getWindowToken(),0);
         target.clearFocus();
-        scanner = new TcpScanner(); final TcpScanner current = scanner;
-        final DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
-        final DeviceIdentifier identity=new DeviceIdentifier(plan,evidence); identifier=identity;
-        identity.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
-        final NsdDiscovery nsd=new NsdDiscovery(this,evidence,plan.mode); discovery=nsd; nsd.start();
-        report=""; resultText=""; deviceList.removeAllViews(); lastDevices.clear(); expandedDevices.clear();
-        start.setText("Cancel scan"); start.setEnabled(true); target.setEnabled(false); progress.setVisibility(android.view.View.VISIBLE);
-        int total = plan.hosts.size() * plan.ports.size(); progress.setMax(total); progress.setProgress(0);
-        status.setText("Scanning " + plan.hosts.size() + " addresses…");
-        final long started = System.currentTimeMillis();
-        AtomicLong lastUpdate = new AtomicLong(); AtomicInteger completed = new AtomicInteger();
-        background.execute(() -> {
-            try {
-                List<TcpScanner.Result> results = current.scan(plan, (result, count, max) -> {
-                    completed.accumulateAndGet(count, Math::max);
-                    long now = SystemClock.elapsedRealtime(); long previous = lastUpdate.get();
-                    if (now - previous >= 150 && lastUpdate.compareAndSet(previous, now)) runOnUiThread(() -> {
-                        if (destroyed || scanner != current || current.isCancelled()) return;
-                        int done = completed.get(); progress.setProgress(done); status.setText("Checked " + done + " / " + max + " TCP connections");
-                    });
-                });
-                runOnUiThread(() -> { if(!destroyed && !current.isCancelled()) status.setText("Identifying devices: mDNS, DNS PTR, SSDP and service information…"); });
-                if(!current.isCancelled()) nsd.awaitCompletion(current::isCancelled);
-                if(!current.isCancelled()) identity.identify(results);
-                runOnUiThread(() -> {
-                    nsd.stop();
-                    if(destroyed || scanner!=current) return;
-                    Map<String,List<DeviceEvidence.Observation>> identified=evidence.snapshot();
-                    for(TcpScanner.Result check:results) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) identified.computeIfAbsent(check.host,k->new ArrayList<>());
-                    List<String> notices=identity.notices(); notices.addAll(nsd.notices());
-                    if(identity.isTimedOut()) notices.add("Identification time budget reached; evidence is partial.");
-                    final boolean cancelled=current.isCancelled();
-                    background.execute(() -> {
-                        try {
-                            List<TcpScanner.Result> extra=identity.endpointChecks();
-                        List<TcpScanner.Result> displayChecks=new ArrayList<>(results);
-                        Map<String,Integer> index=new HashMap<>();
-                        for(int i=0;i<displayChecks.size();i++) index.put(displayChecks.get(i).host+":"+displayChecks.get(i).port,i);
-                        for(TcpScanner.Result check:extra) {
-                            String key=check.host+":"+check.port; Integer found=index.get(key);
-                            if(found==null) { index.put(key,displayChecks.size()); displayChecks.add(check); }
-                            else if(displayChecks.get(found).state==TcpScanner.State.NO_RESPONSE) displayChecks.set(found,check);
-                        }
-                        String text=describe(displayChecks,plan,cancelled,identified,notices,results.size(),extra.size());
-                            String rawJson=json(results,plan,targetValue,cancelled,started,identified,notices,extra);
-                            JSONObject parsed=new JSONObject(rawJson);
-                            String changes;
-                            try { changes=history.save(parsed,plan); } catch(Exception historyError) { changes="History unavailable: "+historyError.getClass().getSimpleName(); }
-                            parsed.put("historyComparison",changes);
-                            final String json=parsed.toString(2);
-                            final String display=text+"\nHistory comparison\n"+changes+"\n";
-                            runOnUiThread(() -> {
-                                if(destroyed || scanner!=current) return;
-                                report=json; resultText=display; renderDevices(); progress.setProgress(results.size());
-                                status.setText(cancelled?"Cancelled — partial results":"Scan completed"); finishScan();
-                            });
-                        } catch(Exception e) { runOnUiThread(() -> { if(!destroyed) { status.setText("Report failed: "+e.getMessage()); finishScan(); } }); }
-                    });
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> { if (!destroyed) { nsd.stop(); identity.cancel(); status.setText("Scan failed: " + e.getMessage()); finishScan(); } });
-            }
-        });
-    }
-    private void finishScan() { scanner=null; identifier=null; discovery=null; start.setEnabled(true); start.setText("Start scan"); target.setEnabled(true); progress.setVisibility(android.view.View.GONE); }
-    private String describe(List<TcpScanner.Result> results, ScanPlan plan, boolean cancelled, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,int initialCompleted,int extraCount) {
-        Map<String, List<Integer>> hosts = new LinkedHashMap<>(); int errors = 0, silent = 0, open = 0;
-        for (TcpScanner.Result result : results) {
-            if (result.state == TcpScanner.State.OPEN || result.state == TcpScanner.State.CLOSED) hosts.computeIfAbsent(result.host, k -> new ArrayList<>());
-            if (result.state == TcpScanner.State.OPEN) { hosts.get(result.host).add(result.port); open++; }
-            if (result.state == TcpScanner.State.ERROR) errors++;
-            if (result.state == TcpScanner.State.NO_RESPONSE) silent++;
-        }
-        for(String ip:identified.keySet()) hosts.computeIfAbsent(ip,k->new ArrayList<>());
-        StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, List<Integer>> host : hosts.entrySet()) {
-            text.append(host.getKey()).append("\n");
-            List<DeviceEvidence.Observation> info=identified.getOrDefault(host.getKey(),Collections.emptyList());
-            String name=DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle");
-            String maker=DeviceEvidence.first(info,"manufacturer"), model=DeviceEvidence.first(info,"modelName","modelHint");
-            text.append("  Name (reported): ").append(name.isEmpty()?"Unknown":name).append("\n");
-            if(!maker.isEmpty()) text.append("  Manufacturer (reported): ").append(maker).append("\n");
-            String mac=DeviceEvidence.first(info,"reportedMac");
-            if(!mac.isEmpty()) text.append("  MAC (reported via NetBIOS): ").append(mac).append("\n");
-            if(!model.isEmpty()) text.append("  Model (reported): ").append(model).append("\n");
-            DeviceProfile profile=new DeviceProfile(info);
-            if(!profile.manufacturer.isEmpty() && maker.isEmpty()) text.append("  Manufacturer (suggested): ").append(profile.manufacturer).append("\n");
-            text.append("  Identification: ").append(profile.confidence).append("\n");
-            for(String reason:profile.reasons) text.append("  Evidence: ").append(reason).append("\n");
-            text.append("  Type (probable): ").append(DeviceEvidence.probableType(info)).append("\n");
-            for(DeviceEvidence.Observation item:info) text.append("  [").append(item.source).append("] ").append(item.field).append(": ").append(item.value).append("\n");
-            if (host.getValue().isEmpty()) text.append("  No selected TCP ports open.\n");
-            for (int port : host.getValue()) text.append("  ").append(port).append("/tcp OPEN\n");
-            text.append("\n");
-        }
-        if (hosts.isEmpty()) text.append("No responding devices detected.\n\n");
-        for(String notice:notices) text.append("Notice: ").append(notice).append("\n");
-        return text.append("Summary\nResponding devices: ").append(hosts.size()).append(" / ").append(plan.hosts.size())
-            .append("\nOpen ports: ").append(open).append("\nNo response: ").append(silent).append("\nConnection errors: ").append(errors)
-            .append("\nMode: ").append(plan.mode).append("\nAdvertised endpoint checks: ").append(extraCount).append("\nSelected-port checks: ").append(initialCompleted).append(" / ").append(plan.hosts.size() * plan.ports.size())
-            .append(cancelled ? "\nPartial scan.\n" : "\n")
-            .append("\nNo response can mean filtering, timeout or an offline device. Names and models are self-reported; probable types are inferred from advertised services. An open port does not establish a vulnerability.").toString();
-    }
-    private String json(List<TcpScanner.Result> results, ScanPlan plan, String target, boolean cancelled, long started, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,List<TcpScanner.Result> endpointChecks) throws Exception {
-        JSONObject report = new JSONObject(); report.put("schemaVersion", 4); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
-        report.put("startedAtEpochMs", started); report.put("finishedAtEpochMs", System.currentTimeMillis());
-        report.put("cancelled", cancelled); report.put("timeoutMs", plan.timeoutMs); report.put("ports", new JSONArray(plan.ports));
-        report.put("plannedChecks", plan.hosts.size() * plan.ports.size()); report.put("completedChecks", results.size());
-        JSONArray checks = new JSONArray();
-        for (TcpScanner.Result result : results) { JSONObject check = new JSONObject(); check.put("ip", result.host); check.put("port", result.port); check.put("protocol", "tcp"); check.put("state", result.state.name()); check.put("attempts",result.attempts); check.put("finalTimeoutMs",result.timeoutMs); checks.put(check); }
-        JSONArray extraChecks=new JSONArray();
-        for(TcpScanner.Result result:endpointChecks) { JSONObject entry=new JSONObject(); entry.put("ip",result.host); entry.put("port",result.port); entry.put("protocol","tcp"); entry.put("state",result.state.name()); entry.put("attempts",result.attempts); entry.put("finalTimeoutMs",result.timeoutMs); extraChecks.put(entry); }
-        report.put("advertisedEndpointChecks",extraChecks);
-        report.put("checks", checks); report.put("identificationNotices",new JSONArray(notices));
-        JSONArray devices=new JSONArray();
-        for(Map.Entry<String,List<DeviceEvidence.Observation>> host:identified.entrySet()) {
-            JSONObject device=new JSONObject(); device.put("ip",host.getKey());
-            device.put("dnsHostname",DeviceEvidence.first(host.getValue(),"dnsHostname"));
-            device.put("reportedName",DeviceEvidence.first(host.getValue(),"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
-            device.put("reportedMac",DeviceEvidence.first(host.getValue(),"reportedMac"));
-            device.put("reportedManufacturer",DeviceEvidence.first(host.getValue(),"manufacturer"));
-            device.put("reportedModel",DeviceEvidence.first(host.getValue(),"modelName","modelHint"));
-            device.put("probableType",DeviceEvidence.probableType(host.getValue())); DeviceProfile profile=new DeviceProfile(host.getValue()); device.put("identityConfidence",profile.confidence);
-            device.put("suggestedManufacturer",profile.manufacturer); device.put("identificationReasons",new JSONArray(profile.reasons));
-            JSONArray observations=new JSONArray();
-            for(DeviceEvidence.Observation item:host.getValue()) { JSONObject entry=new JSONObject(); entry.put("source",item.source); entry.put("field",item.field); entry.put("value",item.value); observations.put(entry); }
-            device.put("evidence",observations); devices.put(device);
-        }
-        report.put("devices",devices); return report.toString(2);
+        try {
+            launchPrevious=ScanService.snapshot(); displayedSnapshot=launchPrevious; startingScan=true;
+            startForegroundService(request);
+            scanRunning=true; expandedDevices.clear(); report=""; resultText=""; deviceList.removeAllViews(); lastDevices.clear();
+            start.setText("Cancel scan"); start.setEnabled(false); target.setEnabled(false); status.setText("Starting scan…");
+        } catch(RuntimeException e) { startingScan=false; scanRunning=false; start.setText("Start scan"); start.setEnabled(true); target.setEnabled(true); status.setText("Unable to start scan: "+e.getMessage()); }
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if(request!=10) return;
-        if(result!=RESULT_OK || data==null || data.getData()==null) { pendingExport=""; return; }
-        final android.net.Uri uri = data.getData(); final String snapshot=pendingExport; pendingExport="";
-        if(snapshot.isEmpty()) { status.setText("Report no longer available. Run a scan and export again."); return; }
+        if(result!=RESULT_OK || data==null || data.getData()==null) { pendingExport=""; pendingExportRunId=0; return; }
+        final android.net.Uri uri=data.getData(); final String snapshot=pendingExport; final long exportId=pendingExportRunId;
+        pendingExport=""; pendingExportRunId=0;
         background.execute(() -> {
-            try (OutputStream stream = getContentResolver().openOutputStream(uri, "wt")) {
-                if (stream == null) throw new java.io.IOException("Unable to open destination");
-                stream.write(snapshot.getBytes(StandardCharsets.UTF_8));
-                runOnUiThread(() -> { if (!destroyed) status.setText("JSON report saved"); });
-            } catch (Exception e) { runOnUiThread(() -> { if (!destroyed) status.setText("Export failed: " + e.getMessage()); }); }
+            try {
+                String payload=snapshot;
+                if(payload.isEmpty()) {
+                    ScanSnapshot saved=ScanService.snapshot();
+                    if(saved==null || saved.runId!=exportId) saved=new LatestScanStore(new java.io.File(getFilesDir(),"latest-scan.json")).load();
+                    if(saved.runId!=exportId || saved.report.isEmpty()) throw new java.io.IOException("Export snapshot no longer available");
+                    payload=saved.report;
+                }
+                try(OutputStream stream=getContentResolver().openOutputStream(uri,"wt")) {
+                    if(stream==null) throw new java.io.IOException("Unable to open destination");
+                    stream.write(payload.getBytes(StandardCharsets.UTF_8));
+                }
+                runOnUiThread(() -> {if(!destroyed) status.setText("JSON report saved");});
+            } catch(Exception e) {runOnUiThread(() -> {if(!destroyed) status.setText("Export failed: "+e.getMessage());});}
         });
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putStringArrayList("expandedDevices",new ArrayList<>(expandedDevices));
-        // Bound Bundle size: large reports must be exported before rotating.
-        if (report.length() < 100000) state.putString("report", report);
+        if(pendingScan!=null) state.putParcelable("pendingScan",pendingScan);
         if(pendingExport.length()<100000) state.putString("pendingExport",pendingExport);
-        if (resultText.length() < 100000) state.putString("results", resultText); state.putBoolean("running", scanner != null);
+        state.putLong("pendingExportRunId",pendingExportRunId);
     }
     @Override protected void onDestroy() {
-        destroyed = true; if (scanner != null) scanner.cancel(); if(identifier!=null) identifier.cancel(); if(discovery!=null) discovery.stop(); background.shutdownNow(); super.onDestroy();
+        destroyed=true; uiHandler.removeCallbacks(refreshScan); background.shutdown(); super.onDestroy();
     }
 }
