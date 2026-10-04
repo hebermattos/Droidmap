@@ -1,0 +1,7 @@
+<resources>
+    <item name="adaptive_scan" type="id" />
+    <item name="scan_mode" type="id" />
+    <item name="target" type="id" />
+    <item name="ports" type="id" />
+    <item name="timeout" type="id" />
+</resources>

@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.netmap.android'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.netmap.android'
+        def parallelInstall = providers.gradleProperty('sideBySideInstall').map { it.toBoolean() }.getOrElse(false)
+        if (parallelInstall) applicationIdSuffix '.dns'
+        manifestPlaceholders = [appLabel: parallelInstall ? 'Netmap Lite DNS' : 'Netmap Lite']
+        minSdk 26
+        targetSdk 35
+        versionCode 7
+        versionName '0.5.0'
+    }
+    def stableDebugKey = providers.environmentVariable('NETMAP_DEBUG_KEYSTORE').orNull
+    if (stableDebugKey != null) {
+        if (!file(stableDebugKey).isFile()) throw new GradleException('NETMAP_DEBUG_KEYSTORE does not exist; restore the saved key before building.')
+        signingConfigs.debug.storeFile = file(stableDebugKey)
+        signingConfigs.debug.storePassword = 'android'
+        signingConfigs.debug.keyAlias = 'androiddebugkey'
+        signingConfigs.debug.keyPassword = 'android'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation 'dnsjava:dnsjava:3.6.5'
+    runtimeOnly 'org.slf4j:slf4j-nop:1.7.36'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
