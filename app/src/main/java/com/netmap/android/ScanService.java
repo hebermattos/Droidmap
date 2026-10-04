@@ -27,6 +27,8 @@ public final class ScanService extends Service {
     private volatile boolean destroyed;
     private boolean finishing;
     private long runId;
+    private String networkScope;
+    private boolean identificationPartial;
     private long lastNotification;
     private int acceptedPreview;
     private final AtomicInteger previewVersion=new AtomicInteger();
@@ -55,6 +57,7 @@ public final class ScanService extends Service {
             plan=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
+        networkScope=NetworkScope.current(this,plan); identificationPartial=false;
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
@@ -104,6 +107,7 @@ public final class ScanService extends Service {
                 for(TcpScanner.Result check:results) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) identified.computeIfAbsent(check.host,k->new ArrayList<>());
                 List<String> notices=identity.notices(); notices.addAll(nsd.notices());
                 if(identity.isTimedOut()) notices.add("Identification time budget reached; evidence is partial.");
+                identificationPartial=identity.isPartial() || nsd.isPartial();
                 boolean cancelled=tcp.isCancelled(); publish("Saving results…",results.size(),false);
                 worker.execute(() -> saveReport(plan,target,started,results,identity.endpointChecks(),identified,notices,cancelled));
             });
@@ -120,13 +124,15 @@ public final class ScanService extends Service {
                 else if(checks.get(found).state==TcpScanner.State.NO_RESPONSE) checks.set(found,check);
             }
             JSONObject parsed=new JSONObject(ScanReport.json(results,plan,target,cancelled,started,identified,notices,extra));
+            boolean networkChanged=!networkScope.equals(NetworkScope.current(this,plan));
+            boolean partial=ScanReport.completion(parsed,networkScope,networkChanged,identificationPartial,cancelled);
             String changes;
             try {changes=new ScanHistory(new File(getFilesDir(),"scan-history.json")).save(parsed,plan);}
             catch(Exception e) {changes="History unavailable: "+e.getClass().getSimpleName();}
             parsed.put("historyComparison",changes);
-            String text=ScanReport.describe(checks,plan,cancelled,identified,notices,results.size(),extra.size())+"\nHistory comparison\n"+changes+"\n";
+            String text="Identification: "+(partial?"partial":"completed")+"\n"+ScanReport.describe(checks,plan,cancelled,identified,notices,results.size(),extra.size())+"\nHistory comparison\n"+changes+"\n";
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
-                cancelled?"Cancelled — partial results":"Scan completed",parsed.toString(2),text);
+                cancelled?"Cancelled — partial results":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
             try {store.save(result);} catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
             ScanSnapshot complete=result; main.post(() -> finish(complete));
         } catch(Exception e) {finishError(e);}

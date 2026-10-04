@@ -19,17 +19,19 @@ final class ScanReport {
             text.append(host.getKey()).append("\n");
             List<DeviceEvidence.Observation> info=identified.getOrDefault(host.getKey(),Collections.emptyList());
             String name=DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle");
-            String maker=DeviceEvidence.first(info,"manufacturer"), model=DeviceEvidence.first(info,"modelName","modelHint");
+            DeviceProfile profile=new DeviceProfile(info);
+            String maker=profile.manufacturerConfidence.equals("Conflicting reports")?"":DeviceEvidence.first(info,"manufacturer"), model=profile.model;
             text.append("  Name (reported): ").append(name.isEmpty()?"Unknown":name).append("\n");
             if(!maker.isEmpty()) text.append("  Manufacturer (reported): ").append(maker).append("\n");
             String mac=DeviceEvidence.first(info,"reportedMac");
             if(!mac.isEmpty()) text.append("  MAC (reported via NetBIOS): ").append(mac).append("\n");
             if(!model.isEmpty()) text.append("  Model (reported): ").append(model).append("\n");
-            DeviceProfile profile=new DeviceProfile(info);
             if(!profile.manufacturer.isEmpty() && maker.isEmpty()) text.append("  Manufacturer (suggested): ").append(profile.manufacturer).append("\n");
             text.append("  Identification: ").append(profile.confidence).append("\n");
+            for(String finding:AnalysisFindings.describe(info)) text.append("  Finding: ").append(finding).append("\n");
+            text.append("  Model confidence: ").append(profile.modelConfidence).append("\n  Manufacturer confidence: ").append(profile.manufacturerConfidence).append("\n  Type confidence: ").append(profile.typeConfidence).append("\n");
             for(String reason:profile.reasons) text.append("  Evidence: ").append(reason).append("\n");
-            text.append("  Type (probable): ").append(DeviceEvidence.probableType(info)).append("\n");
+            text.append("  Type (probable): ").append(profile.type).append("\n");
             for(DeviceEvidence.Observation item:info) text.append("  [").append(item.source).append("] ").append(item.field).append(": ").append(item.value).append("\n");
             if (host.getValue().isEmpty()) text.append("  No selected TCP ports open.\n");
             for (int port : host.getValue()) text.append("  ").append(port).append("/tcp OPEN\n");
@@ -44,7 +46,7 @@ final class ScanReport {
             .append("\nNo response can mean filtering, timeout or an offline device. Names and models are self-reported; probable types are inferred from advertised services. An open port does not establish a vulnerability.").toString();
     }
     static String json(List<TcpScanner.Result> results, ScanPlan plan, String target, boolean cancelled, long started, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,List<TcpScanner.Result> endpointChecks) throws Exception {
-        JSONObject report = new JSONObject(); report.put("schemaVersion", 4); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
+        JSONObject report = new JSONObject(); report.put("schemaVersion", 5); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
         report.put("startedAtEpochMs", started); report.put("finishedAtEpochMs", System.currentTimeMillis());
         report.put("cancelled", cancelled); report.put("timeoutMs", plan.timeoutMs); report.put("ports", new JSONArray(plan.ports));
         report.put("plannedChecks", plan.hosts.size() * plan.ports.size()); report.put("completedChecks", results.size());
@@ -60,15 +62,29 @@ final class ScanReport {
         }
         report.put("devices",devices); return report.toString(2);
     }
+    static boolean completion(JSONObject report,String networkScope,boolean networkChanged,boolean identificationPartial,boolean cancelled) throws JSONException {
+        boolean tcpComplete=!cancelled && report.optInt("completedChecks",-1)==report.optInt("plannedChecks",-2);
+        boolean partial=identificationPartial || cancelled || networkChanged || !tcpComplete;
+        report.put("networkScope",networkScope); report.put("networkChanged",networkChanged);
+        report.put("identificationComplete",!partial);
+        report.put("identificationStatus",cancelled?"cancelled":partial?"partial":"completed");
+        report.put("tcpScanComplete",tcpComplete);
+        return partial;
+    }
     private static JSONObject device(String ip,List<DeviceEvidence.Observation> info) throws Exception {
+            DeviceProfile profile=new DeviceProfile(info);
             JSONObject device=new JSONObject(); device.put("ip",ip);
+            device.put("identificationStatus",DeviceEvidence.first(info,"identificationStatus"));
+            device.put("probeCoverage",DeviceEvidence.first(info,"probeCoverage"));
             device.put("dnsHostname",DeviceEvidence.first(info,"dnsHostname"));
             device.put("reportedName",DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
             device.put("reportedMac",DeviceEvidence.first(info,"reportedMac"));
-            device.put("reportedManufacturer",DeviceEvidence.first(info,"manufacturer"));
-            device.put("reportedModel",DeviceEvidence.first(info,"modelName","modelHint"));
-            device.put("probableType",DeviceEvidence.probableType(info)); DeviceProfile profile=new DeviceProfile(info); device.put("identityConfidence",profile.confidence);
+            device.put("reportedManufacturer",profile.manufacturerConfidence.equals("Conflicting reports")?"":DeviceEvidence.first(info,"manufacturer"));
+            device.put("reportedModel",profile.model);
+            device.put("probableType",profile.type); device.put("identityConfidence",profile.confidence);
+            device.put("modelConfidence",profile.modelConfidence); device.put("manufacturerConfidence",profile.manufacturerConfidence); device.put("typeConfidence",profile.typeConfidence);
             device.put("suggestedManufacturer",profile.manufacturer); device.put("identificationReasons",new JSONArray(profile.reasons));
+            device.put("analysisFindings",new JSONArray(AnalysisFindings.describe(info)));
             JSONArray observations=new JSONArray();
             for(DeviceEvidence.Observation item:info) { JSONObject entry=new JSONObject(); entry.put("source",item.source); entry.put("field",item.field); entry.put("value",item.value); observations.put(entry); }
             device.put("evidence",observations);

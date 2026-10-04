@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.*;
+import java.security.cert.X509Certificate;
 
 /** Bounded SSDP, UPnP and service reads. No redirects, authentication or TLS bypass. */
 public final class DeviceIdentifier {
@@ -42,7 +44,7 @@ public final class DeviceIdentifier {
         try {future.get(Math.max(1,until-System.nanoTime()),TimeUnit.NANOSECONDS); return !cancelled.get();}
         catch(CancellationException e) {return false;}
         catch(TimeoutException e) {timedOut=true; cancel(); return false;}
-        catch(ExecutionException e) {notices.add("SSDP discovery unavailable: "+e.getCause().getClass().getSimpleName()); return !cancelled.get();}
+        catch(ExecutionException e) {failed=true;notices.add("SSDP discovery unavailable: "+e.getCause().getClass().getSimpleName()); return !cancelled.get();}
         catch(InterruptedException e) {cancel(); throw e;}
     }
     public List<TcpScanner.Result> endpointChecks() { synchronized(endpointChecks) { return new ArrayList<>(endpointChecks); } }
@@ -50,6 +52,8 @@ public final class DeviceIdentifier {
     private final Set<Closeable> active = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private volatile boolean timedOut;
+    private volatile boolean failed;
+    public boolean isPartial() { return timedOut || failed; }
     private volatile long deadline=Long.MAX_VALUE;
     private final List<String> notices = Collections.synchronizedList(new ArrayList<>());
     public DeviceIdentifier(ScanPlan plan,DeviceEvidence evidence) { this(plan,evidence,null); }
@@ -87,7 +91,8 @@ public final class DeviceIdentifier {
             for(String host:identificationOrder(checks)) {
                 List<Integer> ports=open.getOrDefault(host,Collections.emptyList());
                 workers.submit(() -> {
-                    fingerprint(host,ports);
+                    try { fingerprint(host,ports); }
+                    catch(RuntimeException error) { failed=true; notices.add("Identification failed for "+host+": "+error.getClass().getSimpleName()); }
                     java.util.function.Consumer<String> listener=progressListener;
                     if(listener!=null && !cancelled.get()) listener.accept(host);
                 });
@@ -133,7 +138,7 @@ public final class DeviceIdentifier {
                     }
                 }
             } finally { active.remove(socket); }
-        } catch (IOException | SecurityException e) { if (!cancelled.get()) notices.add("SSDP discovery unavailable: " + e.getClass().getSimpleName()); }
+        } catch (IOException | SecurityException e) { failed=true; if (!cancelled.get()) notices.add("SSDP discovery unavailable: " + e.getClass().getSimpleName()); }
         // Description fetches use the same fixed pool and global budget as fingerprints.
         descriptionLocations=locations;
     }
@@ -147,11 +152,12 @@ public final class DeviceIdentifier {
     }
     private void fingerprint(String host,List<Integer> ports) {
         if (stopped()) return;
-        netbios(host);
+
         // PTR records may be cached: query only responders or independently announced devices.
         boolean responding=!ports.isEmpty() || evidence.hasObservations(host);
         responding=responding || respondingHosts.contains(host);
-        if(responding && hostnameLookup!=null && !stopped()) hostnameLookup.lookup(host,deadline,this::stopped);
+        boolean netbiosDone=!responding;
+        if(netbiosDone) {netbios(host); responding=evidence.hasObservations(host);}
         String location=descriptionLocations.get(host);
         if (location!=null) description(host,location);
         Map<Integer,String> probes=new LinkedHashMap<>();
@@ -164,10 +170,15 @@ public final class DeviceIdentifier {
             if(result.state==TcpScanner.State.OPEN) probes.put(endpoint.port,endpoint.serviceType);
         }
         for(int port:ports) probes.putIfAbsent(port,"");
-        int reads=0;
-        for(Map.Entry<Integer,String> probe:probes.entrySet()) {
+        List<Map.Entry<Integer,String>> prioritized=new ArrayList<>(probes.entrySet());
+        prioritized.sort(Comparator.comparingInt(item -> probePriority(item.getKey(),item.getValue())));
+        int reads=0,unsupported=0;
+        for(Map.Entry<Integer,String> probe:prioritized) {
             int port=probe.getKey(); String type=probe.getValue();
             if(stopped() || reads>=plan.mode.fingerprintLimit) break;
+            if(isSmbEndpoint(port,type)) { reads++; smb(host,port); continue; }
+            if(isTlsEndpoint(port,type)) { reads++; tls(host,port,type); continue; }
+            if(isRtspEndpoint(port,type)) { reads++; rtsp(host,port); continue; }
             if(isIppEndpoint(port,type)) {
                 reads++; printer(host,port); continue;
             }
@@ -180,17 +191,94 @@ public final class DeviceIdentifier {
                     Map<String,String> h=DeviceEvidence.headers(response);
                     evidence.add(host,"HTTP tcp/"+port,"server",h.get("server"));
                     evidence.add(host,"HTTP tcp/"+port,"httpTitle",DeviceEvidence.title(response));
-                }
+                } else evidence.add(host,"HTTP tcp/"+port,"probeStatus","No valid HTTP reply");
             } else if(port==21 || port==22 || port==23) {
                 reads++; String banner=read(host,port,null,4096);
                 String line=banner.split("\\r?\\n",2)[0];
                 if(!line.isEmpty()) evidence.add(host,"Banner tcp/"+port,"banner",line);
-            }
+                else evidence.add(host,"Banner tcp/"+port,"probeStatus","No banner received");
+            } else unsupported++;
         }
+        if(responding && hostnameLookup!=null && !stopped()) hostnameLookup.lookup(host,deadline,this::stopped);
+        if(!netbiosDone && !stopped()) netbios(host);
+        if(responding || evidence.hasObservations(host)) evidence.add(host,"Analysis","identificationStatus",stopped()?"partial":"completed");
+        if(!prioritized.isEmpty()) evidence.add(host,"Analysis","probeCoverage",reads+" attempted, "+unsupported+" unsupported, "+Math.max(0,prioritized.size()-reads-unsupported)+" not attempted within budget");
     }
     static boolean isIppEndpoint(int port,String type) { return type.startsWith("_ipp._tcp") || type.isEmpty() && port==631; }
     static boolean isHttpEndpoint(int port,String type) {
         return type.startsWith("_http._tcp") || type.isEmpty() && (port==80 || port==8000 || port==8080 || port==8888);
+    }
+    static boolean isSmbEndpoint(int port,String type) { return type.startsWith("_smb._tcp") || type.isEmpty() && port==445; }
+    private void smb(String host,int port) {
+        Map<String,String> fields=Smb.parse(readBytes(host,port,Smb.request(),65536));
+        if(fields.isEmpty()) evidence.add(host,"SMB tcp/"+port,"probeStatus","No valid SMB2 negotiation reply");
+        else fields.forEach((field,value)->evidence.add(host,"SMB tcp/"+port,field,value));
+    }
+    static boolean isTlsEndpoint(int port,String type) {
+        return type.startsWith("_https._tcp") || type.startsWith("_ipps._tcp") || type.isEmpty() && (port==443 || port==8443 || port==5986);
+    }
+    static boolean isRtspEndpoint(int port,String type) { return type.startsWith("_rtsp._tcp") || type.isEmpty() && port==554; }
+    static int probePriority(int port,String type) {
+        if(isIppEndpoint(port,type)) return 0;
+        if(!type.isEmpty()) return 1;
+        if(isSmbEndpoint(port,type) || isTlsEndpoint(port,type) || isHttpEndpoint(port,type) || isRtspEndpoint(port,type)) return 2;
+        return 3;
+    }
+    void rtsp(String host,int port) {
+        String reply=read(host,port,"OPTIONS * RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: Droidmap\r\n\r\n",8192);
+        Map<String,String> fields=DeviceEvidence.headers(reply);
+        if(!reply.matches("(?s)RTSP/1\\.0 [1-5][0-9]{2}\\b.*") || !"1".equals(fields.get("cseq"))) {
+            evidence.add(host,"RTSP tcp/"+port,"probeStatus","No valid RTSP reply"); return;
+        }
+        evidence.add(host,"RTSP tcp/"+port,"serviceType","_rtsp._tcp.");
+        evidence.add(host,"RTSP tcp/"+port,"server",fields.get("server"));
+        evidence.add(host,"RTSP tcp/"+port,"supportedMethods",fields.get("public"));
+        evidence.add(host,"RTSP tcp/"+port,"responseStatus",reply.split("\r?\n",2)[0]);
+    }
+    private int remainingTimeout(int maximum) throws SocketTimeoutException {
+        long remaining=TimeUnit.NANOSECONDS.toMillis(deadline-System.nanoTime());
+        if(stopped() || remaining<=0) throw new SocketTimeoutException();
+        return (int)Math.max(1,Math.min(maximum,remaining));
+    }
+    void tls(String host,int port,String type) {
+        if(stopped()) return;
+        String source="TLS tcp/"+port;
+        try(SSLSocket socket=(SSLSocket)SSLSocketFactory.getDefault().createSocket()) {
+            active.add(socket);
+            try {
+                if(stopped()) return;
+                SSLParameters parameters=socket.getSSLParameters(); parameters.setEndpointIdentificationAlgorithm("HTTPS"); socket.setSSLParameters(parameters);
+                socket.connect(new InetSocketAddress(host,port),remainingTimeout(500));
+                socket.setSoTimeout(remainingTimeout(plan.mode==ScanPlan.Mode.COMPLETE?1800:900)); socket.startHandshake();
+                if(stopped()) return;
+                SSLSession session=socket.getSession();
+                evidence.add(host,source,"tlsValidation","Validated trust chain and IP identity");
+                evidence.add(host,source,"tlsVersion",session.getProtocol()); evidence.add(host,source,"cipherSuite",session.getCipherSuite());
+                X509Certificate cert=(X509Certificate)session.getPeerCertificates()[0];
+                evidence.add(host,source,"certificateSubject",cert.getSubjectX500Principal().getName());
+                evidence.add(host,source,"certificateIssuer",cert.getIssuerX500Principal().getName());
+                evidence.add(host,source,"certificateExpires",cert.getNotAfter().toInstant().toString());
+                if(type.startsWith("_ipps")) return; // No plaintext or print operation.
+                socket.getOutputStream().write(("GET / HTTP/1.0\r\nHost: "+host+":"+port+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                byte[] raw=receive(socket,16384);
+                String reply=new String(raw,StandardCharsets.UTF_8);
+                if(reply.startsWith("HTTP/")) {
+                    evidence.add(host,"HTTPS tcp/"+port,"server",DeviceEvidence.headers(reply).get("server"));
+                    evidence.add(host,"HTTPS tcp/"+port,"httpTitle",DeviceEvidence.title(new String(HttpReply.body(raw,"text/html"),StandardCharsets.UTF_8)));
+                }
+            } finally { active.remove(socket); }
+        } catch(SSLException e) { if(!stopped()) evidence.add(host,source,"probeStatus","TLS validation or handshake failed; certificate data unavailable"); }
+        catch(IOException | SecurityException e) { if(!stopped()) evidence.add(host,source,"probeStatus","TLS connection failed: "+e.getClass().getSimpleName()); }
+    }
+    private byte[] receive(Socket socket,int limit) throws IOException {
+        long until=Math.min(deadline,System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(plan.mode==ScanPlan.Mode.COMPLETE?1800:900));
+        ByteArrayOutputStream result=new ByteArrayOutputStream(); byte[] buffer=new byte[2048];
+        while(!stopped() && result.size()<limit && System.nanoTime()<until) {
+            socket.setSoTimeout((int)Math.max(1,Math.min(500,TimeUnit.NANOSECONDS.toMillis(until-System.nanoTime()))));
+            int count; try {count=socket.getInputStream().read(buffer,0,Math.min(buffer.length,limit-result.size()));} catch(SocketTimeoutException e) {break;}
+            if(count<0) break; result.write(buffer,0,count);
+        }
+        return result.toByteArray();
     }
     TcpScanner.Result verifyEndpoint(String host,int port) {
         if(!hosts.contains(host) || port<1 || port>65535 || stopped()) return null;
@@ -228,10 +316,10 @@ public final class DeviceIdentifier {
             URI uri=new URI(location); int port=uri.getPort()==-1?80:uri.getPort();
             String path=uri.getRawPath(); if(path==null || path.isEmpty()) path="/";
             if(uri.getRawQuery()!=null) path+="?"+uri.getRawQuery();
-            String response=read(host,port,"GET "+path+" HTTP/1.0\r\nHost: "+host+":"+port+"\r\nConnection: close\r\n\r\n",65536);
-            if (!response.matches("(?s)HTTP/1\\.[01] 200\\b.*")) return;
-            int body=response.indexOf("\r\n\r\n"); if(body<0) return;
-            for(Map.Entry<String,String> field:DeviceEvidence.upnpFields(response.substring(body+4)).entrySet()) evidence.add(host,"UPnP description",field.getKey(),field.getValue());
+            byte[] response=readBytes(host,port,("GET "+path+" HTTP/1.0\r\nHost: "+host+":"+port+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII),65536);
+            byte[] body=HttpReply.body(response,"text/xml");
+            if(body.length==0) body=HttpReply.body(response,"application/xml");
+            for(Map.Entry<String,String> field:DeviceEvidence.upnpFields(new String(body,StandardCharsets.UTF_8)).entrySet()) evidence.add(host,"UPnP description",field.getKey(),field.getValue());
         } catch(URISyntaxException ignored) { }
     }
     private void printer(String host,int port) {
@@ -257,7 +345,7 @@ public final class DeviceIdentifier {
             active.add(socket);
             try {
                 if(stopped()) return new byte[0];
-                socket.connect(new InetSocketAddress(host,port),500);
+                socket.connect(new InetSocketAddress(host,port),remainingTimeout(500));
                 long readDeadline=Math.min(deadline,System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(plan.mode==ScanPlan.Mode.COMPLETE?1800:900));
                 if(request!=null) socket.getOutputStream().write(request);
                 ByteArrayOutputStream result=new ByteArrayOutputStream(); byte[] buffer=new byte[2048];

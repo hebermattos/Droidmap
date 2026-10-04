@@ -26,7 +26,7 @@ final class WifiReverseDns {
         } catch(SecurityException ignored) { }
         return new ReverseDns(java.util.Collections.emptyList(),plan,evidence,socket -> { });
     }
-    private static boolean inSubnet(LinkAddress address,String host) {
+    static boolean inSubnet(LinkAddress address,String host) {
         byte[] local=address.getAddress().getAddress(); String[] parts=host.split("\\.");
         int bits=address.getPrefixLength();
         for(int i=0;i<4;i++) {
