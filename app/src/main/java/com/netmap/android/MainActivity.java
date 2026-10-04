@@ -27,6 +27,7 @@ public final class MainActivity extends Activity {
     private Button start;
     private TextView settingsSummary;
     private LinearLayout deviceList;
+    private final Set<String> expandedDevices=new HashSet<>();
     private String selectedPorts=ScanPlan.FAST_PORTS;
     private int timeoutMs=500;
     private ScanPlan.Mode selectedMode=ScanPlan.Mode.FAST;
@@ -87,6 +88,8 @@ public final class MainActivity extends Activity {
         if(state!=null) {
             report=state.getString("report", ""); resultText=state.getString("results", "");
             pendingExport=state.getString("pendingExport", "");
+            ArrayList<String> expanded=state.getStringArrayList("expandedDevices");
+            if(expanded!=null) expandedDevices.addAll(expanded);
             status.setText(state.getBoolean("running")?"Scan stopped after screen recreation. Start again to rescan.":"Ready");
         }
         renderDevices();
@@ -175,27 +178,86 @@ public final class MainActivity extends Activity {
             for(int i=0;i<devices.length();i++) {
                 JSONObject device=devices.getJSONObject(i); String ip=device.getString("ip"); lastDevices.add(ip);
                 Set<Integer> openPorts=portsByIp.getOrDefault(ip,Collections.emptySet());
-                String name=device.optString("reportedName"); String type=device.optString("probableType");
-                Button card=new Button(this); card.setAllCaps(false); card.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
-                card.setText(ip+(name.isEmpty()?"":" • "+name)+"\nProbable type: "+type+"\nOpen TCP ports: "+(openPorts.isEmpty()?"none observed":openPorts.toString()));
-                card.setMaxLines(5); card.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                deviceList.addView(card,new LinearLayout.LayoutParams(-1,-2));
-                card.setOnClickListener(v -> showDevice(device,openPorts));
+                addDeviceCard(device,openPorts);
             }
-            TextView footer=new TextView(this); footer.setText("Tap a device for details. Names and types may be self-reported.\nFull report and JSON export are in Options."); deviceList.addView(footer);
+            TextView footer=new TextView(this); footer.setText("Tap a device to expand or collapse details.\nFull report and JSON export are in Options."); deviceList.addView(footer);
         } catch(Exception e) { TextView fallback=new TextView(this); fallback.setText("Summary unavailable. Open Full report in Options."); deviceList.addView(fallback); }
     }
-    private void showDevice(JSONObject device,Set<Integer> openPorts) {
-        StringBuilder details=new StringBuilder("Open TCP ports: ").append(openPorts.isEmpty()?"none observed":openPorts).append("\n");
-        String[] keys={"reportedName","reportedManufacturer","reportedModel","reportedMac","probableType","identityConfidence","suggestedManufacturer"};
-        String[] labels={"Name (reported)","Manufacturer (reported)","Model (reported)","MAC (reported)","Probable type","Identity confidence","Suggested manufacturer"};
-        for(int i=0;i<keys.length;i++) {
-            String value=device.optString(keys[i]); if(!value.isEmpty()) details.append(labels[i]).append(": ").append(value).append("\n");
+    private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
+    private String portList(Set<Integer> ports,int limit) {
+        if(ports.isEmpty()) return "None observed";
+        StringBuilder value=new StringBuilder(); int count=0;
+        for(int port:ports) { if(count==limit) break; if(count++>0) value.append(", "); value.append(port); }
+        if(ports.size()>limit) value.append(" (+").append(ports.size()-limit).append(" more)");
+        return value.toString();
+    }
+    private void addDeviceCard(JSONObject device,Set<Integer> openPorts) {
+        String ip=device.optString("ip");
+        String name=device.optString("reportedName").replaceAll("\\s+"," ").trim();
+        if(name.length()>64) name=name.substring(0,61)+"…";
+        String summary=ip+(name.isEmpty()?"":" • "+name)+"\nProbable type: "+device.optString("probableType","Unknown")
+            +"\nOpen TCP ports: "+portList(openPorts,8);
+        LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
+        shape.setColor(android.graphics.Color.rgb(20,20,20)); shape.setCornerRadius(dp(12)); shape.setStroke(dp(1),android.graphics.Color.rgb(55,55,55)); card.setBackground(shape);
+        LinearLayout.LayoutParams margins=new LinearLayout.LayoutParams(-1,-2); margins.setMargins(0,dp(10),0,0); deviceList.addView(card,margins);
+        Button toggle=new Button(this); toggle.setAllCaps(false); toggle.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
+        toggle.setTextSize(16); toggle.setPadding(dp(16),dp(12),dp(16),dp(12)); toggle.setMinHeight(dp(64)); card.addView(toggle,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout details=new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL); details.setPadding(dp(16),0,dp(16),dp(16)); card.addView(details);
+        boolean expanded=expandedDevices.contains(ip);
+        if(expanded) populateDeviceDetails(details,device,openPorts);
+        details.setVisibility(expanded?android.view.View.VISIBLE:android.view.View.GONE);
+        setExpansionLabel(toggle,summary,ip,expanded);
+        toggle.setOnClickListener(v -> {
+            boolean show=details.getVisibility()!=android.view.View.VISIBLE;
+            if(show && details.getChildCount()==0) populateDeviceDetails(details,device,openPorts);
+            details.setVisibility(show?android.view.View.VISIBLE:android.view.View.GONE);
+            if(show) expandedDevices.add(ip); else expandedDevices.remove(ip);
+            setExpansionLabel(toggle,summary,ip,show);
+        });
+    }
+    private void setExpansionLabel(Button toggle,String summary,String ip,boolean expanded) {
+        toggle.setText(summary+"\n"+(expanded?"▾ Hide details":"▸ Show details"));
+        toggle.setContentDescription(summary+". "+(expanded?"Collapse":"Expand")+" details for "+ip);
+    }
+    private void detailSection(LinearLayout parent,String title) {
+        TextView heading=new TextView(this); heading.setText(title); heading.setTextSize(16); heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        heading.setPadding(0,dp(16),0,dp(6)); parent.addView(heading);
+    }
+    private void detailValue(LinearLayout parent,String label,String value) {
+        if(value.isEmpty()) return;
+        TextView caption=new TextView(this); caption.setText(label); caption.setTextSize(12); caption.setTextColor(android.graphics.Color.LTGRAY); caption.setPadding(0,dp(8),0,dp(2)); parent.addView(caption);
+        TextView content=new TextView(this); content.setText(value); content.setTextSize(15); content.setTextIsSelectable(true); parent.addView(content);
+    }
+    private void populateDeviceDetails(LinearLayout details,JSONObject device,Set<Integer> openPorts) {
+        detailSection(details,"Open TCP ports");
+        detailValue(details,"Observed ports ("+openPorts.size()+")",portList(openPorts,Integer.MAX_VALUE));
+        detailSection(details,"Device identity");
+        detailValue(details,"IP address",device.optString("ip"));
+        String[] keys={"reportedName","reportedManufacturer","reportedModel","reportedMac","dnsHostname","probableType","identityConfidence","suggestedManufacturer"};
+        String[] labels={"Name (reported)","Manufacturer (reported)","Model (reported)","MAC (reported)","DNS hostname (reported)","Probable type","Identity confidence","Suggested manufacturer"};
+        for(int i=0;i<keys.length;i++) detailValue(details,labels[i],device.optString(keys[i]));
+        JSONArray reasons=device.optJSONArray("identificationReasons");
+        if(reasons!=null && reasons.length()>0) {
+            detailSection(details,"Identification reasons");
+            for(int i=0;i<reasons.length();i++) detailValue(details,"Reason "+(i+1),reasons.optString(i));
         }
-        details.append("Names, models and MAC addresses are self-reported; suggested identity is unverified.\n");
-        JSONArray observations=device.optJSONArray("evidence");
-        if(observations!=null) for(int i=0;i<observations.length();i++) {JSONObject item=observations.optJSONObject(i); if(item!=null) details.append("\n").append(item.optString("field")).append(": ").append(item.optString("value")).append(" [").append(item.optString("source")).append("]");}
-        showText(device.optString("ip"),details.toString());
+        Map<String,List<JSONObject>> sources=new LinkedHashMap<>(); JSONArray observations=device.optJSONArray("evidence");
+        if(observations!=null) for(int i=0;i<observations.length();i++) {
+            JSONObject item=observations.optJSONObject(i); if(item!=null) sources.computeIfAbsent(item.optString("source","Unknown source"),ignored -> new ArrayList<>()).add(item);
+        }
+        detailSection(details,"Evidence by source");
+        if(sources.isEmpty()) detailValue(details,"Evidence","No identification metadata collected.");
+        for(Map.Entry<String,List<JSONObject>> source:sources.entrySet()) {
+            detailSection(details,source.getKey());
+            for(JSONObject item:source.getValue()) detailValue(details,evidenceLabel(item.optString("field")),item.optString("value"));
+        }
+        detailValue(details,"Interpretation","Names, models and MAC addresses are self-reported. Device type and suggested identity are inferred; open ports do not establish vulnerabilities.");
+    }
+    private String evidenceLabel(String field) {
+        // Keep unknown protocol fields readable without discarding their original name.
+        String label=field.replaceAll("([a-z0-9])([A-Z])","$1 $2").replace('_',' ');
+        return label.isEmpty()?"Observation":Character.toUpperCase(label.charAt(0))+label.substring(1);
     }
     private void chooseDevice() {
         if(scanner!=null || lastDevices.isEmpty()) return;
@@ -252,7 +314,7 @@ public final class MainActivity extends Activity {
         final DeviceIdentifier identity=new DeviceIdentifier(plan,evidence); identifier=identity;
         identity.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
         final NsdDiscovery nsd=new NsdDiscovery(this,evidence,plan.mode); discovery=nsd; nsd.start();
-        report=""; resultText=""; deviceList.removeAllViews(); lastDevices.clear();
+        report=""; resultText=""; deviceList.removeAllViews(); lastDevices.clear(); expandedDevices.clear();
         start.setText("Cancel scan"); start.setEnabled(true); target.setEnabled(false); progress.setVisibility(android.view.View.VISIBLE);
         int total = plan.hosts.size() * plan.ports.size(); progress.setMax(total); progress.setProgress(0);
         status.setText("Scanning " + plan.hosts.size() + " addresses…");
@@ -393,6 +455,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        state.putStringArrayList("expandedDevices",new ArrayList<>(expandedDevices));
         // Bound Bundle size: large reports must be exported before rotating.
         if (report.length() < 100000) state.putString("report", report);
         if(pendingExport.length()<100000) state.putString("pendingExport",pendingExport);
