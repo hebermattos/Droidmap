@@ -23,13 +23,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class MainActivity extends Activity {
-    private EditText target, ports, timeout;
-    private Spinner mode;
-    private Button start, stop, export, reanalyze, historyButton;
-    private CheckBox adaptive;
+    private EditText target;
+    private Button start;
+    private TextView settingsSummary;
+    private LinearLayout deviceList;
+    private String selectedPorts=ScanPlan.FAST_PORTS;
+    private int timeoutMs=500;
+    private ScanPlan.Mode selectedMode=ScanPlan.Mode.FAST;
+    private boolean adaptiveScan=true;
+    private String pendingExport="";
     private ScanHistory history;
     private List<String> lastDevices=new ArrayList<>();
-    private TextView status, output;
+    private TextView status;
     private ProgressBar progress;
     private TcpScanner scanner;
     private DeviceIdentifier identifier;
@@ -38,13 +43,14 @@ public final class MainActivity extends Activity {
     private volatile boolean destroyed;
     private String report = "";
     private String resultText = "";
-    private static final String DEFAULT_PORTS=ScanPlan.FAST_PORTS;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         history=new ScanHistory(new java.io.File(getFilesDir(),"scan-history.json"));
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setFocusableInTouchMode(true);
         int pad = (int)(16 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
         layout.setOnApplyWindowInsetsListener((view, insets) -> {
@@ -52,54 +58,150 @@ public final class MainActivity extends Activity {
                 pad + insets.getSystemWindowInsetRight(), pad + insets.getSystemWindowInsetBottom());
             return insets;
         });
-        TextView title = new TextView(this); title.setText("Netmap Lite"); title.setTextSize(26); layout.addView(title);
-        TextView hint = new TextView(this);
-        hint.setText("Local TCP discovery • no root required\nDevice names, models and services when available."); layout.addView(hint);
-        mode=new Spinner(this); mode.setId(R.id.scan_mode);
-        mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Fast — selected ports, no retries","Complete — more ports, retry and longer discovery"}));
-        layout.addView(mode);
-        target = field(layout, "Target IP or private network (/24–/32)", "192.168.0.0/24", R.id.target);
-        ports = field(layout, "TCP ports (comma-separated or ranges)", DEFAULT_PORTS, R.id.ports);
-        timeout = field(layout, "Connection timeout (100–3000 ms)", "500", R.id.timeout);
-        timeout.setInputType(InputType.TYPE_CLASS_NUMBER);
-        mode.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-            public void onItemSelected(android.widget.AdapterView<?> parent,android.view.View view,int position,long id) {
-                String current=ports.getText().toString();
-                if(current.equals(ScanPlan.FAST_PORTS) || current.equals(ScanPlan.COMPLETE_PORTS)) ports.setText(position==0?ScanPlan.FAST_PORTS:ScanPlan.COMPLETE_PORTS);
+        android.content.SharedPreferences preferences=getPreferences(MODE_PRIVATE);
+        selectedPorts=preferences.getString("ports",ScanPlan.FAST_PORTS);
+        timeoutMs=preferences.getInt("timeout",500);
+        selectedMode=preferences.getBoolean("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST;
+        adaptiveScan=preferences.getBoolean("adaptive",true);
+        LinearLayout header=new LinearLayout(this); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView title=new TextView(this); title.setText("Droidmap"); title.setTextSize(26);
+        header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        Button options=new Button(this); options.setText("Options"); options.setContentDescription("Open options menu");
+        header.addView(options); layout.addView(header); options.setOnClickListener(this::showOptions);
+        target=field(layout,"Target IP or private network (/24–/32)","192.168.0.0/24",R.id.target);
+        settingsSummary=new TextView(this); settingsSummary.setTextSize(13); settingsSummary.setPadding(0,pad/2,0,pad/2);
+        layout.addView(settingsSummary); updateSettingsSummary();
+        start=new Button(this); start.setText("Start scan"); layout.addView(start);
+        start.setOnClickListener(v -> {
+            if(scanner==null) begin();
+            else {
+                scanner.cancel(); if(identifier!=null) identifier.cancel(); if(discovery!=null) discovery.stop();
+                start.setEnabled(false); status.setText("Cancelling…");
             }
         });
-        adaptive=new CheckBox(this); adaptive.setId(R.id.adaptive_scan); adaptive.setText("Adaptive scan (prioritize responders)"); adaptive.setChecked(true); layout.addView(adaptive);
-        Button local = new Button(this); local.setText("Use Wi-Fi network"); layout.addView(local);
-        local.setOnClickListener(v -> suggestWifi());
-        LinearLayout buttons = new LinearLayout(this);
-        start = button(buttons, "Start"); stop = button(buttons, "Cancel"); export = button(buttons, "Export JSON");
-        layout.addView(buttons); stop.setEnabled(false); export.setEnabled(false);
-        LinearLayout extraButtons=new LinearLayout(this);
-        reanalyze=button(extraButtons,"Reanalyze IP"); historyButton=button(extraButtons,"History"); layout.addView(extraButtons);
-        reanalyze.setEnabled(false); reanalyze.setOnClickListener(v->chooseDevice()); historyButton.setOnClickListener(v->showHistory());
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); layout.addView(progress);
-        status = new TextView(this); status.setText("Ready"); layout.addView(status);
-        ScrollView scroll = new ScrollView(this);
-        output = new TextView(this); output.setTextIsSelectable(true); output.setTextSize(14); scroll.addView(output);
-        layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1)); setContentView(layout);
-        start.setOnClickListener(v -> begin());
-        stop.setOnClickListener(v -> { if (scanner != null) scanner.cancel(); if(identifier!=null) identifier.cancel(); if(discovery!=null) discovery.stop(); stop.setEnabled(false); status.setText("Cancelling…"); });
-        export.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
-            intent.putExtra(Intent.EXTRA_TITLE, "netmap-scan.json"); startActivityForResult(intent, 10);
-        });
-        if (state != null) {
-            report = state.getString("report", ""); resultText = state.getString("results", "");
-            output.setText(resultText); export.setEnabled(!report.isEmpty());
-            status.setText(state.getBoolean("running") ? "Scan stopped after screen recreation. Start again to rescan." : "Ready");
+        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setVisibility(android.view.View.GONE); layout.addView(progress);
+        status=new TextView(this); status.setText("Ready"); status.setPadding(0,pad/2,0,pad/2); status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE); layout.addView(status);
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
+        deviceList=new LinearLayout(this); deviceList.setOrientation(LinearLayout.VERTICAL); scroll.addView(deviceList);
+        layout.addView(scroll,new LinearLayout.LayoutParams(-1,0,1)); setContentView(layout);
+        if(state!=null) {
+            report=state.getString("report", ""); resultText=state.getString("results", "");
+            pendingExport=state.getString("pendingExport", "");
+            status.setText(state.getBoolean("running")?"Scan stopped after screen recreation. Start again to rescan.":"Ready");
         }
+        renderDevices();
+    }
+    private void updateSettingsSummary() {
+        int count=ScanPlan.parsePorts(selectedPorts).size();
+        settingsSummary.setText((selectedMode==ScanPlan.Mode.FAST?"Fast":"Complete")+" • "+count+" ports • "+timeoutMs+" ms"+(adaptiveScan?" • Adaptive":""));
+    }
+    private void showOptions(android.view.View anchor) {
+        PopupMenu menu=new PopupMenu(this,anchor); boolean idle=scanner==null;
+        menu.getMenu().add(0,1,0,"Scan settings").setEnabled(idle);
+        menu.getMenu().add(0,2,1,"Use Wi-Fi network").setEnabled(idle);
+        menu.getMenu().add(0,3,2,"History").setEnabled(idle);
+        menu.getMenu().add(0,4,3,"Reanalyze a device").setEnabled(idle && !lastDevices.isEmpty());
+        menu.getMenu().add(0,5,4,"Full report").setEnabled(!resultText.isEmpty());
+        menu.getMenu().add(0,6,5,"Export JSON").setEnabled(idle && !report.isEmpty());
+        menu.setOnMenuItemClickListener(item -> {
+            switch(item.getItemId()) {
+                case 1: showSettings(); break;
+                case 2: suggestWifi(); break;
+                case 3: showHistory(); break;
+                case 4: chooseDevice(); break;
+                case 5: showText("Full report",resultText); break;
+                case 6:
+                    pendingExport=report;
+                    Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.putExtra(Intent.EXTRA_TITLE,"droidmap-scan.json"); startActivityForResult(intent,10); break;
+                default: return false;
+            }
+            return true;
+        }); menu.show();
+    }
+    private void showSettings() {
+        if(scanner!=null) return;
+        LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
+        int pad=(int)(20*getResources().getDisplayMetrics().density); form.setPadding(pad,0,pad,0);
+        TextView label=new TextView(this); label.setText("Scan mode"); form.addView(label);
+        Spinner mode=new Spinner(this);
+        mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Fast","Complete"}));
+        mode.setSelection(selectedMode==ScanPlan.Mode.FAST?0:1); form.addView(mode);
+        EditText ports=field(form,"TCP ports (comma-separated or ranges)",selectedPorts,R.id.ports);
+        EditText timeout=field(form,"Connection timeout (100–3000 ms)",Integer.toString(timeoutMs),R.id.timeout); timeout.setInputType(InputType.TYPE_CLASS_NUMBER);
+        CheckBox adaptive=new CheckBox(this); adaptive.setText("Adaptive scan (prioritize responders)"); adaptive.setChecked(adaptiveScan); form.addView(adaptive);
+        TextView help=new TextView(this); help.setText("Complete mode uses more default ports, retries and longer device discovery. Custom ports are kept."); form.addView(help);
+        mode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent,android.view.View view,int position,long id) {
+                String current=ports.getText().toString();
+                if(current.equals(ScanPlan.FAST_PORTS)||current.equals(ScanPlan.COMPLETE_PORTS)) ports.setText(position==0?ScanPlan.FAST_PORTS:ScanPlan.COMPLETE_PORTS);
+            }
+        });
+        ScrollView scroll=new ScrollView(this); scroll.addView(form);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle("Scan settings").setView(scroll)
+            .setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            int value;
+            try { value=Integer.parseInt(timeout.getText().toString().trim()); if(value<100||value>3000) throw new IllegalArgumentException(); }
+            catch(IllegalArgumentException e) { timeout.setError("Enter 100–3000 ms"); return; }
+            String portValues=ports.getText().toString().trim();
+            try { ScanPlan.parsePorts(portValues); } catch(IllegalArgumentException e) { ports.setError(e.getMessage()); return; }
+            selectedPorts=portValues; timeoutMs=value; selectedMode=mode.getSelectedItemPosition()==0?ScanPlan.Mode.FAST:ScanPlan.Mode.COMPLETE; adaptiveScan=adaptive.isChecked();
+            saveSettings(); updateSettingsSummary(); dialog.dismiss();
+        })); dialog.show();
+    }
+    private void saveSettings() {
+        getPreferences(MODE_PRIVATE).edit().putString("ports",selectedPorts).putInt("timeout",timeoutMs)
+            .putBoolean("complete",selectedMode==ScanPlan.Mode.COMPLETE).putBoolean("adaptive",adaptiveScan).apply();
+    }
+    private void showText(String title,String text) {
+        ScrollView scroll=new ScrollView(this); TextView content=new TextView(this); content.setText(text); content.setTextIsSelectable(true);
+        int pad=(int)(20*getResources().getDisplayMetrics().density); content.setPadding(pad,pad,pad,pad); scroll.addView(content);
+        new android.app.AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Close",null).show();
+    }
+    private void renderDevices() {
+        deviceList.removeAllViews(); lastDevices=new ArrayList<>();
+        if(report.isEmpty()) { TextView empty=new TextView(this); empty.setText("Discover devices on your local network.\nUse Options to adjust the scan."); deviceList.addView(empty); return; }
+        try {
+            JSONObject data=new JSONObject(report); JSONArray devices=data.getJSONArray("devices");
+            TextView heading=new TextView(this); heading.setText(devices.length()+" devices • "+data.optString("target")); heading.setTextSize(18); deviceList.addView(heading);
+            if(devices.length()==0) { TextView empty=new TextView(this); empty.setText("No devices identified. See Full report in Options for scan details."); deviceList.addView(empty); }
+            Map<String,Set<Integer>> portsByIp=new HashMap<>();
+            for(String key:new String[]{"checks","advertisedEndpointChecks"}) {
+                JSONArray checks=data.optJSONArray(key); if(checks==null) continue;
+                for(int j=0;j<checks.length();j++) { JSONObject check=checks.getJSONObject(j); if("OPEN".equals(check.optString("state"))) portsByIp.computeIfAbsent(check.getString("ip"),ignored -> new TreeSet<>()).add(check.getInt("port")); }
+            }
+            for(int i=0;i<devices.length();i++) {
+                JSONObject device=devices.getJSONObject(i); String ip=device.getString("ip"); lastDevices.add(ip);
+                Set<Integer> openPorts=portsByIp.getOrDefault(ip,Collections.emptySet());
+                String name=device.optString("reportedName"); String type=device.optString("probableType");
+                Button card=new Button(this); card.setAllCaps(false); card.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);
+                card.setText(ip+(name.isEmpty()?"":" • "+name)+"\nProbable type: "+type+"\nOpen TCP ports: "+(openPorts.isEmpty()?"none observed":openPorts.toString()));
+                card.setMaxLines(5); card.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                deviceList.addView(card,new LinearLayout.LayoutParams(-1,-2));
+                card.setOnClickListener(v -> showDevice(device,openPorts));
+            }
+            TextView footer=new TextView(this); footer.setText("Tap a device for details. Names and types may be self-reported.\nFull report and JSON export are in Options."); deviceList.addView(footer);
+        } catch(Exception e) { TextView fallback=new TextView(this); fallback.setText("Summary unavailable. Open Full report in Options."); deviceList.addView(fallback); }
+    }
+    private void showDevice(JSONObject device,Set<Integer> openPorts) {
+        StringBuilder details=new StringBuilder("Open TCP ports: ").append(openPorts.isEmpty()?"none observed":openPorts).append("\n");
+        String[] keys={"reportedName","reportedManufacturer","reportedModel","reportedMac","probableType","identityConfidence","suggestedManufacturer"};
+        String[] labels={"Name (reported)","Manufacturer (reported)","Model (reported)","MAC (reported)","Probable type","Identity confidence","Suggested manufacturer"};
+        for(int i=0;i<keys.length;i++) {
+            String value=device.optString(keys[i]); if(!value.isEmpty()) details.append(labels[i]).append(": ").append(value).append("\n");
+        }
+        details.append("Names, models and MAC addresses are self-reported; suggested identity is unverified.\n");
+        JSONArray observations=device.optJSONArray("evidence");
+        if(observations!=null) for(int i=0;i<observations.length();i++) {JSONObject item=observations.optJSONObject(i); if(item!=null) details.append("\n").append(item.optString("field")).append(": ").append(item.optString("value")).append(" [").append(item.optString("source")).append("]");}
+        showText(device.optString("ip"),details.toString());
     }
     private void chooseDevice() {
         if(scanner!=null || lastDevices.isEmpty()) return;
         String[] ips=lastDevices.toArray(new String[0]);
         new android.app.AlertDialog.Builder(this).setTitle("Reanalyze a device")
-            .setItems(ips,(dialog,index)-> {target.setText(ips[index]); mode.setSelection(1); ports.setText(ScanPlan.COMPLETE_PORTS); begin();})
+            .setItems(ips,(dialog,index)-> {target.setText(ips[index]); selectedMode=ScanPlan.Mode.COMPLETE; selectedPorts=ScanPlan.COMPLETE_PORTS; saveSettings(); updateSettingsSummary(); begin();})
             .setNegativeButton("Cancel",null).show();
     }
     private void showHistory() {
@@ -119,11 +221,8 @@ public final class MainActivity extends Activity {
         });
     }
     private EditText field(LinearLayout layout, String label, String value, int id) {
-        TextView caption = new TextView(this); caption.setText(label); layout.addView(caption);
+        TextView caption = new TextView(this); caption.setText(label); caption.setLabelFor(id); layout.addView(caption);
         EditText field = new EditText(this); field.setId(id); field.setSingleLine(true); field.setText(value); layout.addView(field); return field;
-    }
-    private Button button(LinearLayout layout, String text) {
-        Button button = new Button(this); button.setText(text); layout.addView(button, new LinearLayout.LayoutParams(0, -2, 1)); return button;
     }
     private void suggestWifi() {
         ConnectivityManager cm = (ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
@@ -143,16 +242,18 @@ public final class MainActivity extends Activity {
     private void begin() {
         final ScanPlan plan;
         final String targetValue = target.getText().toString().trim();
-        try { plan = new ScanPlan(targetValue, ports.getText().toString(), Integer.parseInt(timeout.getText().toString().trim()),mode.getSelectedItemPosition()==0?ScanPlan.Mode.FAST:ScanPlan.Mode.COMPLETE,adaptive.isChecked()); }
+        try { plan = new ScanPlan(targetValue,selectedPorts,timeoutMs,selectedMode,adaptiveScan); }
         catch (IllegalArgumentException e) { status.setText(e.getMessage()); return; }
+        android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(keyboard!=null) keyboard.hideSoftInputFromWindow(target.getWindowToken(),0);
+        target.clearFocus();
         scanner = new TcpScanner(); final TcpScanner current = scanner;
         final DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
         final DeviceIdentifier identity=new DeviceIdentifier(plan,evidence); identifier=identity;
         identity.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
         final NsdDiscovery nsd=new NsdDiscovery(this,evidence,plan.mode); discovery=nsd; nsd.start();
-        report = ""; resultText = ""; output.setText(""); export.setEnabled(false);
-        start.setEnabled(false); stop.setEnabled(true); reanalyze.setEnabled(false); historyButton.setEnabled(false); adaptive.setEnabled(false);
-        target.setEnabled(false); ports.setEnabled(false); timeout.setEnabled(false); mode.setEnabled(false);
+        report=""; resultText=""; deviceList.removeAllViews(); lastDevices.clear();
+        start.setText("Cancel scan"); start.setEnabled(true); target.setEnabled(false); progress.setVisibility(android.view.View.VISIBLE);
         int total = plan.hosts.size() * plan.ports.size(); progress.setMax(total); progress.setProgress(0);
         status.setText("Scanning " + plan.hosts.size() + " addresses…");
         final long started = System.currentTimeMillis();
@@ -197,12 +298,10 @@ public final class MainActivity extends Activity {
                             parsed.put("historyComparison",changes);
                             final String json=parsed.toString(2);
                             final String display=text+"\nHistory comparison\n"+changes+"\n";
-                            List<String> devices=new ArrayList<>(ScanHistory.inventory(ScanHistory.compact(parsed,plan)).keySet());
                             runOnUiThread(() -> {
                                 if(destroyed || scanner!=current) return;
-                                lastDevices=devices;
-                                report=json; resultText=display; output.setText(display); progress.setProgress(results.size());
-                                status.setText(cancelled?"Cancelled — partial results":"Scan completed"); finishScan(); export.setEnabled(true);
+                                report=json; resultText=display; renderDevices(); progress.setProgress(results.size());
+                                status.setText(cancelled?"Cancelled — partial results":"Scan completed"); finishScan();
                             });
                         } catch(Exception e) { runOnUiThread(() -> { if(!destroyed) { status.setText("Report failed: "+e.getMessage()); finishScan(); } }); }
                     });
@@ -212,7 +311,7 @@ public final class MainActivity extends Activity {
             }
         });
     }
-    private void finishScan() { scanner = null; identifier=null; discovery=null; start.setEnabled(true); stop.setEnabled(false); target.setEnabled(true); ports.setEnabled(true); timeout.setEnabled(true); mode.setEnabled(true); adaptive.setEnabled(true); historyButton.setEnabled(true); reanalyze.setEnabled(!lastDevices.isEmpty()); }
+    private void finishScan() { scanner=null; identifier=null; discovery=null; start.setEnabled(true); start.setText("Start scan"); target.setEnabled(true); progress.setVisibility(android.view.View.GONE); }
     private String describe(List<TcpScanner.Result> results, ScanPlan plan, boolean cancelled, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,int initialCompleted,int extraCount) {
         Map<String, List<Integer>> hosts = new LinkedHashMap<>(); int errors = 0, silent = 0, open = 0;
         for (TcpScanner.Result result : results) {
@@ -280,8 +379,10 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request != 10 || result != RESULT_OK || data == null || data.getData() == null) return;
-        final android.net.Uri uri = data.getData(); final String snapshot = report;
+        if(request!=10) return;
+        if(result!=RESULT_OK || data==null || data.getData()==null) { pendingExport=""; return; }
+        final android.net.Uri uri = data.getData(); final String snapshot=pendingExport; pendingExport="";
+        if(snapshot.isEmpty()) { status.setText("Report no longer available. Run a scan and export again."); return; }
         background.execute(() -> {
             try (OutputStream stream = getContentResolver().openOutputStream(uri, "wt")) {
                 if (stream == null) throw new java.io.IOException("Unable to open destination");
@@ -294,6 +395,7 @@ public final class MainActivity extends Activity {
         super.onSaveInstanceState(state);
         // Bound Bundle size: large reports must be exported before rotating.
         if (report.length() < 100000) state.putString("report", report);
+        if(pendingExport.length()<100000) state.putString("pendingExport",pendingExport);
         if (resultText.length() < 100000) state.putString("results", resultText); state.putBoolean("running", scanner != null);
     }
     @Override protected void onDestroy() {

@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. The latest migrated source is version 0.5.0, including the identification, DNS, reanalysis and history improvements.
+A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.6.0 adds a compact interface with device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Features
 
@@ -34,10 +34,13 @@ The Android CI workflow can also be run manually on the feature branch. It build
 ## Use
 
 1. Connect your phone to the local Wi-Fi network.
-2. Select **Fast** or **Complete**, then tap **Use Wi-Fi network** or enter an address, such as `192.168.0.109`, or network, such as `192.168.0.0/24`.
-3. Choose TCP ports, such as `22,80,443,5060,8000-8010`, and a timeout. Start with the defaults; increase the timeout for slow Wi-Fi.
-4. Tap **Start**, inspect responding IPs and open ports, or tap **Cancel** to retain partial results.
-5. Tap **Export JSON** and choose the destination through Android's document picker. No broad storage permission is required.
+2. Enter a private IP address or network, or open **Options → Use Wi-Fi network**.
+3. Open **Options → Scan settings** to choose Fast/Complete mode, TCP ports, timeout and adaptive scanning. Tap **Save** to apply; settings persist between launches. Cancel discards edits.
+4. Tap **Start scan**. The same button becomes **Cancel scan** while running; cancellation retains partial results.
+5. Tap a device card for identification details and evidence sources. Open **Options → Full report** for the detailed scan and history comparison.
+6. Use **Options → History**, **Reanalyze a device** or **Export JSON**. Export uses Android's document picker and requires no broad storage permission.
+
+The main screen keeps the target, settings summary and one scan button above the results. Options that cannot run during a scan are disabled. The black background and white text are preserved.
 
 ## What the results mean
 
