@@ -21,6 +21,8 @@ public final class NsdDiscovery {
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private final Queue<String> types=new ArrayDeque<>();
     private boolean running, resolving;
+    private volatile boolean incomplete;
+    public boolean isPartial() { return incomplete || !notices.isEmpty(); }
     private final Runnable rotate=()-> { for(NsdManager.DiscoveryListener listener:new ArrayList<>(listeners)) stopOne(listener); };
     private final Runnable deadline=this::stop;
     public NsdDiscovery(Context context,DeviceEvidence evidence,ScanPlan.Mode mode) {
@@ -30,10 +32,10 @@ public final class NsdDiscovery {
         running=true;
         if(manager==null) { notices.add("mDNS discovery unavailable"); running=false; finished.countDown(); return; }
         handler.postDelayed(deadline,mode.discoverySeconds*1000L);
-        types.addAll(Arrays.asList("_http._tcp.","_https._tcp.","_googlecast._tcp.","_airplay._tcp.","_raop._tcp.","_ipp._tcp.","_ipps._tcp.","_printer._tcp.","_smb._tcp.","_workstation._tcp.","_androidtvremote2._tcp.","_adb-tls-connect._tcp.","_hap._tcp.","_spotify-connect._tcp.","_daap._tcp.","_mqtt._tcp.","_rfb._tcp.","_scanner._tcp."));
+        types.addAll(Arrays.asList("_http._tcp.","_https._tcp.","_googlecast._tcp.","_airplay._tcp.","_raop._tcp.","_ipp._tcp.","_ipps._tcp.","_printer._tcp.","_smb._tcp.","_workstation._tcp.","_androidtvremote2._tcp.","_adb-tls-connect._tcp.","_hap._tcp.","_spotify-connect._tcp.","_daap._tcp.","_mqtt._tcp.","_rfb._tcp.","_scanner._tcp.","_rtsp._tcp."));
+        int batches=(types.size()+5)/6;
         for(int i=0;i<6;i++) discoverNext();
-        handler.postDelayed(rotate,mode.discoverySeconds*1000L/3);
-        handler.postDelayed(rotate,mode.discoverySeconds*2000L/3);
+        for(int batch=1;batch<batches;batch++) handler.postDelayed(rotate,mode.discoverySeconds*1000L*batch/batches);
     }
     private void discoverNext() {
         if(!running || types.isEmpty()) return;
@@ -69,7 +71,7 @@ public final class NsdDiscovery {
                     Map<String,byte[]> attrs=service.getAttributes();
                     for(String key:new String[]{"fn","md","model","ty","product","manufacturer","name","note","uuid","deviceid","rp","am","osvers"}) {
                         byte[] value=attrs.get(key);
-                        if(value!=null && value.length<=1024) evidence.add(ip,"mDNS TXT",(key.equals("fn") || key.equals("name"))?"friendlyName":key.equals("manufacturer")?"manufacturer":key.equals("rp")?"printerResource":key.equals("uuid") || key.equals("deviceid")?"deviceUuid":key.equals("osvers")?"reportedOsVersion":key.equals("note")?"location":"modelHint",new String(value,StandardCharsets.UTF_8));
+                        if(value!=null && value.length<=1024) evidence.add(ip,"mDNS TXT",MdnsFields.field(service.getServiceType(),key),new String(value,StandardCharsets.UTF_8));
                     }
                 }
                 resolveNext();
@@ -78,6 +80,7 @@ public final class NsdDiscovery {
     }
     private void stopOne(NsdManager.DiscoveryListener listener) { try { manager.stopServiceDiscovery(listener); } catch(RuntimeException ignored) { } }
     public void stop() {
+        if(running && (resolving || !pending.isEmpty())) { incomplete=true; if(notices.size()<4) notices.add("mDNS resolution budget reached; evidence is partial."); }
         running=false; finished.countDown(); handler.removeCallbacks(deadline); handler.removeCallbacks(rotate); pending.clear();types.clear();
         if(manager!=null) for(NsdManager.DiscoveryListener listener:new ArrayList<>(listeners)) stopOne(listener);
     }

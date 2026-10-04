@@ -81,6 +81,7 @@ public final class DeviceEvidence {
         if (all.contains("_adb")) return "Android device";
         if (all.contains("_hap")) return "HomeKit accessory";
         if (all.contains("_mqtt")) return "MQTT service device";
+        if (all.contains("_rtsp")) return "Streaming media service device";
         if (all.contains("_rfb")) return "Remote desktop device";
         if (all.contains("_scanner")) return "Scanner";
         if (all.contains("_spotify-connect") || all.contains("_daap")) return "Network audio device";

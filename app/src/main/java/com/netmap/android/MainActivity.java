@@ -272,9 +272,14 @@ public final class MainActivity extends Activity {
         detailValue(details,"Observed ports ("+openPorts.size()+")",portList(openPorts,Integer.MAX_VALUE));
         detailSection(details,"Device identity");
         detailValue(details,"IP address",device.optString("ip"));
-        String[] keys={"reportedName","reportedManufacturer","reportedModel","reportedMac","dnsHostname","probableType","identityConfidence","suggestedManufacturer"};
-        String[] labels={"Name (reported)","Manufacturer (reported)","Model (reported)","MAC (reported)","DNS hostname (reported)","Probable type","Identity confidence","Suggested manufacturer"};
+        String[] keys={"reportedName","reportedManufacturer","reportedModel","reportedMac","dnsHostname","probableType","identityConfidence","suggestedManufacturer","modelConfidence","manufacturerConfidence","typeConfidence","identificationStatus","probeCoverage"};
+        String[] labels={"Name (reported)","Manufacturer (reported)","Model (reported)","MAC (reported)","DNS hostname (reported)","Probable type","Identity confidence","Suggested manufacturer","Model confidence","Manufacturer confidence","Type confidence","Identification status","Probe coverage"};
         for(int i=0;i<keys.length;i++) detailValue(details,labels[i],device.optString(keys[i]));
+        JSONArray findings=device.optJSONArray("analysisFindings");
+        if(findings!=null && findings.length()>0) {
+            detailSection(details,"Analysis findings");
+            for(int i=0;i<findings.length();i++) detailValue(details,"Finding",findings.optString(i));
+        }
         JSONArray reasons=device.optJSONArray("identificationReasons");
         if(reasons!=null && reasons.length()>0) {
             detailSection(details,"Identification reasons");

@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.7.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.8.0 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Features
 
@@ -63,14 +63,14 @@ TCP discovery tests each selected port on each target. Identification additional
 
 Scanning uses the OS routing table. Wi-Fi client isolation, VPN routes, mobile-data routing, or local-network restrictions can prevent responses. The app targets SDK 35 with `INTERNET` and `ACCESS_NETWORK_STATE` permissions; retargeting to SDK 37+ requires implementing the local network runtime permission described in [Android's local-network documentation](https://developer.android.com/privacy-and-security/local-network-permission).
 
-Scans stop when the Activity is destroyed (including screen rotation). Small completed reports survive screen recreation; large reports should be exported first. Reports are not persisted between app launches. The app does not upload results. Results are self-reported observations, not authenticated hardware identities. Port numbers alone never determine manufacturer/model.
+User-started scans belong to the foreground service and survive Activity recreation, including screen rotation. Completed and normally cancelled reports are persisted atomically between app launches. The app does not upload results. Results are self-reported observations, not authenticated hardware identities. Port numbers alone never determine manufacturer/model.
 
 ## Tests
 
 The scanner has a plain Java test suite covering private-target validation, CIDR boundaries, port limits, real open/refused TCP connections, result ordering, concurrency and cancellation:
 
 ```bash
-bash android/tests/run.sh
+bash tests/run.sh
 ```
 
 The identification suite additionally tests target filtering, evidence bounds/deduplication, HTTP/UPnP parsing, description URL restrictions, NetBIOS packet validation and real socket reads. The tests run on a development machine with JDK 17; loopback is used only by the test harness and is not accepted in the app target field. Android CI additionally compiles the APK and runs Android lint. Physical-device validation is still required for Wi-Fi routing, screen layout and document export.
@@ -80,11 +80,11 @@ The identification suite additionally tests target filtering, evidence bounds/de
 - mDNS uses Android NSD to browse HTTP/HTTPS, Google Cast, AirPlay/RAOP, IPP/IPPS/printers, SMB, workstations, Android TV and ADB TLS services. It resolves serially for compatibility and stops after six seconds in Fast mode or twelve in Complete mode. The identification phase waits for this bounded discovery window before taking its endpoint snapshot. Out-of-target resolved addresses are ignored. Service names are advertised labels, not guaranteed hostnames.
 - SSDP starts alongside TCP scanning and its completed receive window is reused by identification. It listens for at most three seconds in Fast mode or five seconds in Complete mode / 512 packets. UPnP descriptions are requested only from a literal HTTP address matching the reply sender. No redirects or external description hosts are followed, and entity-bearing XML is rejected. Reported fields include friendly name, manufacturer, model name/number, device type and UDN when present.
 - NetBIOS sends one node-status request per target with a 250 ms receive timeout and validates sender, transaction ID and record bounds. Names/workgroups and nonzero MACs are included when reported; this is not a universal MAC discovery method.
-- TCP fingerprint reads are capped at four per responsive host in Fast mode or eight in Complete mode. Passive banners are read from selected open ports 21/22/23. HTTP requests use selected open ports 80/8000/8080/8888 or verified nonstandard ports explicitly advertised as `_http._tcp` and collect page titles and server headers. HTTPS is not fingerprinted and self-signed TLS validation is not bypassed.
+- TCP fingerprint reads are capped at four per responsive host in Fast mode or eight in Complete mode. Passive banners are read from selected open ports 21/22/23. HTTP requests use selected open ports 80/8000/8080/8888 or verified nonstandard ports explicitly advertised as `_http._tcp` and collect page titles and server headers. HTTPS/TLS, RTSP and SMB have bounded read-only fingerprints as described below. Self-signed TLS validation is not bypassed.
 - Identification uses eight workers, a twenty-second identification budget in Fast mode or sixty seconds in Complete mode, read deadlines and byte limits. Cancellation closes active sockets. Results retain partial-identification notices if the budget is reached. Discovery failures are best effort and do not discard TCP results.
 - A Cast service means a Cast receiver capability; it does not establish a Chromecast hardware model. Printer/AirPlay/media-server categories are similarly marked **probable**. Friendly names, manufacturers and models are labeled **reported**. Unknown devices remain unknown.
 
-JSON schema version 3 preserves the original TCP checks and adds `devices` with reported name/manufacturer/model/MAC, probable type, confidence explanation and sourced evidence, plus `identificationNotices`, mode/retry metadata, per-check attempt/final-timeout fields and a separate `advertisedEndpointChecks` array. MAC/vendor identification for silent devices remains unavailable. Physical-device tests are required for Android NSD callbacks and real Wi-Fi multicast behavior.
+JSON schema version 5 preserves the original TCP checks and adds `devices` with reported name/manufacturer/model/MAC, probable type, confidence explanation and sourced evidence, plus `identificationNotices`, mode/retry metadata, per-check attempt/final-timeout fields and a separate `advertisedEndpointChecks` array. MAC/vendor identification for silent devices remains unavailable. Physical-device tests are required for Android NSD callbacks and real Wi-Fi multicast behavior.
 
 ## Scan profiles (0.3.0)
 
@@ -116,14 +116,14 @@ Names appear as fallback reported names and as `dnsHostname` with DNS source evi
 
 Identification prioritizes TCP responders and independently announced devices, then still checks silent targets for NetBIOS evidence. An indexed responder set avoids repeatedly traversing all TCP checks for each IP. SSDP has one bounded discovery worker, starts before TCP checks and is joined within the identification budget; cancellation closes its socket and interrupts its worker.
 
-- Eighteen mDNS service types cover HTTP, printing, SMB, Cast, AirPlay, Android TV, ADB, HomeKit, Spotify, DAAP, MQTT, VNC and scanners. Discovery rotates batches of at most six active requests for older Android limits, within the mode window. TXT fields retain advertised names, model hints, manufacturer, UUID, OS version, location and printer resource paths.
+- Nineteen mDNS service types cover HTTP, printing, SMB, Cast, AirPlay, Android TV, ADB, HomeKit, Spotify, DAAP, MQTT, VNC, scanners and RTSP. Discovery rotates batches of at most six active requests for older Android limits, within the mode window. TXT fields retain advertised names, model hints, manufacturer, UUID, OS version, location and printer resource paths.
 - Advertised plaintext IPP endpoints, or selected open TCP/631 endpoints with no conflicting advertisement, receive only **Get-Printer-Attributes**. No print jobs or configuration changes are sent. IPPS is never queried with plaintext. Responses require HTTP 200/application-ipp, matching request ID, successful IPP status, complete bounded attributes and valid HTTP framing. Printer resource paths are constrained to the target device.
-- Manufacturer suggestions use explicit brand tokens in service metadata/banners. Conflicting reported manufacturers suppress suggestions. Repeated matching identity values across protocol families are labeled **Corroborated, unverified**; this is agreement, not authenticated identity. DNS names alone do not infer a manufacturer or device type. JSON schema 4 includes reasons, suggestions and the adaptive setting.
+- Manufacturer suggestions use explicit brand tokens in service metadata/banners. Conflicting reported manufacturers suppress suggestions. Repeated matching values for the same identity field across protocol families are labeled **Corroborated, unverified**; this is agreement, not authenticated identity. DNS names alone do not infer a manufacturer or device type. JSON schema 5 includes reasons, suggestions and the adaptive setting.
 - Optional **Adaptive scan** first probes one selected port on every target, then prioritizes responders. It starts at 32 concurrent probes, adjusts between 8 and 32 using 32-result windows based on connection errors or latency of confirmed responses (silence alone does not reduce concurrency), and may increase subsequent timeouts using observed response latency, capped at 3000 ms. It never shortens the entered timeout or skips any selected host/port. Disable it for fixed concurrency/timeouts. Complete-mode retries remain bounded as before.
 
 ## Reanalysis and history
 
-**Reanalyze IP** selects an observed device and starts a Complete scan of that single IP with the Complete port preset. The app stores up to 20 compact completed-scan summaries in private internal storage, capped at 4 MiB. History includes observed responders, names/models/types and open ports, and survives app restarts. It compares only the same normalized target range and selected-port list. Cancelled or incomplete TCP scans do not become comparison baselines. Missing devices/ports are labeled **not observed**, not offline or definitively closed. Identification budgets and filtering may affect observations. JSON exports include `historyComparison`.
+**Reanalyze IP** selects an observed device and starts a Complete scan of that single IP with the Complete port preset. The app stores up to 20 compact completed-scan summaries in private internal storage, capped at 4 MiB. History includes observed responders, names/models/types and open ports, and survives app restarts. It compares only matching Wi-Fi session scope, normalized target range, selected ports, mode, timeout and adaptive setting. Cancelled, incomplete TCP or partial-identification scans do not become comparison baselines. Missing devices/ports are labeled **not observed**, not offline or definitively closed. Identification budgets and filtering may affect observations. JSON exports include `historyComparison`.
 
 **History** opens previous summaries. Summaries do not preserve every raw connection result; export JSON after a scan for the full evidence. History remains local to each app installation. Uninstalling an app removes its private history.
 
@@ -157,3 +157,17 @@ The script requires the saved key and checks its certificate against the deliver
 ## Migration and installed-app compatibility
 
 The Android project now lives at the repository root. Java namespace, application IDs, version 0.5.0 and signing configuration are preserved, so moving repositories does not reset installed-app data or change APK update requirements. The launcher retains its Netmap Lite name for compatibility. Signing backups remain outside Git.
+
+## Evidence quality and protocol analysis (0.8.0)
+
+- mDNS TXT fields retain their meaning: OS versions, products and service-specific model attributes are separate.
+- Model, manufacturer and device type have separate confidence labels. Conflicting models are withheld; cross-field agreement does not increase confidence.
+- Read-only fingerprints prioritize IPP and advertised services over generic banners. NetBIOS still checks silent targets after higher-value reads. The TCP default remains 200 ms; identification has independent bounded deadlines.
+- HTTPS/TLS uses the platform trust store and verifies the target IP. Valid handshakes report TLS version, cipher and certificate metadata. Self-signed, untrusted or IP-mismatched certificates remain validation failures; no trust bypass, authentication or redirects are used. IPPS receives only a TLS handshake.
+- RTSP uses `OPTIONS *` with response sequence validation. It does not authenticate, request media or start streaming. RTSP advertisements on nonstandard TCP ports are supported.
+- UPnP description bodies use bounded HTTP framing, including chunked responses with XML content types.
+- Expanded device details and JSON include confidence per identity field and evidence-based findings. Findings do not assert vulnerabilities from port numbers or version strings.
+- JSON schema 5 includes TCP completion, identification status and network scope. Time-limited identification is visibly partial, even when all TCP checks completed.
+- History baselines require complete identification and matching target, ports, mode, timeout, adaptive setting and Wi-Fi session scope. Missing network identity or a network change skips comparison. Scopes include the Android boot counter and network handle: reconnecting or rebooting conservatively starts a new baseline. Existing unscoped entries remain readable but are not reused for comparison.
+
+SMB uses only unauthenticated SMB2 NEGOTIATE on port 445 or announced SMB TCP endpoints. It reports the negotiated dialect (2.0.2 through 3.0.2) and signing advertisement, without session setup, share access or file operations. This does not enumerate every supported dialect or test SMB 3.1.1. MQTT-specific fingerprints remain outside this release.

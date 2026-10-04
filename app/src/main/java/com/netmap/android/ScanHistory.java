@@ -17,6 +17,8 @@ final class ScanHistory {
     }
     synchronized String save(JSONObject report,ScanPlan plan) throws IOException,JSONException {
         if(report.optBoolean("cancelled") || report.has("completedChecks") && report.optInt("completedChecks")!=plan.hosts.size()*plan.ports.size()) return "History comparison skipped for a cancelled scan.";
+        if(report.optString("networkScope").isEmpty()) return "History comparison skipped: network identity unavailable.";
+        if(report.optBoolean("networkChanged") || report.has("identificationComplete") && !report.optBoolean("identificationComplete")) return "History comparison skipped: identification partial or network changed.";
         JSONArray history=load(); JSONObject entry=compact(report,plan); JSONObject previous=null;
         for(int i=0;i<history.length();i++) if(history.getJSONObject(i).optString("targetKey").equals(entry.getString("targetKey"))) {previous=history.getJSONObject(i);break;}
         String changes=previous==null?"First completed scan for this target and port selection.":compare(previous,entry);
@@ -32,7 +34,8 @@ final class ScanHistory {
     }
     static JSONObject compact(JSONObject report,ScanPlan plan) throws JSONException {
         JSONObject entry=new JSONObject();entry.put("target",report.getString("target"));entry.put("time",report.getLong("finishedAtEpochMs"));entry.put("mode",plan.mode.name());
-        entry.put("targetKey",plan.hosts.get(0)+"/"+plan.hosts.get(plan.hosts.size()-1)+"/"+plan.ports);entry.put("ports",new JSONArray(plan.ports));
+        entry.put("networkScope",report.optString("networkScope"));entry.put("timeoutMs",plan.timeoutMs);entry.put("adaptive",plan.adaptive);
+        entry.put("targetKey",report.optString("networkScope")+"/"+plan.mode+"/"+plan.timeoutMs+"/"+plan.adaptive+"/"+plan.hosts.get(0)+"/"+plan.hosts.get(plan.hosts.size()-1)+"/"+plan.ports);entry.put("ports",new JSONArray(plan.ports));
         Map<String,Set<Integer>> hosts=new TreeMap<>((a,b)->Long.compare(ScanPlan.ipv4(a),ScanPlan.ipv4(b)));
         for(String section:new String[]{"checks","advertisedEndpointChecks"}) {
             JSONArray checks=report.optJSONArray(section); if(checks==null) continue;

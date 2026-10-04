@@ -57,7 +57,7 @@ public class ImprovementsTest {
         Set<String> pairs=new HashSet<>();for(TcpScanner.Result result:results) {assertTrue(result.timeoutMs>=100);pairs.add(result.host+":"+result.port);}assertEquals(results.size(),pairs.size());
     }
     private JSONObject report(String target,String ip,int port,boolean cancelled) throws Exception {
-        JSONObject r=new JSONObject();r.put("target",target);r.put("finishedAtEpochMs",123456);r.put("cancelled",cancelled);
+        JSONObject r=new JSONObject();r.put("target",target);r.put("finishedAtEpochMs",123456);r.put("cancelled",cancelled);r.put("networkScope","test-network");r.put("identificationComplete",true);
         JSONArray checks=new JSONArray();checks.put(new JSONObject().put("ip",ip).put("port",port).put("state","OPEN"));r.put("checks",checks);r.put("devices",new JSONArray());return r;
     }
     @Test public void historyComparisonPersistenceAndCancellation() throws Exception {
