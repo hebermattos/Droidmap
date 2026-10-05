@@ -28,7 +28,7 @@ public final class ScanService extends Service {
     private boolean finishing;
     private long runId;
     private String networkScope;
-    private boolean identificationPartial;
+    private boolean identificationPartial;\n    private boolean nmapEnabled;
     private long lastNotification;
     private int acceptedPreview;
     private final AtomicInteger previewVersion=new AtomicInteger();
@@ -57,7 +57,7 @@ public final class ScanService extends Service {
             plan=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
-        networkScope=NetworkScope.current(this,plan); identificationPartial=false;
+        networkScope=NetworkScope.current(this,plan); identificationPartial=false; nmapEnabled=intent.getBooleanExtra("nmap",true);
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
@@ -102,7 +102,7 @@ public final class ScanService extends Service {
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
             List<String> nmapNotices=Collections.emptyList();
             if(!tcp.isCancelled()) {
-                nmapNotices=NmapEnricher.enrich(this,plan,results,evidence);
+                if(nmapEnabled) nmapNotices=NmapEnricher.enrich(this,plan,results,evidence);
                 identity.identify(results);
             }
             List<String> enrichmentNotices=nmapNotices;
