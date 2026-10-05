@@ -27,7 +27,11 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK packages
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'\n      - name: Build packaged Nmap for ARM64\n        env:\n          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018\n        run: bash native-tools/build-nmap-android.sh
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+      - name: Build packaged Nmap for ARM64
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: bash native-tools/build-nmap-android.sh
       - name: Test scanner
         run: bash tests/run.sh
       - name: Test, build and lint Android app
