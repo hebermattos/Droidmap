@@ -28,6 +28,14 @@ public final class DeviceEvidence {
         Map<String,List<Endpoint>> result=new LinkedHashMap<>(); endpoints.forEach((ip,values)->result.put(ip,new ArrayList<>(values.values()))); return result;
     }
     public DeviceEvidence(Collection<String> allowed) { this.allowed = new HashSet<>(allowed); }
+    public synchronized boolean allowDiscoveredHost(String ip) {
+        if(ip==null || allowed.size()>=1024) return false;
+        try {
+            java.net.InetAddress address=java.net.InetAddress.getByName(ScanPlan.stripZone(ip));
+            if(!(address instanceof java.net.Inet6Address) || address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isMulticastAddress()) return false;
+            return allowed.add(ip) || allowed.contains(ip);
+        } catch(Exception ignored) { return false; }
+    }
     public synchronized void add(String ip, String source, String field, String value) {
         if (!allowed.contains(ip) || value == null) return;
         value = clean(value);
