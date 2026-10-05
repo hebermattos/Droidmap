@@ -137,11 +137,7 @@ public final class ScanService extends Service {
             try {changes=new ScanHistory(new File(getFilesDir(),"scan-history.json")).save(parsed,plan);}
             catch(Exception e) {changes="History unavailable: "+e.getClass().getSimpleName();}
             parsed.put("historyComparison",changes);
-            String text="Identification: "+(partial?"partial":"completed")+"
-"+ScanReport.describe(checks,plan,cancelled,identified,notices,results.size(),extra.size())+"
-History comparison
-"+changes+"
-";
+            String text="Identification: "+(partial?"partial":"completed")+"\\n"+ScanReport.describe(checks,plan,cancelled,identified,notices,results.size(),extra.size())+"\\nHistory comparison\\n"+changes+"\\n";
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
                 cancelled?"Cancelled — partial results":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
             try {store.save(result);} catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
