@@ -51,12 +51,12 @@ public class RefactoringTest {
     @Test
     public void scanSettingsKeepCustomOptionsAndValidateBounds() {
         ScanSettings settings = new ScanSettings("22,8000-8002", 350, ScanPlan.Mode.FAST, false);
-        assertEquals("Fast • 4 ports • 350 ms", settings.summary());
+        assertEquals("Fast • 4 ports • 350 ms • Nmap On", settings.summary());\n        assertTrue(settings.nmap);
         ScanSettings complete = settings.completeDefaults();
         assertEquals(ScanPlan.Mode.COMPLETE, complete.mode);
         assertEquals(ScanPlan.COMPLETE_PORTS, complete.ports);
         assertEquals(350, complete.timeoutMs);
-        assertFalse(complete.adaptive);
+        assertFalse(complete.adaptive);\n        assertTrue(complete.nmap);
         assertEquals("22,8000-8002", settings.ports);
         assertThrows(
                 IllegalArgumentException.class,
@@ -118,7 +118,7 @@ public class RefactoringTest {
         assertEquals(500, restored.timeoutMs);
         assertEquals("80,443", restored.ports);
         assertEquals(ScanPlan.Mode.COMPLETE, restored.mode);
-        assertFalse(restored.adaptive);
+        assertFalse(restored.adaptive);\n        assertTrue(restored.nmap);
     }
 
     @Test
