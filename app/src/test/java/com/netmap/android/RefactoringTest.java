@@ -179,10 +179,7 @@ public class RefactoringTest {
                                     while (!input.readLine().isEmpty()) {}
                                     socket.getOutputStream()
                                             .write(
-                                                    "HTTP/1.0 200 OK\r
-        Server: Example\r
-        \r
-        <title>Office device</title>"
+                                                    "HTTP/1.0 200 OK\\r\\nServer: Example\\r\\n\\r\\n<title>Office device</title>"
                                                             .getBytes(StandardCharsets.US_ASCII));
                                     return request;
                                 }
