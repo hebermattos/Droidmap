@@ -237,17 +237,30 @@ final class DeviceResultsRenderer {
                 detailValue(details, "Reason " + (i + 1), reasons.optString(i));
         }
         Map<String, List<JSONObject>> sources = new LinkedHashMap<>();
+        List<JSONObject> nmap = new ArrayList<>();
         JSONArray observations = device.optJSONArray("evidence");
         if (observations != null)
             for (int i = 0; i < observations.length(); i++) {
                 JSONObject item = observations.optJSONObject(i);
-                if (item != null)
-                    sources.computeIfAbsent(
-                                    item.optString("source", "Unknown source"),
-                                    ignored -> new ArrayList<>())
-                            .add(item);
+                if (item != null) {
+                    String source = item.optString("source", "Unknown source");
+                    if (source.startsWith("Nmap")) nmap.add(item);
+                    else sources.computeIfAbsent(source, ignored -> new ArrayList<>()).add(item);
+                }
             }
-        detailSection(details, "Evidence by source");
+        detailSection(details, "Nmap");
+        if (nmap.isEmpty()) {
+            detailValue(details, "Service detection", "No Nmap results for this device.");
+        } else {
+            for (JSONObject item : nmap) {
+                String source = item.optString("source", "Nmap");
+                String label = source.equals("Nmap")
+                        ? evidenceLabel(item.optString("field"))
+                        : source.replace("Nmap service ", "Port ") + " • " + evidenceLabel(item.optString("field"));
+                detailValue(details, label, item.optString("value"));
+            }
+        }
+        detailSection(details, "Other evidence by source");
         if (sources.isEmpty())
             detailValue(details, "Evidence", "No identification metadata collected.");
         for (Map.Entry<String, List<JSONObject>> source : sources.entrySet()) {

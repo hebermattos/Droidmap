@@ -10,7 +10,6 @@ final class NmapEnricher {
 
     static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence) {
         List<String> notices=new ArrayList<>();
-        if(plan.mode!=ScanPlan.Mode.COMPLETE) return notices;
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
         File data;
@@ -26,9 +25,11 @@ final class NmapEnricher {
             attempted++;
             try {
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,plan.ports,plan.timeoutMs);
-                NmapXmlParser.parse(xml,evidence); enriched++;
+                NmapXmlParser.parse(xml,evidence); evidence.add(host,"Nmap","scanStatus","Completed"); enriched++;
             } catch(Exception e) {
-                notices.add("Nmap "+host+": "+DeviceEvidence.clean(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));
+                String error=DeviceEvidence.clean(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
+                evidence.add(host,"Nmap","scanStatus","Failed: "+error);
+                notices.add("Nmap "+host+": "+error);
             }
         }
         if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" responsive devices.");

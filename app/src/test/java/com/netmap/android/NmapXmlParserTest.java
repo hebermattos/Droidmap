@@ -14,6 +14,8 @@ public class NmapXmlParserTest {
         assertTrue(items.stream().anyMatch(x->x.field.equals("serviceName") && x.value.equals("ssh")));
         assertTrue(items.stream().anyMatch(x->x.field.equals("banner") && x.value.equals("OpenSSH 9.6")));
         assertTrue(items.stream().anyMatch(x->x.field.equals("dnsHostname") && x.value.equals("nas.lan")));
+        assertTrue(items.stream().anyMatch(x->x.source.equals("Nmap") && x.field.equals("openPort")));
+        assertTrue(items.stream().anyMatch(x->x.source.equals("Nmap service 22") && x.field.equals("banner")));
     }
     @Test public void parsesIpv6ServiceEvidence() throws Exception {
         String ip="fd00::10";
