@@ -355,7 +355,8 @@ public final class MainActivity extends Activity {
                         .putExtra("ports", settings.ports)
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
-                        .putExtra("adaptive", settings.adaptive)\n                        .putExtra("nmap", settings.nmap);
+                        .putExtra("adaptive", settings.adaptive)
+                        .putExtra("nmap", settings.nmap);
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                         != android.content.pm.PackageManager.PERMISSION_GRANTED

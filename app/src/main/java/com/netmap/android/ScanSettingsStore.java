@@ -26,7 +26,8 @@ final class ScanSettingsStore {
                 preferences.getBoolean("complete", false)
                         ? ScanPlan.Mode.COMPLETE
                         : ScanPlan.Mode.FAST,
-                preferences.getBoolean("adaptive", true),\n                preferences.getBoolean("nmap", true));
+                preferences.getBoolean("adaptive", true),
+                preferences.getBoolean("nmap", true));
     }
 
     void save(ScanSettings settings) {
@@ -35,7 +36,8 @@ final class ScanSettingsStore {
                 .putString("ports", settings.ports)
                 .putInt("timeout", settings.timeoutMs)
                 .putBoolean("complete", settings.mode == ScanPlan.Mode.COMPLETE)
-                .putBoolean("adaptive", settings.adaptive)\n                .putBoolean("nmap", settings.nmap)
+                .putBoolean("adaptive", settings.adaptive)
+                .putBoolean("nmap", settings.nmap)
                 .apply();
     }
 }

@@ -44,7 +44,11 @@ final class ScanSettingsDialog {
         CheckBox adaptive = new CheckBox(context);
         adaptive.setText("Adaptive scan (prioritize responders)");
         adaptive.setChecked(current.adaptive);
-        form.addView(adaptive);\n        CheckBox nmap = new CheckBox(context);\n        nmap.setText("Nmap service detection");\n        nmap.setChecked(current.nmap);\n        form.addView(nmap);
+        form.addView(adaptive);
+        CheckBox nmap = new CheckBox(context);
+        nmap.setText("Nmap service detection");
+        nmap.setChecked(current.nmap);
+        form.addView(nmap);
         TextView help = new TextView(context);
         help.setText(
                 "Complete mode uses more default ports, retries and longer device discovery. Custom"
@@ -104,7 +108,8 @@ final class ScanSettingsDialog {
                                                             mode.getSelectedItemPosition() == 0
                                                                     ? ScanPlan.Mode.FAST
                                                                     : ScanPlan.Mode.COMPLETE,
-                                                            adaptive.isChecked(),\n                                                            nmap.isChecked());
+                                                            adaptive.isChecked(),
+                                                            nmap.isChecked());
                                             onSave.accept(updated);
                                             dialog.dismiss();
                                         }));
