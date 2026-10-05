@@ -31,15 +31,13 @@ final class IppProbe implements DeviceProbe {
                                 context.evidence.observations(host), "printerResource"));
         if (resource == null) return;
         try {
-            byte[] body = Ipp.request("ipp://" + host + ":" + port + resource);
+            byte[] body = Ipp.request("ipp://" + IpAddresses.authority(host,port) + resource);
             ByteArrayOutputStream request = new ByteArrayOutputStream();
             request.write(
                     ("POST "
                                     + resource
                                     + " HTTP/1.1\r\nHost: "
-                                    + host
-                                    + ":"
-                                    + port
+                                    + IpAddresses.authority(host,port)
                                     + "\r\nContent-Type: application/ipp\r\nContent-Length: "
                                     + body.length
                                     + "\r\nConnection: close\r\n\r\n")

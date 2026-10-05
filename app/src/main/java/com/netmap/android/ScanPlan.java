@@ -39,7 +39,7 @@ public final class ScanPlan {
         try{
             InetAddress parsed=InetAddress.getByName(address);
             if(!(parsed instanceof Inet6Address)) throw new IllegalArgumentException("Enter a literal IPv6 address.");
-            if(!(parsed.isLinkLocalAddress()||parsed.isSiteLocalAddress()||isUniqueLocal(parsed))) throw new IllegalArgumentException("Use a link-local or unique-local IPv6 address.");
+            if(!(parsed.isLinkLocalAddress()||parsed.isSiteLocalAddress()||isUniqueLocal(parsed)||IpAddresses.global(parsed))) throw new IllegalArgumentException("Use a unicast IPv6 address on the connected Wi-Fi network.");
             return parsed.getHostAddress().split("%",2)[0]+(zone.isEmpty()?"":"%"+zone);
         }catch(UnknownHostException e){throw new IllegalArgumentException("Invalid IPv6 address.");}
     }

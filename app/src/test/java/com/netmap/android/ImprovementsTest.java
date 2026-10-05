@@ -10,11 +10,14 @@ import org.json.*;
 
 public class ImprovementsTest {
     @Test public void discoveredIpv6CanExtendEvidenceButIpv4Cannot() {
-        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"));
+        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"),host->host.startsWith("fe80:")&&host.endsWith("%wlan0"));
         assertTrue(evidence.allowDiscoveredHost("fe80::1234%wlan0"));
         evidence.add("fe80::1234%wlan0","IPv6 discovery","address","fe80::1234%wlan0");
         assertTrue(evidence.hasObservations("fe80::1234%wlan0"));
         assertFalse(evidence.allowDiscoveredHost("192.168.1.99"));
+        assertFalse(evidence.allowDiscoveredHost("fe80::1234%other"));
+        assertFalse(evidence.allowDiscoveredHost("2001:db8::1234"));
+        assertFalse(new DeviceEvidence(Collections.singleton("192.168.1.1")).allowDiscoveredHost("fe80::1234%wlan0"));
     }
 
     @Test public void acceptsLocalIpv6WithoutExpandingSubnet() {

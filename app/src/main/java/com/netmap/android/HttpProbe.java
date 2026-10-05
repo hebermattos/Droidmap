@@ -27,9 +27,7 @@ final class HttpProbe implements DeviceProbe {
                         host,
                         port,
                         "GET / HTTP/1.0\r\nHost: "
-                                + host
-                                + ":"
-                                + port
+                                + IpAddresses.authority(host,port)
                                 + "\r\nUser-Agent: Netmap-Lite/0.4\r\nConnection: close\r\n\r\n",
                         16384);
         if (response.startsWith("HTTP/")) {
