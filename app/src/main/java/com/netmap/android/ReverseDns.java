@@ -42,11 +42,13 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
     }
     ReverseDns(List<InetAddress> servers,ScanPlan plan,DeviceEvidence evidence,SocketBinder binder,String scope,Transport transport,java.util.function.LongSupplier cacheClock) {
         this.cacheClock=cacheClock;
-        for(InetAddress server:servers) if(privateIpv4(server) && this.servers.size()<2 && !this.servers.contains(server)) this.servers.add(server);
+        for(InetAddress server:servers) if(localDns(server) && this.servers.size()<2 && !this.servers.contains(server)) this.servers.add(server);
         this.hosts=new HashSet<>(plan.hosts); this.evidence=evidence; this.binder=binder; this.scope=scope;
         this.transport=transport==null?this::exchange:transport;
         timeoutMs=plan.mode==ScanPlan.Mode.COMPLETE?1200:600;
     }
+    static boolean localDns(InetAddress address) { if(address instanceof Inet6Address) return address.isLinkLocalAddress() || address.isSiteLocalAddress() || ScanPlan.isUniqueLocal(address);
+        return privateIpv4(address); }
     static boolean privateIpv4(InetAddress address) {
         byte[] b=address.getAddress(); if(b.length!=4) return false;
         int first=b[0]&255,second=b[1]&255;
@@ -149,6 +151,6 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
             } finally {active.remove(socket);}
         }
     }
-    @Override public List<String> notices() { return servers.isEmpty()?Collections.singletonList("DNS PTR skipped: no matching Wi-Fi network with private IPv4 DNS servers."):Collections.emptyList(); }
+    @Override public List<String> notices() { return servers.isEmpty()?Collections.singletonList("DNS PTR skipped: no matching Wi-Fi network with local DNS servers."):Collections.emptyList(); }
     @Override public void cancel() { cancelled.set(true); for(Closeable socket:active) try {socket.close();} catch(IOException ignored) { } }
 }

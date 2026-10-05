@@ -75,7 +75,7 @@ public final class TcpScanner {
         }
         List<Result> snapshot = new ArrayList<>(results);
         snapshot.sort((a, b) -> {
-            int hostOrder = Long.compare(ScanPlan.ipv4(a.host), ScanPlan.ipv4(b.host));
+            int hostOrder = ScanPlan.compareHosts(a.host, b.host);
             return hostOrder != 0 ? hostOrder : Integer.compare(a.port, b.port);
         });
         return snapshot;

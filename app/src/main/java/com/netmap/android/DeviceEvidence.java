@@ -9,7 +9,7 @@ public final class DeviceEvidence {
         public final String source, field, value;
         Observation(String source, String field, String value) { this.source=source; this.field=field; this.value=value; }
     }
-    private final Map<String, List<Observation>> devices = new TreeMap<>((a,b) -> Long.compare(ScanPlan.ipv4(a), ScanPlan.ipv4(b)));
+    private final Map<String, List<Observation>> devices = new TreeMap<>(ScanPlan::compareHosts);
     public static final class Endpoint {
         public final int port;
         public final String source,serviceType;
