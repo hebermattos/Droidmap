@@ -9,6 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.json.*;
 
 public class ImprovementsTest {
+    @Test public void discoveredIpv6CanExtendEvidenceButIpv4Cannot() {
+        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"));
+        assertTrue(evidence.allowDiscoveredHost("fe80::1234%wlan0"));
+        evidence.add("fe80::1234%wlan0","IPv6 discovery","address","fe80::1234%wlan0");
+        assertTrue(evidence.hasObservations("fe80::1234%wlan0"));
+        assertFalse(evidence.allowDiscoveredHost("192.168.1.99"));
+    }
+
     @Test public void acceptsLocalIpv6WithoutExpandingSubnet() {
         assertEquals(Collections.singletonList("fd00:0:0:0:0:0:0:10"), ScanPlan.parseHosts("fd00::10"));
         assertTrue(ScanPlan.isIpv6("fd00::10"));
