@@ -66,7 +66,7 @@ public final class ScanService extends Service {
             else startForeground(NOTIFICATION,notification);
             scanner=new TcpScanner();
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
-            for(String ipv6:Ipv6NeighborDiscovery.discover(this)) evidence.add(ipv6,"IPv6 discovery","address",ipv6);
+            for(String ipv6:Ipv6NeighborDiscovery.discover(this)) if(evidence.allowDiscoveredHost(ipv6)) evidence.add(ipv6,"IPv6 discovery","address",ipv6);
             identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
             identifier.startDiscovery();
             discovery=new NsdDiscovery(this,evidence,plan.mode); discovery.start();
