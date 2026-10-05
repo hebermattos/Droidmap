@@ -51,12 +51,14 @@ public class RefactoringTest {
     @Test
     public void scanSettingsKeepCustomOptionsAndValidateBounds() {
         ScanSettings settings = new ScanSettings("22,8000-8002", 350, ScanPlan.Mode.FAST, false);
-        assertEquals("Fast • 4 ports • 350 ms • Nmap On", settings.summary());\n        assertTrue(settings.nmap);
+        assertEquals("Fast • 4 ports • 350 ms • Nmap On", settings.summary());
+        assertTrue(settings.nmap);
         ScanSettings complete = settings.completeDefaults();
         assertEquals(ScanPlan.Mode.COMPLETE, complete.mode);
         assertEquals(ScanPlan.COMPLETE_PORTS, complete.ports);
         assertEquals(350, complete.timeoutMs);
-        assertFalse(complete.adaptive);\n        assertTrue(complete.nmap);
+        assertFalse(complete.adaptive);
+        assertTrue(complete.nmap);
         assertEquals("22,8000-8002", settings.ports);
         assertThrows(
                 IllegalArgumentException.class,
@@ -118,7 +120,8 @@ public class RefactoringTest {
         assertEquals(500, restored.timeoutMs);
         assertEquals("80,443", restored.ports);
         assertEquals(ScanPlan.Mode.COMPLETE, restored.mode);
-        assertFalse(restored.adaptive);\n        assertTrue(restored.nmap);
+        assertFalse(restored.adaptive);
+        assertTrue(restored.nmap);
     }
 
     @Test
@@ -176,7 +179,10 @@ public class RefactoringTest {
                                     while (!input.readLine().isEmpty()) {}
                                     socket.getOutputStream()
                                             .write(
-                                                    "HTTP/1.0 200 OK\r\nServer: Example\r\n\r\n<title>Office device</title>"
+                                                    "HTTP/1.0 200 OK\r
+        Server: Example\r
+        \r
+        <title>Office device</title>"
                                                             .getBytes(StandardCharsets.US_ASCII));
                                     return request;
                                 }
