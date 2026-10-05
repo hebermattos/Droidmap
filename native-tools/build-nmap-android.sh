@@ -23,3 +23,9 @@ for f in nmap-service-probes nmap-services nmap-protocols nmap-rpc; do
   test -s "$SOURCE/share/nmap/$f"
   cp "$SOURCE/share/nmap/$f" "$DATA/$f"
 done
+rm -rf "$DATA/scripts" "$DATA/nselib"
+cp -R "$SOURCE/share/nmap/scripts" "$DATA/scripts"
+cp -R "$SOURCE/share/nmap/nselib" "$DATA/nselib"
+(cd "$DATA" && find scripts nselib -type f -print | LC_ALL=C sort > nse-files.txt)
+test -s "$DATA/scripts/script.db"
+test -s "$DATA/nse-files.txt"

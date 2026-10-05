@@ -238,13 +238,15 @@ final class DeviceResultsRenderer {
         }
         Map<String, List<JSONObject>> sources = new LinkedHashMap<>();
         List<JSONObject> nmap = new ArrayList<>();
+        List<JSONObject> vulnerabilities = new ArrayList<>();
         JSONArray observations = device.optJSONArray("evidence");
         if (observations != null)
             for (int i = 0; i < observations.length(); i++) {
                 JSONObject item = observations.optJSONObject(i);
                 if (item != null) {
                     String source = item.optString("source", "Unknown source");
-                    if (source.startsWith("Nmap")) nmap.add(item);
+                    if (source.equals("Nmap vulnerabilities")) vulnerabilities.add(item);
+                    else if (source.startsWith("Nmap")) nmap.add(item);
                     else sources.computeIfAbsent(source, ignored -> new ArrayList<>()).add(item);
                 }
             }
@@ -260,6 +262,11 @@ final class DeviceResultsRenderer {
                 detailValue(details, label, item.optString("value"));
             }
         }
+        detailSection(details, "Nmap vulnerabilities");
+        if (vulnerabilities.isEmpty()) detailValue(details, "Safe checks", "No vulnerability findings reported.");
+        else for (JSONObject item : vulnerabilities)
+            detailValue(details, evidenceLabel(item.optString("field")), item.optString("value"));
+        detailValue(details, "Scope", "Safe NSE vulnerability checks on Nmap-confirmed open ports only. Brute force, DoS, intrusive and exploit scripts are excluded.");
         detailSection(details, "Other evidence by source");
         if (sources.isEmpty())
             detailValue(details, "Evidence", "No identification metadata collected.");

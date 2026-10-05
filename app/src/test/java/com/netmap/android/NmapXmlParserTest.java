@@ -30,4 +30,10 @@ public class NmapXmlParserTest {
             fail("DOCTYPE must be rejected");
         } catch(Exception expected) { }
     }
+    @Test public void parsesSafeVulnerabilityScriptOutput() throws Exception {
+        String ip="192.168.1.10"; DeviceEvidence evidence=new DeviceEvidence(Collections.singleton(ip));
+        String xml="<?xml version=\"1.0\"?><nmaprun><host><address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><script id=\"ssl-poodle\" output=\"VULNERABLE: test finding\"/></port></ports></host></nmaprun>";
+        NmapXmlParser.parseVulnerabilities(xml,evidence);
+        assertTrue(evidence.observations(ip).stream().anyMatch(x->x.source.equals("Nmap vulnerabilities") && x.field.contains("443") && x.value.contains("VULNERABLE")));
+    }
 }

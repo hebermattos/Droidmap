@@ -26,6 +26,15 @@ final class NmapEnricher {
             try {
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,plan.ports,plan.timeoutMs);
                 NmapXmlParser.parse(xml,evidence); evidence.add(host,"Nmap","scanStatus","Completed"); enriched++;
+                LinkedHashSet<Integer> openPorts=new LinkedHashSet<>();
+                for(DeviceEvidence.Observation item:evidence.observations(host)) if(item.source.equals("Nmap")&&item.field.equals("openPort")) try { openPorts.add(Integer.parseInt(item.value.split("/",2)[0])); } catch(Exception ignored) {}
+                if(!openPorts.isEmpty()) try {
+                    String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
+                    NmapXmlParser.parseVulnerabilities(vulnXml,evidence);
+                    evidence.add(host,"Nmap vulnerabilities","scanStatus","Completed on "+openPorts.size()+" open port(s)");
+                } catch(Exception vulnerabilityError) {
+                    evidence.add(host,"Nmap vulnerabilities","scanStatus","Failed: "+DeviceEvidence.clean(vulnerabilityError.getMessage()==null?vulnerabilityError.getClass().getSimpleName():vulnerabilityError.getMessage()));
+                }
             } catch(Exception e) {
                 String error=DeviceEvidence.clean(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
                 evidence.add(host,"Nmap","scanStatus","Failed: "+error);
@@ -39,9 +48,12 @@ final class NmapEnricher {
     private static File installData(Context context) throws IOException {
         File dir=new File(context.getFilesDir(),"nmap-data");
         if(!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create data directory");
-        for(String name:new String[]{"nmap-service-probes","nmap-services","nmap-protocols","nmap-rpc"}) {
+        List<String> names=new ArrayList<>(Arrays.asList("nmap-service-probes","nmap-services","nmap-protocols","nmap-rpc","scripts/script.db"));
+        try(BufferedReader manifest=new BufferedReader(new InputStreamReader(context.getAssets().open("nmap-data/nse-files.txt")))) { String line; while((line=manifest.readLine())!=null) if(!line.trim().isEmpty()&&!names.contains(line)) names.add(line); }
+        for(String name:names) {
             File target=new File(dir,name);
             if(target.isFile() && target.length()>0) continue;
+            File parent=target.getParentFile(); if(parent!=null&&!parent.isDirectory()&&!parent.mkdirs()) throw new IOException("cannot create Nmap data subdirectory");
             try(InputStream in=context.getAssets().open("nmap-data/"+name); OutputStream out=new FileOutputStream(target)) {
                 byte[] buffer=new byte[8192]; int read; while((read=in.read(buffer))!=-1) out.write(buffer,0,read);
             }
