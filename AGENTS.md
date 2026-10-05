@@ -13,11 +13,14 @@ This file applies to the entire repository. Read the current checkout before cha
 
 | Location | Responsibility |
 | --- | --- |
-| `app/src/main/java/com/netmap/android/MainActivity.java` | Native UI, scan settings, expandable device results, history and export |
+| `app/src/main/java/com/netmap/android/MainActivity.java` | Activity lifecycle, user actions and service snapshots |
+| `ScanSettings.java`, `ScanSettingsStore.java`, `ScanSettingsDialog.java` | Immutable validated settings, preferences/migration and settings editor |
+| `DeviceResultsRenderer.java`, `ScanHistoryDialog.java`, `ReportExporter.java`, `ExportRequest.java` | Device cards, history presentation and run-scoped export state/I/O |
 | `ScanPlan.java` | Target/port validation, scan modes, retries and budgets |
 | `TcpScanner.java`, `AdaptivePolicy.java` | Bounded TCP connections, scheduling, progress and cancellation |
-| `DeviceIdentifier.java` | SSDP/UPnP, NetBIOS, service fingerprints and advertised endpoint checks |
-| `DeviceEvidence.java`, `DeviceProfile.java` | Bounded observations, provenance and inferred identity |
+| `DeviceIdentifier.java` | Discovery/identification scheduling, protocol routing and advertised endpoint checks |
+| `SsdpDiscovery.java`, `*Probe.java`, `ProbeContext.java` | Protocol operations and shared deadlines, read bounds and socket ownership |
+| `DeviceEvidence.java`, `DeviceProfile.java`, `DeviceConfidence.java`, `IdentificationStatus.java` | Bounded observations, provenance and typed identity/completion decisions |
 | `NsdDiscovery.java` | Android mDNS/NSD discovery and resolution |
 | `ReverseDns.java`, `WifiReverseDns.java` | dnsjava PTR resolution, scoped caching and Wi-Fi DNS binding |
 | `Ipp.java`, `HttpReply.java`, `NetBios.java` | Protocol encoding and bounded reply parsing |
@@ -34,6 +37,7 @@ Java filenames in the table are relative to `app/src/main/java/com/netmap/androi
 - Check every selected host/port unless cancelled. Performance optimizations must not silently omit silent addresses or ports. Keep retry behavior and progress counts consistent with `ScanPlan`.
 - Respect the entered timeout and custom port selection. Keep factory defaults and one-time preference migrations consistent with the implemented UI and README; do not reset saved custom values on every launch.
 - `OPEN` requires a successful TCP connection. Explicit refusal is `CLOSED`; timeouts and other failures must not establish reachability. Missing observations do not prove a device is offline.
+- Use typed confidence/status values for decisions; format their labels only at evidence, UI or report boundaries. Preserve schema 5 labels when refactoring.
 - Preserve source evidence and distinguish reported metadata from inferred identity. Port numbers or DNS names alone must not identify hardware or manufacturer. Unknown devices remain unknown.
 - Preserve initial TCP checks separately from advertised endpoint checks in JSON. Verify announced TCP endpoints before labeling them open; a UDP announcement is not an open TCP port.
 - Keep probes read-only. Do not send print jobs, modify devices, authenticate or exploit vulnerabilities as part of identification.

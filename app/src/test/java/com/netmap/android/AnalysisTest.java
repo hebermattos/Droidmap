@@ -24,12 +24,12 @@ public class AnalysisTest {
         DeviceEvidence e=new DeviceEvidence(Collections.singleton(IP));
         e.add(IP,"mDNS","friendlyName","Example"); e.add(IP,"UPnP","modelName","Example");
         DeviceProfile p=new DeviceProfile(e.observations(IP));
-        assertNotEquals("Corroborated, unverified",p.confidence);
+        assertNotEquals(DeviceConfidence.CORROBORATED,p.confidence);
         e.add(IP,"mDNS TXT","modelHint","Example");
-        assertEquals("Corroborated, unverified",new DeviceProfile(e.observations(IP)).modelConfidence);
+        assertEquals(DeviceConfidence.CORROBORATED,new DeviceProfile(e.observations(IP)).modelConfidence);
         e.add(IP,"IPP","modelName","Different"); p=new DeviceProfile(e.observations(IP));
-        assertEquals("Conflicting reports",p.modelConfidence); assertEquals("",p.model);
-        assertNotEquals("Corroborated, unverified",p.confidence);
+        assertEquals(DeviceConfidence.CONFLICTING,p.modelConfidence); assertEquals("",p.model);
+        assertNotEquals(DeviceConfidence.CORROBORATED,p.confidence);
     }
     @Test public void protocolRoutingProtectsEncryptedAndPrintingServices() {
         assertTrue(DeviceIdentifier.isTlsEndpoint(443,""));
@@ -77,7 +77,7 @@ public class AnalysisTest {
         DeviceEvidence e=new DeviceEvidence(Collections.singleton(IP));
         e.add(IP,"mDNS","serviceType","_ipp._tcp.");e.add(IP,"mDNS","serviceType","_googlecast._tcp.");
         DeviceProfile profile=new DeviceProfile(e.observations(IP));
-        assertEquals("Multiple advertised roles",profile.type);assertTrue(profile.typeConfidence.contains("Multiple"));
+        assertEquals("Multiple advertised roles",profile.type);assertTrue(profile.typeConfidence == DeviceConfidence.MULTIPLE_ROLES);
     }
     @Test public void tlsFailureIsVisibleWithoutPlaintextFallback() throws Exception {
         try(ServerSocket server=new ServerSocket(0,1,InetAddress.getLoopbackAddress())) {

@@ -20,16 +20,16 @@ final class ScanReport {
             List<DeviceEvidence.Observation> info=identified.getOrDefault(host.getKey(),Collections.emptyList());
             String name=DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle");
             DeviceProfile profile=new DeviceProfile(info);
-            String maker=profile.manufacturerConfidence.equals("Conflicting reports")?"":DeviceEvidence.first(info,"manufacturer"), model=profile.model;
+            String maker=profile.manufacturerConfidence == DeviceConfidence.CONFLICTING?"":DeviceEvidence.first(info,"manufacturer"), model=profile.model;
             text.append("  Name (reported): ").append(name.isEmpty()?"Unknown":name).append("\n");
             if(!maker.isEmpty()) text.append("  Manufacturer (reported): ").append(maker).append("\n");
             String mac=DeviceEvidence.first(info,"reportedMac");
             if(!mac.isEmpty()) text.append("  MAC (reported via NetBIOS): ").append(mac).append("\n");
             if(!model.isEmpty()) text.append("  Model (reported): ").append(model).append("\n");
             if(!profile.manufacturer.isEmpty() && maker.isEmpty()) text.append("  Manufacturer (suggested): ").append(profile.manufacturer).append("\n");
-            text.append("  Identification: ").append(profile.confidence).append("\n");
+            text.append("  Identification: ").append(profile.confidence.label).append("\n");
             for(String finding:AnalysisFindings.describe(info)) text.append("  Finding: ").append(finding).append("\n");
-            text.append("  Model confidence: ").append(profile.modelConfidence).append("\n  Manufacturer confidence: ").append(profile.manufacturerConfidence).append("\n  Type confidence: ").append(profile.typeConfidence).append("\n");
+            text.append("  Model confidence: ").append(profile.modelConfidence.label).append("\n  Manufacturer confidence: ").append(profile.manufacturerConfidence.label).append("\n  Type confidence: ").append(profile.typeConfidence.label).append("\n");
             for(String reason:profile.reasons) text.append("  Evidence: ").append(reason).append("\n");
             text.append("  Type (probable): ").append(profile.type).append("\n");
             for(DeviceEvidence.Observation item:info) text.append("  [").append(item.source).append("] ").append(item.field).append(": ").append(item.value).append("\n");
@@ -67,7 +67,7 @@ final class ScanReport {
         boolean partial=identificationPartial || cancelled || networkChanged || !tcpComplete;
         report.put("networkScope",networkScope); report.put("networkChanged",networkChanged);
         report.put("identificationComplete",!partial);
-        report.put("identificationStatus",cancelled?"cancelled":partial?"partial":"completed");
+        report.put("identificationStatus",IdentificationStatus.of(cancelled, partial).wireValue);
         report.put("tcpScanComplete",tcpComplete);
         return partial;
     }
@@ -79,10 +79,10 @@ final class ScanReport {
             device.put("dnsHostname",DeviceEvidence.first(info,"dnsHostname"));
             device.put("reportedName",DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
             device.put("reportedMac",DeviceEvidence.first(info,"reportedMac"));
-            device.put("reportedManufacturer",profile.manufacturerConfidence.equals("Conflicting reports")?"":DeviceEvidence.first(info,"manufacturer"));
+            device.put("reportedManufacturer",profile.manufacturerConfidence == DeviceConfidence.CONFLICTING?"":DeviceEvidence.first(info,"manufacturer"));
             device.put("reportedModel",profile.model);
-            device.put("probableType",profile.type); device.put("identityConfidence",profile.confidence);
-            device.put("modelConfidence",profile.modelConfidence); device.put("manufacturerConfidence",profile.manufacturerConfidence); device.put("typeConfidence",profile.typeConfidence);
+            device.put("probableType",profile.type); device.put("identityConfidence",profile.confidence.label);
+            device.put("modelConfidence",profile.modelConfidence.label); device.put("manufacturerConfidence",profile.manufacturerConfidence.label); device.put("typeConfidence",profile.typeConfidence.label);
             device.put("suggestedManufacturer",profile.manufacturer); device.put("identificationReasons",new JSONArray(profile.reasons));
             device.put("analysisFindings",new JSONArray(AnalysisFindings.describe(info)));
             JSONArray observations=new JSONArray();
