@@ -69,6 +69,7 @@ public final class NsdDiscovery {
                         int scope=((Inet6Address)service.getHost()).getScopeId();
                         if(scope>0) ip=ip+"%"+scope;
                     }
+                    if(!evidence.allowDiscoveredHost(ip)) { resolveNext(); return; }
                     evidence.add(ip,"mDNS","serviceName",service.getServiceName());
                     evidence.add(ip,"mDNS","serviceType",service.getServiceType());
                     evidence.advertise(ip,"mDNS",service.getServiceType(),service.getPort());
