@@ -65,11 +65,9 @@ public final class ScanService extends Service {
             if(Build.VERSION.SDK_INT>=29) startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
             else startForeground(NOTIFICATION,notification);
             scanner=new TcpScanner();
-            Set<String> observedHosts=new LinkedHashSet<>(plan.hosts);
-            observedHosts.addAll(Ipv6NeighborDiscovery.discover(this));
-            DeviceEvidence evidence=new DeviceEvidence(observedHosts);
-            ScanPlan identityPlan=plan;
-            identifier=new DeviceIdentifier(identityPlan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
+            DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
+            for(String ipv6:Ipv6NeighborDiscovery.discover(this)) evidence.add(ipv6,"IPv6 discovery","address",ipv6);
+            identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
             identifier.startDiscovery();
             discovery=new NsdDiscovery(this,evidence,plan.mode); discovery.start();
             TcpScanner tcp=scanner; DeviceIdentifier identity=identifier; NsdDiscovery nsd=discovery;
