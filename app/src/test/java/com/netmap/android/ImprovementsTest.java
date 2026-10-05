@@ -9,6 +9,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.json.*;
 
 public class ImprovementsTest {
+    @Test public void acceptsLocalIpv6WithoutExpandingSubnet() {
+        assertEquals(Collections.singletonList("fd00:0:0:0:0:0:0:10"), ScanPlan.parseHosts("fd00::10"));
+        assertTrue(ScanPlan.isIpv6("fd00::10"));
+        try { ScanPlan.parseHosts("fd00::/64"); fail("IPv6 subnet sweeps must be rejected"); } catch(IllegalArgumentException expected) { }
+    }
+
     private void attribute(DataOutputStream out,String name,String value) throws Exception {
         byte[] n=name.getBytes(StandardCharsets.UTF_8),v=value.getBytes(StandardCharsets.UTF_8);
         out.writeByte(0x42);out.writeShort(n.length);out.write(n);out.writeShort(v.length);out.write(v);
