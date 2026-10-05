@@ -20,7 +20,8 @@ android {
         signingConfigs.debug.keyAlias = 'androiddebugkey'
         signingConfigs.debug.keyPassword = 'android'
     }
-    packagingOptions { jniLibs { useLegacyPackaging true } }\n    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    packagingOptions { jniLibs { useLegacyPackaging true } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
 dependencies {
