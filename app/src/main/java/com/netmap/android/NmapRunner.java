@@ -13,7 +13,8 @@ final class NmapRunner {
     NmapRunner(Launcher launcher) { this.launcher=launcher; }
 
     String scan(String binary,String host,Collection<Integer> ports,int timeoutMs) throws Exception {
-        if(!ScanPlan.isPrivateIpv4(host)) throw new IllegalArgumentException("Nmap target must be a private IPv4 address");
+        List<String> validated=ScanPlan.parseHosts(host);
+        if(validated.size()!=1 || !validated.get(0).equals(host)) throw new IllegalArgumentException("Nmap target must be a private IPv4 address");
         if(binary==null || binary.trim().isEmpty()) throw new IllegalArgumentException("Missing Nmap binary");
         StringBuilder selected=new StringBuilder();
         for(Integer port:ports) {
