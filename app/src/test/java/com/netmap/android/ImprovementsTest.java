@@ -42,8 +42,8 @@ public class ImprovementsTest {
         DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"));
         evidence.add("192.168.1.1","mDNS TXT","modelHint","Brother HL-L2350DW");evidence.add("192.168.1.1","mDNS","serviceType","_ipp._tcp.");
         DeviceProfile profile=new DeviceProfile(evidence.observations("192.168.1.1"));assertEquals("Brother",profile.manufacturer);assertTrue(profile.type.toLowerCase(Locale.ROOT).contains("printer"));assertFalse(profile.reasons.isEmpty());
-        evidence.add("192.168.1.1","IPP","modelName","Brother HL-L2350DW");assertEquals("Corroborated, unverified",new DeviceProfile(evidence.observations("192.168.1.1")).confidence);
-        evidence.add("192.168.1.1","UPnP","manufacturer","Samsung");evidence.add("192.168.1.1","IPP","manufacturer","Brother");profile=new DeviceProfile(evidence.observations("192.168.1.1"));assertEquals("",profile.manufacturer);assertNotEquals("Corroborated, unverified",profile.confidence);
+        evidence.add("192.168.1.1","IPP","modelName","Brother HL-L2350DW");assertEquals(DeviceConfidence.CORROBORATED,new DeviceProfile(evidence.observations("192.168.1.1")).confidence);
+        evidence.add("192.168.1.1","UPnP","manufacturer","Samsung");evidence.add("192.168.1.1","IPP","manufacturer","Brother");profile=new DeviceProfile(evidence.observations("192.168.1.1"));assertEquals("",profile.manufacturer);assertNotEquals(DeviceConfidence.CORROBORATED,profile.confidence);
         evidence=new DeviceEvidence(Collections.singleton("192.168.1.1"));evidence.add("192.168.1.1","DNS PTR","dnsHostname","Samsung-TV.lan");assertEquals("",new DeviceProfile(evidence.observations("192.168.1.1")).manufacturer);
     }
     @Test public void adaptivePolicyLimitsAndCompleteInventory() throws Exception {

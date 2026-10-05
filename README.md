@@ -1,6 +1,13 @@
 # Droidmap
 
-A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.8.0 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 device discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend, root, Nmap, Nuclei, Metasploit or a model runtime. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.8.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+
+## Code ownership
+
+- `MainActivity` coordinates lifecycle, user actions and service snapshots. `ScanSettings`, `ScanSettingsStore` and `ScanSettingsDialog` own validated options, preference migration and editing.
+- `DeviceResultsRenderer`, `ScanHistoryDialog` and `ReportExporter` own device cards, history presentation and export state/I/O. `ExportRequest` pins exports to the selected scan across Activity recreation.
+- `DeviceIdentifier` schedules discovery/identification and verifies advertised endpoints. `SsdpDiscovery` and the HTTP, TLS, SMB, RTSP, IPP, NetBIOS, UPnP and banner probes own protocol operations. `ProbeContext` shares deadline, read bounds and active socket ownership with cancellation.
+- `DeviceProfile` makes typed decisions using `DeviceConfidence`; `IdentificationStatus` expresses completion. JSON and text reports retain their existing labels and schema version 5.
 
 ## Features
 
@@ -72,6 +79,8 @@ The scanner has a plain Java test suite covering private-target validation, CIDR
 ```bash
 bash tests/run.sh
 ```
+
+The Gradle unit suite also checks extracted probe routing, HTTP evidence/socket cleanup, typed confidence serialization, immutable settings and run-scoped export restoration.
 
 The identification suite additionally tests target filtering, evidence bounds/deduplication, HTTP/UPnP parsing, description URL restrictions, NetBIOS packet validation and real socket reads. The tests run on a development machine with JDK 17; loopback is used only by the test harness and is not accepted in the app target field. Android CI additionally compiles the APK and runs Android lint. Physical-device validation is still required for Wi-Fi routing, screen layout and document export.
 
