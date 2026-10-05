@@ -25,7 +25,14 @@ final class NmapRunner {
         List<String> command=Arrays.asList(binary,"-sT","-sV","-Pn","--version-light","--host-timeout","15s",
                 "--max-retries","1","--max-rtt-timeout",Math.max(100,Math.min(3000,timeoutMs))+"ms",
                 "-p",selected.toString(),"-oX","-",host);
-        Process process;\n        if(launcher!=null) process=launcher.start(command);\n        else { ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(true); builder.environment().put(\"NMAPDIR\",dataDir); process=builder.start(); }
+        Process process;
+        if(launcher!=null) process=launcher.start(command);
+        else {
+            ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(true);
+            builder.environment().put("NMAPDIR",dataDir);
+            builder.environment().put("LD_LIBRARY_PATH",new File(binary).getParent());
+            process=builder.start();
+        }
         ExecutorService reader=Executors.newSingleThreadExecutor();
         Future<String> output=reader.submit(() -> readBounded(process.getInputStream(),1024*1024));
         try {
