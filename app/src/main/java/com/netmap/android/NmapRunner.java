@@ -9,10 +9,10 @@ import java.util.concurrent.*;
 final class NmapRunner {
     interface Launcher { Process start(List<String> command) throws IOException; }
     private final Launcher launcher;
-    NmapRunner() { this(command -> new ProcessBuilder(command).redirectErrorStream(true).start()); }
+    NmapRunner() { this.launcher=null; }
     NmapRunner(Launcher launcher) { this.launcher=launcher; }
 
-    String scan(String binary,String host,Collection<Integer> ports,int timeoutMs) throws Exception {
+    String scan(String binary,String dataDir,String host,Collection<Integer> ports,int timeoutMs) throws Exception {
         List<String> validated=ScanPlan.parseHosts(host);
         if(validated.size()!=1 || !validated.get(0).equals(host)) throw new IllegalArgumentException("Nmap target must be a private IPv4 address");
         if(binary==null || binary.trim().isEmpty()) throw new IllegalArgumentException("Missing Nmap binary");
@@ -25,7 +25,7 @@ final class NmapRunner {
         List<String> command=Arrays.asList(binary,"-sT","-sV","-Pn","--version-light","--host-timeout","15s",
                 "--max-retries","1","--max-rtt-timeout",Math.max(100,Math.min(3000,timeoutMs))+"ms",
                 "-p",selected.toString(),"-oX","-",host);
-        Process process=launcher.start(command);
+        Process process;\n        if(launcher!=null) process=launcher.start(command);\n        else { ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(true); builder.environment().put(\"NMAPDIR\",dataDir); process=builder.start(); }
         ExecutorService reader=Executors.newSingleThreadExecutor();
         Future<String> output=reader.submit(() -> readBounded(process.getInputStream(),1024*1024));
         try {
