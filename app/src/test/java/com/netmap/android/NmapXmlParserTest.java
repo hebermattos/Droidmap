@@ -1,0 +1,24 @@
+package com.netmap.android;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import java.util.*;
+
+public class NmapXmlParserTest {
+    @Test public void parsesOpenServiceEvidence() throws Exception {
+        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.10"));
+        String xml="<?xml version=\"1.0\"?><nmaprun><host><address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><hostnames><hostname name=\"nas.lan\"/></hostnames><ports><port protocol=\"tcp\" portid=\"22\"><state state=\"open\"/><service name=\"ssh\" product=\"OpenSSH\" version=\"9.6\"/></port></ports></host></nmaprun>";
+        NmapXmlParser.parse(xml,evidence);
+        List<DeviceEvidence.Observation> items=evidence.observations("192.168.1.10");
+        assertTrue(items.stream().anyMatch(x->x.field.equals("openPort") && x.value.equals("22/tcp")));
+        assertTrue(items.stream().anyMatch(x->x.field.equals("serviceName") && x.value.equals("ssh")));
+        assertTrue(items.stream().anyMatch(x->x.field.equals("banner") && x.value.equals("OpenSSH 9.6")));
+        assertTrue(items.stream().anyMatch(x->x.field.equals("dnsHostname") && x.value.equals("nas.lan")));
+    }
+    @Test public void rejectsDoctype() throws Exception {
+        try {
+            NmapXmlParser.parse("<!DOCTYPE x [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><nmaprun/>",new DeviceEvidence(Collections.singleton("192.168.1.1")));
+            fail("DOCTYPE must be rejected");
+        } catch(Exception expected) { }
+    }
+}

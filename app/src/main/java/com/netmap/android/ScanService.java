@@ -99,7 +99,7 @@ public final class ScanService extends Service {
             preview(target,tcp,evidence,liveChecks,Collections.emptyList(),true);
             main.post(() -> {if(!destroyed && scanner==tcp && !tcp.isCancelled()) publish("Identifying devices…",results.size(),true);});
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
-            if(!tcp.isCancelled()) identity.identify(results);
+            if(!tcp.isCancelled()) {\n                List<String> nmapNotices=NmapEnricher.enrich(this,plan,results,evidence);\n                identity.identify(results);\n                identity.addNotices(nmapNotices);\n            }
             main.post(() -> {
                 if(destroyed || scanner!=tcp) return;
                 nsd.stop(); finishing=true;

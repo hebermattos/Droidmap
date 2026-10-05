@@ -162,7 +162,7 @@ public final class DeviceIdentifier {
         return timedOut;
     }
 
-    public List<String> notices() {
+    void addNotices(Collection<String> items) { synchronized (notices) { notices.addAll(items); } }\n\n    public List<String> notices() {
         synchronized (notices) {
             List<String> result = new ArrayList<>(notices);
             if (hostnameLookup != null) result.addAll(hostnameLookup.notices());
