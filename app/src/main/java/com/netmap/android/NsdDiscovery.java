@@ -4,7 +4,7 @@ import android.content.Context;
 import android.net.nsd.*;
 import android.os.Handler;
 import android.os.Looper;
-import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -63,8 +63,12 @@ public final class NsdDiscovery {
             public void onServiceResolved(NsdServiceInfo service) { handler.post(() -> {
                 resolving=false;
                 if(!running) return;
-                if(service.getHost() instanceof Inet4Address) {
+                if(service.getHost()!=null) {
                     String ip=service.getHost().getHostAddress();
+                    if(service.getHost() instanceof Inet6Address && service.getHost().isLinkLocalAddress() && ip.indexOf('%')<0) {
+                        int scope=((Inet6Address)service.getHost()).getScopeId();
+                        if(scope>0) ip=ip+"%"+scope;
+                    }
                     evidence.add(ip,"mDNS","serviceName",service.getServiceName());
                     evidence.add(ip,"mDNS","serviceType",service.getServiceType());
                     evidence.advertise(ip,"mDNS",service.getServiceType(),service.getPort());
