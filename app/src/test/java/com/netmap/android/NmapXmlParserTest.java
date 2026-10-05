@@ -15,6 +15,13 @@ public class NmapXmlParserTest {
         assertTrue(items.stream().anyMatch(x->x.field.equals("banner") && x.value.equals("OpenSSH 9.6")));
         assertTrue(items.stream().anyMatch(x->x.field.equals("dnsHostname") && x.value.equals("nas.lan")));
     }
+    @Test public void parsesIpv6ServiceEvidence() throws Exception {
+        String ip="fd00::10";
+        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton(ip));
+        String xml="<?xml version=\"1.0\"?><nmaprun><host><address addr=\"fd00::10\" addrtype=\"ipv6\"/><ports><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><service name=\"https\"/></port></ports></host></nmaprun>";
+        NmapXmlParser.parse(xml,evidence);
+        assertTrue(evidence.observations(ip).stream().anyMatch(x->x.field.equals("openPort") && x.value.equals("443/tcp")));
+    }
     @Test public void rejectsDoctype() throws Exception {
         try {
             NmapXmlParser.parse("<!DOCTYPE x [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><nmaprun/>",new DeviceEvidence(Collections.singleton("192.168.1.1")));
