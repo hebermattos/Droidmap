@@ -8,7 +8,7 @@ import java.util.*;
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence) {
+    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
@@ -19,16 +19,24 @@ final class NmapEnricher {
         LinkedHashSet<String> responders=new LinkedHashSet<>();
         for(TcpScanner.Result check:checks)
             if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) responders.add(check.host);
-        NmapRunner runner=new NmapRunner(); int attempted=0, enriched=0;
+        for(Map.Entry<String,List<DeviceEvidence.Observation>> device:evidence.snapshot().entrySet()) {
+            boolean peer=device.getValue().stream().anyMatch(o->o.source.equals("mDNS")||o.source.equals("IPv6 neighbor"));
+            boolean own=device.getValue().stream().anyMatch(o->o.field.equals("addressOrigin")&&o.value.equals("This phone"));
+            if(peer&&!own) responders.add(device.getKey());
+        }
+        NmapRunner runner=new NmapRunner(null,cancelled); int attempted=0, enriched=0;
         for(String host:responders) {
-            if(attempted>=plan.mode.fingerprintLimit) break;
+            if(cancelled.getAsBoolean()||attempted>=plan.mode.fingerprintLimit) break;
             attempted++;
             try {
-                String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,plan.ports,plan.timeoutMs);
+                LinkedHashSet<Integer> selected=new LinkedHashSet<>(plan.ports);
+                for(DeviceEvidence.Endpoint endpoint:evidence.endpoints().getOrDefault(host,Collections.emptyList()))
+                    if(selected.size()<256) selected.add(endpoint.port);
+                String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,selected,plan.timeoutMs);
                 NmapXmlParser.parse(xml,evidence); evidence.add(host,"Nmap","scanStatus","Completed"); enriched++;
                 LinkedHashSet<Integer> openPorts=new LinkedHashSet<>();
                 for(DeviceEvidence.Observation item:evidence.observations(host)) if(item.source.equals("Nmap")&&item.field.equals("openPort")) try { openPorts.add(Integer.parseInt(item.value.split("/",2)[0])); } catch(Exception ignored) {}
-                if(!openPorts.isEmpty()) try {
+                if(!cancelled.getAsBoolean()&&!openPorts.isEmpty()) try {
                     String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
                     NmapXmlParser.parseVulnerabilities(vulnXml,evidence);
                     evidence.add(host,"Nmap vulnerabilities","scanStatus","Completed on "+openPorts.size()+" open port(s)");
@@ -41,7 +49,8 @@ final class NmapEnricher {
                 notices.add("Nmap "+host+": "+error);
             }
         }
-        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" responsive devices.");
+        if(responders.size()>attempted) notices.add("Nmap host budget reached: "+(responders.size()-attempted)+" observed device(s) not attempted.");
+        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" observed devices.");
         return notices;
     }
 

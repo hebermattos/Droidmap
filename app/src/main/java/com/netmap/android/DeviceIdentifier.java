@@ -182,6 +182,7 @@ public final class DeviceIdentifier {
         deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(plan.mode.identificationSeconds);
         if (cancelled.get()) return;
         if (!awaitDiscovery(deadline)) return;
+        hosts.addAll(evidence.snapshot().keySet());
         advertised = evidence.endpoints();
         for (TcpScanner.Result check : checks) {
             initialChecks.put(check.host + ":" + check.port, check);
@@ -235,7 +236,9 @@ public final class DeviceIdentifier {
         for (TcpScanner.Result check : checks)
             if (check.state == TcpScanner.State.OPEN || check.state == TcpScanner.State.CLOSED)
                 responders.add(check.host);
-        List<String> ordered = new ArrayList<>(plan.hosts);
+        LinkedHashSet<String> all=new LinkedHashSet<>(plan.hosts);
+        all.addAll(evidence.snapshot().keySet());
+        List<String> ordered = new ArrayList<>(all);
         ordered.sort(
                 Comparator.comparingInt(
                         host ->

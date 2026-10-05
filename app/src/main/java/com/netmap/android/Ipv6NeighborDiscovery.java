@@ -1,71 +1,73 @@
 package com.netmap.android;
 
-import android.content.Context;
-import android.net.*;
+import android.net.LinkAddress;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.function.BooleanSupplier;
 
-/** Collects IPv6 addresses already observable by Android; never enumerates an IPv6 prefix. */
+/** Best-effort Wi-Fi observations; a cached neighbor entry does not prove current reachability. */
 final class Ipv6NeighborDiscovery {
-    private static final int MAX=512;
-
-    static Set<String> discover(Context context) {
-        LinkedHashSet<String> found=new LinkedHashSet<>();
-        addWifiAddresses(context,found);
-        addIpNeighbors(found);
-        return Collections.unmodifiableSet(found);
-    }
-
-    private static void addWifiAddresses(Context context,Set<String> found) {
-        ConnectivityManager cm=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if(cm==null)return;
+    static List<String> collect(WifiIpv6Scope wifi,DeviceEvidence evidence,BooleanSupplier cancelled) {
+        List<String> notices=new ArrayList<>();
+        if(wifi.links==null) {
+            notices.add("IPv6 discovery skipped: no matching Wi-Fi network.");return notices;
+        }
+        for(LinkAddress local:wifi.links.getLinkAddresses()) {
+            if(cancelled.getAsBoolean()) return notices;
+            String ip=wifi.normalize(local.getAddress().getHostAddress());
+            if(ip==null||!evidence.allowDiscoveredHost(ip)) continue;
+            metadata(ip,wifi,evidence,"IPv6 local");
+            evidence.add(ip,"IPv6 local","addressOrigin","This phone");
+            evidence.add(ip,"IPv6 local","prefixLength",Integer.toString(local.getPrefixLength()));
+        }
+        Process process=null;ExecutorService reader=Executors.newSingleThreadExecutor();
         try {
-            for(Network network:cm.getAllNetworks()) {
-                NetworkCapabilities caps=cm.getNetworkCapabilities(network);
-                LinkProperties lp=cm.getLinkProperties(network);
-                if(caps==null||lp==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))continue;
-                String iface=lp.getInterfaceName();
-                for(LinkAddress link:lp.getLinkAddresses()) {
-                    InetAddress a=link.getAddress();
-                    if(a instanceof Inet6Address && usable(a)) add(found,scoped(a,iface));
-                }
+            if(cancelled.getAsBoolean()) return notices;
+            process=new ProcessBuilder("/system/bin/ip","-6","neigh","show","dev",wifi.links.getInterfaceName()).redirectErrorStream(true).start();
+            Process command=process;
+            Future<String> output=reader.submit(()->NmapRunner.readBounded(command.getInputStream(),65536));
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(1);
+            while(!process.waitFor(50,TimeUnit.MILLISECONDS)) {
+                if(cancelled.getAsBoolean()||System.nanoTime()>=deadline) throw new IOException("neighbor read interrupted or timed out");
             }
-        } catch(SecurityException ignored) {}
-    }
-
-    private static void addIpNeighbors(Set<String> found) {
-        Process p=null;
-        try {
-            p=new ProcessBuilder("/system/bin/ip","-6","neigh","show").redirectErrorStream(true).start();
-            try(BufferedReader r=new BufferedReader(new InputStreamReader(p.getInputStream(),StandardCharsets.UTF_8))) {
-                String line;
-                while(found.size()<MAX && (line=r.readLine())!=null) {
-                    String[] parts=line.trim().split("\\s+");
-                    if(parts.length<1)continue;
-                    String candidate=parts[0],iface="";
-                    for(int i=1;i+1<parts.length;i++)if("dev".equals(parts[i])){iface=parts[i+1];break;}
-                    if(candidate.indexOf(':')<0)continue;
-                    try {
-                        InetAddress a=InetAddress.getByName(ScanPlan.stripZone(candidate));
-                        if(a instanceof Inet6Address && usable(a)) add(found,a.isLinkLocalAddress()&&!iface.isEmpty()?ScanPlan.stripZone(a.getHostAddress())+"%"+iface:a.getHostAddress());
-                    } catch(Exception ignored) {}
-                }
+            String text=output.get(200,TimeUnit.MILLISECONDS);
+            if(process.exitValue()!=0) throw new IOException("neighbor table access unavailable");
+            int count=0;
+            for(String line:text.split("\n")) {
+                if(cancelled.getAsBoolean()||count++>=512) break;
+                recordLine(line,wifi,evidence);
             }
-        } catch(Exception ignored) {
-            // Android versions may deny access to the neighbor table; mDNS/NSD still discovers peers.
-        } finally { if(p!=null)p.destroy(); }
+        } catch(InterruptedException e) {Thread.currentThread().interrupt();}
+        catch(Exception e) { if(!cancelled.getAsBoolean()) notices.add("IPv6 neighbor table unavailable; mDNS discovery remains active."); }
+        finally {
+            if(process!=null) {process.destroyForcibly();try {process.getInputStream().close();}catch(IOException ignored) {}}
+            reader.shutdownNow();
+        }
+        return notices;
     }
-
-    private static boolean usable(InetAddress a) {
-        return !a.isAnyLocalAddress()&&!a.isLoopbackAddress()&&!a.isMulticastAddress()&&
-            (a.isLinkLocalAddress()||a.isSiteLocalAddress()||ScanPlan.isUniqueLocal(a)||isGlobal(a));
+    static void recordLine(String line,WifiIpv6Scope wifi,DeviceEvidence evidence) {
+        String[] parts=line.trim().split("\\s+");
+        if(parts.length<1||parts[0].indexOf(':')<0) return;
+        String iface=wifi.links.getInterfaceName(),mac="",state=parts[parts.length-1];
+        for(int i=1;i+1<parts.length;i++) {
+            if(parts[i].equals("dev")) iface=parts[i+1];
+            if(parts[i].equals("lladdr")) mac=parts[i+1];
+        }
+        if(!Objects.equals(iface,wifi.links.getInterfaceName())||state.equals("FAILED")||state.equals("INCOMPLETE")) return;
+        String ip=wifi.normalize(parts[0]);
+        if(ip==null||!evidence.allowDiscoveredHost(ip)) return;
+        metadata(ip,wifi,evidence,"IPv6 neighbor");
+        evidence.add(ip,"IPv6 neighbor","neighborState",state);
+        if(mac.matches("(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}")&&!mac.equals("00:00:00:00:00:00"))
+            evidence.add(ip,"IPv6 neighbor","neighborMac",mac.toUpperCase(Locale.ROOT));
+        evidence.add(ip,"IPv6 neighbor","reachabilityNote","Cached neighbor observation; current reachability unverified");
     }
-    private static boolean isGlobal(InetAddress a) { byte[] b=a.getAddress();return b.length==16&&(b[0]&0xe0)==0x20; }
-    private static String scoped(InetAddress a,String iface) {
-        String raw=ScanPlan.stripZone(a.getHostAddress());
-        return a.isLinkLocalAddress()&&iface!=null&&!iface.isEmpty()?raw+"%"+iface:raw;
+    private static void metadata(String ip,WifiIpv6Scope wifi,DeviceEvidence evidence,String source) {
+        evidence.add(ip,source,"address",ip);
+        evidence.add(ip,source,"networkInterface",wifi.links.getInterfaceName());
+        try {evidence.add(ip,source,"addressType",IpAddresses.kind(IpAddresses.literal(ip)));}catch(Exception ignored) { }
     }
-    private static void add(Set<String> found,String value) { if(found.size()<MAX)found.add(value); }
 }

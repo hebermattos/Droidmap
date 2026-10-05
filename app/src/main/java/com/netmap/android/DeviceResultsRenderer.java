@@ -69,7 +69,17 @@ final class DeviceResultsRenderer {
                 JSONObject device = devices.getJSONObject(i);
                 String ip = device.getString("ip");
                 lastDevices.add(ip);
-                Set<Integer> openPorts = portsByIp.getOrDefault(ip, Collections.emptySet());
+                Set<Integer> openPorts = new TreeSet<>(portsByIp.getOrDefault(ip, Collections.emptySet()));
+                JSONArray observations=device.optJSONArray("evidence");
+                if(observations!=null) for(int j=0;j<observations.length();j++) {
+                    JSONObject item=observations.optJSONObject(j);
+                    if(item==null||!item.optString("source").equals("Nmap")||!item.optString("field").equals("openPort")) continue;
+                    String value=item.optString("value");
+                    if(value.endsWith("/tcp")) try {
+                        int port=Integer.parseInt(value.substring(0,value.length()-4));
+                        if(port>=1&&port<=65535) openPorts.add(port);
+                    } catch(NumberFormatException ignored) { }
+                }
                 addDeviceCard(device, openPorts);
             }
             TextView footer = new TextView(context);
@@ -190,6 +200,17 @@ final class DeviceResultsRenderer {
                 details,
                 "Observed ports (" + openPorts.size() + ")",
                 portList(openPorts, Integer.MAX_VALUE));
+        if(ScanPlan.isIpv6(device.optString("ip"))) {
+            detailSection(details,"IPv6 network");
+            JSONArray metadata=device.optJSONArray("evidence");
+            Set<String> shown=new HashSet<>();
+            Set<String> fields=new HashSet<>(Arrays.asList("addressType","networkInterface","addressOrigin","prefixLength","neighborState","neighborMac","reachabilityNote","serviceAddresses"));
+            if(metadata!=null) for(int i=0;i<metadata.length();i++) {
+                JSONObject item=metadata.optJSONObject(i);
+                if(item!=null&&fields.contains(item.optString("field"))&&shown.add(item.optString("field")+item.optString("value")))
+                    detailValue(details,evidenceLabel(item.optString("field")),item.optString("value"));
+            }
+        }
         detailSection(details, "Device identity");
         detailValue(details, "IP address", device.optString("ip"));
         String[] keys = {

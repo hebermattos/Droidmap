@@ -27,7 +27,6 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
         @Override protected boolean removeEldestEntry(Map.Entry<String,Cached> entry) { return size()>512; }
     };
     private final List<InetAddress> servers=new ArrayList<>();
-    private final Set<String> hosts;
     private final DeviceEvidence evidence;
     private final SocketBinder binder;
     private final Transport transport;
@@ -43,7 +42,7 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
     ReverseDns(List<InetAddress> servers,ScanPlan plan,DeviceEvidence evidence,SocketBinder binder,String scope,Transport transport,java.util.function.LongSupplier cacheClock) {
         this.cacheClock=cacheClock;
         for(InetAddress server:servers) if(localDns(server) && this.servers.size()<2 && !this.servers.contains(server)) this.servers.add(server);
-        this.hosts=new HashSet<>(plan.hosts); this.evidence=evidence; this.binder=binder; this.scope=scope;
+        this.evidence=evidence; this.binder=binder; this.scope=scope;
         this.transport=transport==null?this::exchange:transport;
         timeoutMs=plan.mode==ScanPlan.Mode.COMPLETE?1200:600;
     }
@@ -54,7 +53,7 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
         int first=b[0]&255,second=b[1]&255;
         return first==10 || first==172 && second>=16 && second<=31 || first==192 && second==168;
     }
-    static Message query(String host) throws UnknownHostException { return query(ReverseMap.fromAddress(InetAddress.getByName(host))); }
+    static Message query(String host) throws UnknownHostException { return query(ReverseMap.fromAddress(IpAddresses.literal(host))); }
     private static Message query(Name name) { return Message.newQuery(Record.newRecord(name,Type.PTR,DClass.IN)); }
     static List<String> names(byte[] wire,Message query) throws IOException { return answers(wire,query).names; }
     static Answers answers(byte[] wire,Message query) throws IOException {
@@ -86,7 +85,7 @@ class ReverseDns implements DeviceIdentifier.HostnameLookup {
         return EMPTY;
     }
     @Override public void lookup(String host,long deadline,BooleanSupplier stopped) {
-        if(!hosts.contains(host) || cancelled.get() || stopped.getAsBoolean() || System.nanoTime()>=deadline) return;
+        if(!evidence.isAllowed(host) || cancelled.get() || stopped.getAsBoolean() || System.nanoTime()>=deadline) return;
         for(InetAddress server:servers) {
             if(cancelled.get() || stopped.getAsBoolean()) return;
             String key=scope+"/"+server.getHostAddress()+"/"+host;

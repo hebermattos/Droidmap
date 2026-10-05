@@ -5,6 +5,7 @@ import static org.junit.Assert.*;
 import org.xbill.DNS.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReverseDnsTest {
     private Message reply(Message query) throws Exception {
@@ -13,6 +14,20 @@ public class ReverseDnsTest {
         response.addRecord(query.getQuestion(),Section.QUESTION);
         response.addRecord(new PTRRecord(query.getQuestion().getName(),DClass.IN,60,Name.fromString("printer.lan.")),Section.ANSWER);
         return response;
+    }
+    @Test public void resolvesNewIpv6AndStripsInterfaceFromPtrQuestion() throws Exception {
+        ScanPlan plan=new ScanPlan("fd00::1","80",200);
+        DeviceEvidence evidence=new DeviceEvidence(plan.hosts,host->host.startsWith("fd00:"));
+        assertTrue(evidence.allowDiscoveredHost("fd00::42"));
+        AtomicInteger calls=new AtomicInteger();
+        ReverseDns dns=new ReverseDns(Collections.singletonList(InetAddress.getByName("192.168.1.1")),plan,evidence,socket->{},UUID.randomUUID().toString(),(query,server,tcp,deadline,stopped)->{
+            calls.incrementAndGet();assertTrue(query.getQuestion().getName().toString().endsWith("ip6.arpa."));
+            try{return reply(query).toWire();}catch(Exception e){throw new java.io.IOException(e);}
+        });
+        dns.lookup("fd00::42",Long.MAX_VALUE,()->false);
+        assertEquals(1,calls.get());
+        assertEquals("printer.lan",DeviceEvidence.first(evidence.observations("fd00::42"),"dnsHostname"));
+        assertEquals(ReverseMap.fromAddress(InetAddress.getByName("fe80::42")),ReverseDns.query("fe80::42%missingInterface").getQuestion().getName());
     }
     @Test public void extractsMatchingPtr() throws Exception {
         Message query=ReverseDns.query("192.168.1.42");

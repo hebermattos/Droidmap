@@ -4,7 +4,7 @@ This file applies to the entire repository. Read the current checkout before cha
 
 ## Project scope
 
-- Droidmap is a standalone Android app for private IPv4 discovery, TCP connect scanning and evidence-based device identification.
+- Droidmap is a standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scanning and evidence-based device identification.
 - The Android project lives at the repository root. It is independent of the Netmap .NET pipeline; do not recreate an `android/` subproject or copy backend dependencies into it.
 - Keep code, UI text, documentation and GitHub descriptions in English. Communicate with the user in their requested language.
 - Prefer focused Java/native Android changes and the existing Gradle wrapper. Do not add frameworks or dependencies without a concrete need.
@@ -21,7 +21,8 @@ This file applies to the entire repository. Read the current checkout before cha
 | `DeviceIdentifier.java` | Discovery/identification scheduling, protocol routing and advertised endpoint checks |
 | `SsdpDiscovery.java`, `*Probe.java`, `ProbeContext.java` | Protocol operations and shared deadlines, read bounds and socket ownership |
 | `DeviceEvidence.java`, `DeviceProfile.java`, `DeviceConfidence.java`, `IdentificationStatus.java` | Bounded observations, provenance and typed identity/completion decisions |
-| `NsdDiscovery.java` | Android mDNS/NSD discovery and resolution |
+| `NsdDiscovery.java` | Android mDNS/NSD discovery, multi-address tracking and bounded legacy resolution |
+| `IpAddresses.java`, `WifiIpv6Scope.java`, `Ipv6NeighborDiscovery.java` | Literal normalization, Wi-Fi IPv6 admission, interface scope and bounded neighbor observations |
 | `ReverseDns.java`, `WifiReverseDns.java` | dnsjava PTR resolution, scoped caching and Wi-Fi DNS binding |
 | `Ipp.java`, `HttpReply.java`, `NetBios.java` | Protocol encoding and bounded reply parsing |
 | `ScanHistory.java` | Local summaries and comparisons between comparable scans |
@@ -32,8 +33,8 @@ Java filenames in the table are relative to `app/src/main/java/com/netmap/androi
 
 ## Scan and identification invariants
 
-- Retain RFC 1918 literal IPv4 validation and the /24–/32 target limit. Loopback is allowed only inside test harnesses, not through the app target field.
-- Preserve configured bounds: at most 256 target addresses, 256 selected ports, 32 concurrent TCP checks and 16 advertised endpoints per device. Keep observation, parser, discovery, DNS and history limits explicit.
+- Retain RFC 1918 literal IPv4 validation and the /24–/32 target limit. IPv6 literals must be validated against the connected Wi-Fi link, with interface scope for link-local and prefix matching for global unicast. Never enumerate an IPv6 /64. Loopback is allowed only inside test harnesses, not through the app target field.
+- Preserve configured bounds: at most 256 target addresses, 256 selected ports, 32 concurrent TCP checks and 16 advertised endpoints per device. Keep observation, parser, discovery, DNS and history limits explicit. Additional IPv6 discovery is capped at 256 addresses; mDNS tracking is capped at 32 callbacks and 16 addresses per update.
 - Check every selected host/port unless cancelled. Performance optimizations must not silently omit silent addresses or ports. Keep retry behavior and progress counts consistent with `ScanPlan`.
 - Respect the entered timeout and custom port selection. Keep factory defaults and one-time preference migrations consistent with the implemented UI and README; do not reset saved custom values on every launch.
 - `OPEN` requires a successful TCP connection. Explicit refusal is `CLOSED`; timeouts and other failures must not establish reachability. Missing observations do not prove a device is offline.

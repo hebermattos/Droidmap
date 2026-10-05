@@ -10,6 +10,10 @@ final class MdnsFields {
             case "rp": return "printerResource";
             case "note": return "location";
             case "osvers": return "reportedOsVersion";
+            case "hwvers": return "reportedHardwareVersion";
+            case "swvers": return "reportedSoftwareVersion";
+            case "firmware": return "reportedFirmwareVersion";
+            case "serial": return "reportedSerialNumber";
             case "product": return "reportedProduct";
             case "model": return "modelHint";
             case "md": return type.startsWith("_googlecast.")?"modelHint":"reportedMd";

@@ -16,7 +16,7 @@ final class NetBiosProbe {
     }
 
     void netbios(String host) {
-        if (context.stopped()) return;
+        if (context.stopped() || ScanPlan.isIpv6(host)) return;
         int id = java.util.concurrent.ThreadLocalRandom.current().nextInt(65536);
         try (DatagramSocket socket = new DatagramSocket()) {
             context.track(socket);

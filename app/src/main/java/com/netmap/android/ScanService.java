@@ -53,10 +53,18 @@ public final class ScanService extends Service {
         if(scanner!=null) return START_NOT_STICKY; // never queue a duplicate scan
         String target=intent.getStringExtra("target");
         final ScanPlan plan;
+        final WifiIpv6Scope wifi;
         try {
             if(target==null) throw new IllegalArgumentException("Missing scan target");
-            plan=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
+            ScanPlan requested=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
+            wifi=WifiIpv6Scope.capture(this,requested);
+            String host=requested.hosts.get(0);
+            if(ScanPlan.isIpv6(host)) {
+                String normalized=wifi.normalize(host);
+                if(normalized==null) throw new IllegalArgumentException("IPv6 target must belong to the connected Wi-Fi network and use its interface scope.");
+                plan=new ScanPlan(normalized,intent.getStringExtra("ports"),requested.timeoutMs,requested.mode,requested.adaptive);
+            } else plan=requested;
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
         networkScope=NetworkScope.current(this,plan); identificationPartial=false; nmapEnabled=intent.getBooleanExtra("nmap",true);
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
@@ -66,14 +74,13 @@ public final class ScanService extends Service {
             if(Build.VERSION.SDK_INT>=29) startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
             else startForeground(NOTIFICATION,notification);
             scanner=new TcpScanner();
-            DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
-            for(String ipv6:Ipv6NeighborDiscovery.discover(this)) if(evidence.allowDiscoveredHost(ipv6)) evidence.add(ipv6,"IPv6 discovery","address",ipv6);
+            DeviceEvidence evidence=new DeviceEvidence(plan.hosts,wifi::accepts);
             identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
             identifier.startDiscovery();
-            discovery=new NsdDiscovery(this,evidence,plan.mode); discovery.start();
+            discovery=new NsdDiscovery(this,evidence,plan.mode,wifi); discovery.start();
             TcpScanner tcp=scanner; DeviceIdentifier identity=identifier; NsdDiscovery nsd=discovery;
             long started=runId;
-            worker.execute(() -> scan(plan,target,started,tcp,identity,nsd,evidence));
+            worker.execute(() -> scan(plan,target,started,tcp,identity,nsd,evidence,wifi));
         } catch(RuntimeException e) { failStartup(target,e); }
         return START_NOT_STICKY;
     }
@@ -82,10 +89,11 @@ public final class ScanService extends Service {
         worker.execute(() -> {try {store.save(latest);}catch(Exception ignored){}});
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
     }
-    private void scan(ScanPlan plan,String target,long started,TcpScanner tcp,DeviceIdentifier identity,NsdDiscovery nsd,DeviceEvidence evidence) {
+    private void scan(ScanPlan plan,String target,long started,TcpScanner tcp,DeviceIdentifier identity,NsdDiscovery nsd,DeviceEvidence evidence,WifiIpv6Scope wifi) {
         try {
             // Write the interruption marker before any network checks.
             store.save(latest);
+            identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
             AtomicInteger completed=new AtomicInteger(); AtomicLong lastUpdate=new AtomicLong();
             Queue<TcpScanner.Result> liveChecks=new ConcurrentLinkedQueue<>();
             identity.setProgressListener(host -> preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
@@ -103,8 +111,12 @@ public final class ScanService extends Service {
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
             List<String> nmapNotices=Collections.emptyList();
             if(!tcp.isCancelled()) {
-                if(nmapEnabled) nmapNotices=NmapEnricher.enrich(this,plan,results,evidence);
                 identity.identify(results);
+                if(nmapEnabled&&!tcp.isCancelled()) {
+                    List<TcpScanner.Result> observedChecks=new ArrayList<>(results);
+                    observedChecks.addAll(identity.endpointChecks());
+                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,tcp::isCancelled);
+                }
             }
             List<String> enrichmentNotices=nmapNotices;
             main.post(() -> {
@@ -113,8 +125,9 @@ public final class ScanService extends Service {
                 Map<String,List<DeviceEvidence.Observation>> identified=evidence.snapshot();
                 for(TcpScanner.Result check:results) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) identified.computeIfAbsent(check.host,k->new ArrayList<>());
                 List<String> notices=identity.notices(); notices.addAll(enrichmentNotices); notices.addAll(nsd.notices());
+                if(evidence.isDiscoveryLimited()) notices.add("IPv6 address discovery limit reached; evidence is partial.");
                 if(identity.isTimedOut()) notices.add("Identification time budget reached; evidence is partial.");
-                identificationPartial=identity.isPartial() || nsd.isPartial();
+                identificationPartial=identity.isPartial() || nsd.isPartial() || evidence.isDiscoveryLimited();
                 boolean cancelled=tcp.isCancelled(); publish("Saving results…",results.size(),false);
                 worker.execute(() -> saveReport(plan,target,started,results,identity.endpointChecks(),identified,notices,cancelled));
             });

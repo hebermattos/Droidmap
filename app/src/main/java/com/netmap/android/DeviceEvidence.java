@@ -17,7 +17,25 @@ public final class DeviceEvidence {
     }
     private final Map<String,Map<Integer,Endpoint>> endpoints=new LinkedHashMap<>();
     private final Set<String> allowed;
+    private final java.util.function.Predicate<String> discoveryScope;
+    private int discovered;
+    private boolean discoveryLimited;
+    public synchronized boolean isDiscoveryLimited() {return discoveryLimited;}
+    public synchronized boolean isAllowed(String host) { return allowed.contains(IpAddresses.canonical(host)); }
+    public synchronized String resolveHost(String host) {
+        String normalized=IpAddresses.canonical(host);
+        if(allowed.contains(normalized)) return normalized;
+        if(!IpAddresses.zoneSuffix(host).isEmpty()) return null;
+        // XML commonly omits the link-local zone. Accept only an unambiguous existing target.
+        String match=null;
+        for(String candidate:allowed) if(IpAddresses.sameAddress(candidate,host)) {
+            if(match!=null) return null;
+            match=candidate;
+        }
+        return match;
+    }
     public synchronized void advertise(String ip,String source,String serviceType,int port) {
+        ip=IpAddresses.canonical(ip);
         if(!allowed.contains(ip) || port<1 || port>65535 || serviceType==null || !serviceType.contains("._tcp")) return;
         Map<Integer,Endpoint> perHost=endpoints.computeIfAbsent(ip,k->new LinkedHashMap<>());
         if(perHost.size()>=16 && !perHost.containsKey(port)) return;
@@ -27,16 +45,26 @@ public final class DeviceEvidence {
     public synchronized Map<String,List<Endpoint>> endpoints() {
         Map<String,List<Endpoint>> result=new LinkedHashMap<>(); endpoints.forEach((ip,values)->result.put(ip,new ArrayList<>(values.values()))); return result;
     }
-    public DeviceEvidence(Collection<String> allowed) { this.allowed = new HashSet<>(allowed); }
+    public DeviceEvidence(Collection<String> allowed) { this(allowed,host->false); }
+    public DeviceEvidence(Collection<String> allowed,java.util.function.Predicate<String> discoveryScope) {
+        this.allowed=new HashSet<>();
+        for(String host:allowed) this.allowed.add(IpAddresses.canonical(host));
+        this.discoveryScope=discoveryScope;
+    }
     public synchronized boolean allowDiscoveredHost(String ip) {
-        if(ip==null || allowed.size()>=1024) return false;
+        if(ip==null) return false;
+        ip=IpAddresses.canonical(ip);
+        if(allowed.contains(ip)) return true;
+        if(!discoveryScope.test(ip)) return false;
+        if(discovered>=256) {discoveryLimited=true;return false;}
         try {
-            java.net.InetAddress address=java.net.InetAddress.getByName(ScanPlan.stripZone(ip));
-            if(!(address instanceof java.net.Inet6Address) || address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isMulticastAddress()) return false;
-            return allowed.add(ip) || allowed.contains(ip);
+            java.net.InetAddress a=IpAddresses.literal(ip);
+            if(!(a instanceof java.net.Inet6Address)||a.isAnyLocalAddress()||a.isLoopbackAddress()||a.isMulticastAddress()) return false;
+            allowed.add(ip);discovered++;return true;
         } catch(Exception ignored) { return false; }
     }
     public synchronized void add(String ip, String source, String field, String value) {
+        ip=IpAddresses.canonical(ip);
         if (!allowed.contains(ip) || value == null) return;
         value = clean(value);
         if (value.isEmpty()) return;
@@ -45,8 +73,8 @@ public final class DeviceEvidence {
         for (Observation old : list) if (old.source.equals(source) && old.field.equals(field) && old.value.equals(value)) return;
         list.add(new Observation(source, field, value));
     }
-    public synchronized List<Observation> observations(String host) { return new ArrayList<>(devices.getOrDefault(host,Collections.emptyList())); }
-    public synchronized boolean hasObservations(String host) { return devices.containsKey(host); }
+    public synchronized List<Observation> observations(String host) { return new ArrayList<>(devices.getOrDefault(IpAddresses.canonical(host),Collections.emptyList())); }
+    public synchronized boolean hasObservations(String host) { return devices.containsKey(IpAddresses.canonical(host)); }
     public synchronized Map<String,List<Observation>> snapshot() {
         Map<String,List<Observation>> result = new LinkedHashMap<>();
         devices.forEach((ip,items) -> result.put(ip, new ArrayList<>(items))); return result;
