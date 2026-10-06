@@ -20,6 +20,9 @@ sources=(
   "$project_dir/app/src/main/java/com/netmap/android/"*Probe.java
   "$project_dir/app/src/main/java/com/netmap/android/NmapRunner.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapXmlParser.java"
+  "$project_dir/app/src/main/java/com/netmap/android/MacAddresses.java"
+  "$project_dir/app/src/main/java/com/netmap/android/Ipv4MacDiscovery.java"
+  "$project_dir/tests/MacAddressTests.java"
   "$project_dir/tests/Ipv6CollectionTests.java"
   "$project_dir/tests/ScannerTests.java"
   "$project_dir/tests/IdentificationTests.java"
@@ -29,3 +32,5 @@ java -cp "$classes_dir" com.netmap.android.ScannerTests
 java -cp "$classes_dir" com.netmap.android.IdentificationTests
 
 java -cp "$classes_dir" com.netmap.android.Ipv6CollectionTests
+
+java -cp "$classes_dir" com.netmap.android.MacAddressTests

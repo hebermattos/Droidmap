@@ -12,6 +12,12 @@ final class NmapXmlParser {
         for(int i=0;i<hosts.getLength();i++){Element host=(Element)hosts.item(i);String ip="";NodeList addresses=host.getElementsByTagName("address");
             for(int j=0;j<addresses.getLength();j++){Element a=(Element)addresses.item(j);String type=a.getAttribute("addrtype");if("ipv4".equals(type)||"ipv6".equals(type)){ip=a.getAttribute("addr");break;}}
             ip=evidence.resolveHost(ip);if(ip==null||ip.isEmpty())continue;NodeList names=host.getElementsByTagName("hostname");if(names.getLength()>0)evidence.add(ip,"Nmap","dnsHostname",((Element)names.item(0)).getAttribute("name"));
+            for(int j=0;j<addresses.getLength();j++) {
+                Element address=(Element)addresses.item(j);
+                if(!"mac".equals(address.getAttribute("addrtype"))) continue;
+                String mac=MacAddresses.normalize(address.getAttribute("addr"));
+                if(!mac.isEmpty()) evidence.add(ip,"Nmap","macAddress",mac);
+            }
             NodeList ports=host.getElementsByTagName("port");for(int j=0;j<ports.getLength();j++){Element port=(Element)ports.item(j);NodeList states=port.getElementsByTagName("state");if(states.getLength()==0||!"open".equals(((Element)states.item(0)).getAttribute("state")))continue;String number=port.getAttribute("portid");evidence.add(ip,"Nmap","openPort",number+"/"+port.getAttribute("protocol"));NodeList services=port.getElementsByTagName("service");if(services.getLength()==0)continue;Element service=(Element)services.item(0);String name=service.getAttribute("name"),product=service.getAttribute("product"),version=service.getAttribute("version");if(!name.isEmpty())evidence.add(ip,"Nmap service "+number,"serviceName",name);String banner=(product+" "+version).trim();if(!banner.isEmpty())evidence.add(ip,"Nmap service "+number,"banner",banner);}
         }
     }

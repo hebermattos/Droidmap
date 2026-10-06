@@ -211,6 +211,34 @@ final class DeviceResultsRenderer {
                     detailValue(details,evidenceLabel(item.optString("field")),item.optString("value"));
             }
         }
+        detailSection(details, "MAC addresses");
+        JSONArray macs = device.optJSONArray("macAddresses");
+        if (macs == null) {
+            // Older saved reports retain their sourced evidence but lack macAddresses.
+            macs = new JSONArray();
+            List<DeviceEvidence.Observation> legacy = new ArrayList<>();
+            JSONArray evidence = device.optJSONArray("evidence");
+            if (evidence != null) for (int i = 0; i < evidence.length(); i++) {
+                JSONObject item = evidence.optJSONObject(i);
+                if (item != null) legacy.add(new DeviceEvidence.Observation(
+                        item.optString("source"), item.optString("field"), item.optString("value")));
+            }
+            for (DeviceEvidence.Observation item : MacAddresses.observations(legacy)) {
+                try {
+                    macs.put(new JSONObject().put("address", item.value).put("source", item.source)
+                            .put("kind", MacAddresses.kind(item.value)));
+                } catch (org.json.JSONException ignored) { }
+            }
+        }
+        if (macs == null || macs.length() == 0) {
+            detailValue(details, "MAC", "Unavailable — not observed or access restricted");
+        } else {
+            for (int i = 0; i < macs.length(); i++) {
+                JSONObject mac = macs.optJSONObject(i);
+                if (mac != null) detailValue(details, "Source: " + mac.optString("source"),
+                        mac.optString("address") + "\n" + mac.optString("kind"));
+            }
+        }
         detailSection(details, "Device identity");
         detailValue(details, "IP address", device.optString("ip"));
         String[] keys = {
