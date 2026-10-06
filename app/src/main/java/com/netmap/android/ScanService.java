@@ -106,6 +106,12 @@ public final class ScanService extends Service {
                     publish("Checked "+completed.get()+" / "+total+" TCP connections",completed.get(),true);
                 });
             });
+            if (!tcp.isCancelled() && wifi.links != null) {
+                identity.addNotices(Ipv4MacDiscovery.collect(wifi.links.getInterfaceName(),
+                        host -> wifi.links.getLinkAddresses().stream()
+                                .anyMatch(local -> WifiReverseDns.inSubnet(local, host)),
+                        evidence, tcp::isCancelled, android.os.Build.VERSION.SDK_INT < 29));
+            }
             preview(target,tcp,evidence,liveChecks,Collections.emptyList(),true);
             main.post(() -> {if(!destroyed && scanner==tcp && !tcp.isCancelled()) publish("Identifying devices…",results.size(),true);});
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);

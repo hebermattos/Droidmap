@@ -61,8 +61,8 @@ final class Ipv6NeighborDiscovery {
         if(ip==null||!evidence.allowDiscoveredHost(ip)) return;
         metadata(ip,wifi,evidence,"IPv6 neighbor");
         evidence.add(ip,"IPv6 neighbor","neighborState",state);
-        if(mac.matches("(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}")&&!mac.equals("00:00:00:00:00:00"))
-            evidence.add(ip,"IPv6 neighbor","neighborMac",mac.toUpperCase(Locale.ROOT));
+        mac=MacAddresses.normalize(mac);
+        if(!mac.isEmpty()) evidence.add(ip,"IPv6 neighbor","neighborMac",mac);
         evidence.add(ip,"IPv6 neighbor","reachabilityNote","Cached neighbor observation; current reachability unverified");
     }
     private static void metadata(String ip,WifiIpv6Scope wifi,DeviceEvidence evidence,String source) {

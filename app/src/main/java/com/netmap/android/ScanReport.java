@@ -23,8 +23,11 @@ final class ScanReport {
             String maker=profile.manufacturerConfidence == DeviceConfidence.CONFLICTING?"":DeviceEvidence.first(info,"manufacturer"), model=profile.model;
             text.append("  Name (reported): ").append(name.isEmpty()?"Unknown":name).append("\n");
             if(!maker.isEmpty()) text.append("  Manufacturer (reported): ").append(maker).append("\n");
-            String mac=DeviceEvidence.first(info,"reportedMac");
-            if(!mac.isEmpty()) text.append("  MAC (reported via NetBIOS): ").append(mac).append("\n");
+            List<DeviceEvidence.Observation> macs=MacAddresses.observations(info);
+            if(macs.isEmpty()) text.append("  MAC: Unavailable — not observed or access restricted.\n");
+            for(DeviceEvidence.Observation mac:macs)
+                text.append("  MAC [").append(mac.source).append("]: ").append(mac.value)
+                        .append(" — ").append(MacAddresses.kind(mac.value)).append("\n");
             if(!model.isEmpty()) text.append("  Model (reported): ").append(model).append("\n");
             if(!profile.manufacturer.isEmpty() && maker.isEmpty()) text.append("  Manufacturer (suggested): ").append(profile.manufacturer).append("\n");
             text.append("  Identification: ").append(profile.confidence.label).append("\n");
@@ -79,6 +82,11 @@ final class ScanReport {
             device.put("dnsHostname",DeviceEvidence.first(info,"dnsHostname"));
             device.put("reportedName",DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
             device.put("reportedMac",DeviceEvidence.first(info,"reportedMac"));
+            JSONArray macs=new JSONArray();
+            for(DeviceEvidence.Observation mac:MacAddresses.observations(info))
+                macs.put(new JSONObject().put("address",mac.value).put("source",mac.source)
+                        .put("kind",MacAddresses.kind(mac.value)));
+            device.put("macAddresses",macs);
             device.put("reportedManufacturer",profile.manufacturerConfidence == DeviceConfidence.CONFLICTING?"":DeviceEvidence.first(info,"manufacturer"));
             device.put("reportedModel",profile.model);
             device.put("probableType",profile.type); device.put("identityConfidence",profile.confidence.label);

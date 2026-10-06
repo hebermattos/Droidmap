@@ -20,6 +20,13 @@ public final class ScannerTests {
         List<String> hosts = ScanPlan.parseHosts("192.168.0.109/24");
         check(hosts.size() == 254 && hosts.get(0).equals("192.168.0.1") && hosts.get(253).equals("192.168.0.254"), "CIDR normalization");
         check(ScanPlan.parseHosts("10.0.0.0/31").size() == 2, "Point to point");
+        check(ScanPlan.wifiNetworkTarget("192.168.0.109", 24).equals("192.168.0.0/24"), "All Wi-Fi IPs normalizes the network");
+        check(ScanPlan.wifiNetworkTarget("10.0.0.130", 25).equals("10.0.0.128/25"), "All Wi-Fi IPs preserves actual prefix");
+        check(ScanPlan.parseHosts(ScanPlan.wifiNetworkTarget("10.0.0.130", 25)).size() == 126, "All usable addresses selected");
+        check(ScanPlan.wifiNetworkTarget("10.0.0.1", 32).equals("10.0.0.1/32"), "Single-host Wi-Fi subnet");
+        rejects(() -> ScanPlan.wifiNetworkTarget("10.0.0.1", 23));
+        rejects(() -> ScanPlan.wifiNetworkTarget("8.8.8.8", 24));
+        rejects(() -> ScanPlan.wifiNetworkTarget("fe80::1", 64));
         check(ScanPlan.parseHosts("172.31.255.255/32").size() == 1, "Private 172 boundary");
         for (String bad : List.of("8.8.8.8", "172.32.0.1", "172.15.0.1", "127.0.0.1", "192.168.0.0/23", "192.168.0.1/33", "192.168.0.256", "hostname", "192.168.0.1/", "192.168.0.1/24/24", "-1.2.3.4")) rejects(() -> ScanPlan.parseHosts(bad));
         check(ScanPlan.parsePorts("443,80,80,21-23").equals(List.of(21,22,23,80,443)), "Ports sorted and deduplicated");

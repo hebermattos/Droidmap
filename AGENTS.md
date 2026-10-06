@@ -22,6 +22,7 @@ This file applies to the entire repository. Read the current checkout before cha
 | `SsdpDiscovery.java`, `*Probe.java`, `ProbeContext.java` | Protocol operations and shared deadlines, read bounds and socket ownership |
 | `DeviceEvidence.java`, `DeviceProfile.java`, `DeviceConfidence.java`, `IdentificationStatus.java` | Bounded observations, provenance and typed identity/completion decisions |
 | `NsdDiscovery.java` | Android mDNS/NSD discovery, multi-address tracking and bounded legacy resolution |
+| `MacAddresses.java`, `Ipv4MacDiscovery.java` | Validated sourced MAC metadata and bounded on-link IPv4 neighbor/legacy ARP collection |
 | `IpAddresses.java`, `WifiIpv6Scope.java`, `Ipv6NeighborDiscovery.java` | Literal normalization, Wi-Fi IPv6 admission, interface scope and bounded neighbor observations |
 | `ReverseDns.java`, `WifiReverseDns.java` | dnsjava PTR resolution, scoped caching and Wi-Fi DNS binding |
 | `Ipp.java`, `HttpReply.java`, `NetBios.java` | Protocol encoding and bounded reply parsing |
