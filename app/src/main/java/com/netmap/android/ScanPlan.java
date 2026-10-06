@@ -32,6 +32,14 @@ public final class ScanPlan {
         if(prefix<=30){first++;last--;} List<String> hosts=new ArrayList<>();for(long ip=first;ip<=last;ip++)hosts.add(format(ip));
         return Collections.unmodifiableList(hosts);
     }
+    /** Selects every usable IPv4 address on the actual Wi-Fi subnet, without truncation. */
+    static String wifiNetworkTarget(String address, int prefix){
+        if(prefix<24||prefix>32) throw new IllegalArgumentException("This Wi-Fi network exceeds the 256-address limit. Enter a /24–/32 range manually.");
+        String target=address+"/"+prefix;
+        parseHosts(target);
+        long mask=(0xffffffffL<<(32-prefix))&0xffffffffL;
+        return format(ipv4(address)&mask)+"/"+prefix;
+    }
     static String parseIpv6(String text){
         if(text.contains("/")) throw new IllegalArgumentException("IPv6 subnet sweeps are not supported; select a discovered IPv6 host.");
         String address=text,zone=""; int percent=text.indexOf('%');

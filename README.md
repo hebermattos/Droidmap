@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.9.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.9.2 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -14,7 +14,8 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - A black-and-white radar/network launcher icon, with adaptive masks on Android 8+ and themed monochrome icons on Android 13+.
 
 - Scan a single private IPv4 address or a /24–/32 network.
-- Suggest the connected Wi-Fi IPv4 network (larger subnets are reduced to the local /24).
+- Select **Options → Scan all Wi-Fi IPs** to scan every usable IPv4 address on the connected private Wi-Fi subnet. The selected target and address count appear before you tap **Start scan**. Network and broadcast addresses are excluded for /24–/30; /31 and /32 retain all addresses. Every selected IP/port is checked, including silent hosts.
+- The all-IP option keeps the actual subnet prefix (/24–/32) and rejects larger networks with an explicit message instead of silently truncating them. **Use Wi-Fi network** remains a shortcut to a bounded range (larger subnets use the local /24). IPv6 discovery remains enabled for observed local addresses; IPv6 subnets are not enumerated.
 - Edit ports as comma-separated values or ranges, and set a 100–3000 ms connection timeout.
 - View responding devices and open ports grouped by IP.
 - Collect mDNS service names/TXT model hints, SSDP/UPnP names/manufacturer/model, HTTP titles/server headers, passive SSH/FTP/Telnet banners and NetBIOS node-status names.
@@ -43,7 +44,7 @@ The Android CI workflow can also be run manually on the feature branch. It build
 ## Use
 
 1. Connect your phone to the local Wi-Fi network.
-2. Enter a private IP address or network, or open **Options → Use Wi-Fi network**.
+2. Enter a private IP address or network, or open **Options → Use Wi-Fi network**. To select the entire connected Wi-Fi subnet, choose **Options → Scan all Wi-Fi IPs**, review the address count, then tap **Start scan**.
 3. Open **Options → Scan settings** to choose Fast/Complete mode, TCP ports, timeout and adaptive scanning. The default timeout is **200 ms**; a one-time upgrade changes a saved legacy 500 ms value to 200 ms, preserving other customized values. Later explicit edits, including 500 ms, persist. Tap **Save** to apply; Cancel discards edits. Increase the timeout if your Wi-Fi or devices respond slowly.
 4. Tap **Start scan**. The same button becomes **Cancel scan** while running; cancellation retains partial results.
 5. Tap a device card to expand or collapse details directly in the list. Details group open ports, identity, identification reasons and evidence by source; values can be selected and copied. Expanded devices stay expanded when rotating a saved result. Open **Options → Full report** for the detailed scan and history comparison.

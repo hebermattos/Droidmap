@@ -210,6 +210,7 @@ public final class MainActivity extends Activity {
         boolean idle = !scanRunning;
         menu.getMenu().add(0, 1, 0, "Scan settings").setEnabled(idle);
         menu.getMenu().add(0, 2, 1, "Use Wi-Fi network").setEnabled(idle);
+        menu.getMenu().add(0, 7, 2, "Scan all Wi-Fi IPs").setEnabled(idle);
         menu.getMenu().add(0, 3, 2, "History").setEnabled(idle);
         menu.getMenu()
                 .add(0, 4, 3, "Reanalyze a device")
@@ -227,6 +228,9 @@ public final class MainActivity extends Activity {
                             break;
                         case 3:
                             showHistory();
+                            break;
+                        case 7:
+                            selectAllWifiIps();
                             break;
                         case 4:
                             chooseDevice();
@@ -309,8 +313,21 @@ public final class MainActivity extends Activity {
         return field;
     }
 
+    private void selectAllWifiIps() {
+        selectWifiNetwork(true);
+    }
+
     private void suggestWifi() {
+        selectWifiNetwork(false);
+    }
+
+    private void selectWifiNetwork(boolean allIps) {
         ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (cm == null) {
+            status.setText("Wi-Fi network information is unavailable.");
+            return;
+        }
+        String limitNotice = "";
         for (Network network : cm.getAllNetworks()) {
             NetworkCapabilities caps = cm.getNetworkCapabilities(network);
             if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue;
@@ -323,15 +340,23 @@ public final class MainActivity extends Activity {
                                 + "/"
                                 + Math.max(24, address.getPrefixLength());
                 try {
+                    if (allIps) value = ScanPlan.wifiNetworkTarget(
+                            address.getAddress().getHostAddress(), address.getPrefixLength());
                     ScanPlan.parseHosts(value);
                     target.setText(value);
+                    target.setError(null);
+                    status.setText(allIps
+                            ? "All " + ScanPlan.parseHosts(value).size()
+                                    + " usable Wi-Fi IPv4 addresses selected. Tap Start scan."
+                            : "Wi-Fi range selected. Tap Start scan.");
                     return;
-                } catch (IllegalArgumentException ignored) {
+                } catch (IllegalArgumentException error) {
+                    if (allIps && address.getPrefixLength() < 24) limitNotice = error.getMessage();
                 }
             }
         }
         status.setText(
-                "No private Wi-Fi IPv4 network found. Connect to Wi-Fi or enter a target"
+                !limitNotice.isEmpty() ? limitNotice : "No private Wi-Fi IPv4 network found. Connect to Wi-Fi or enter a target"
                         + " manually.");
     }
 
