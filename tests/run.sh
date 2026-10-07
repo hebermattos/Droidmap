@@ -3,7 +3,11 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 classes_dir="$(mktemp -d)"
 trap 'rm -rf "$classes_dir"' EXIT
+python3 "$project_dir/tests/generate-nmap-fixture.py" "$project_dir/app/src/main/assets/nmap-command-templates.json" "$classes_dir/TestNmapTemplates.java"
 sources=(
+  "$classes_dir/TestNmapTemplates.java"
+  "$project_dir/app/src/main/java/com/netmap/android/NmapCommands.java"
+  "$project_dir/tests/NmapCommandTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/ScanPlan.java"
   "$project_dir/app/src/main/java/com/netmap/android/IpAddresses.java"
   "$project_dir/app/src/main/java/com/netmap/android/TcpScanner.java"
@@ -34,3 +38,5 @@ java -cp "$classes_dir" com.netmap.android.IdentificationTests
 java -cp "$classes_dir" com.netmap.android.Ipv6CollectionTests
 
 java -cp "$classes_dir" com.netmap.android.MacAddressTests
+
+java -cp "$classes_dir" com.netmap.android.NmapCommandTests
