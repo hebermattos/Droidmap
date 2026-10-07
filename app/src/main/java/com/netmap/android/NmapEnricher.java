@@ -12,6 +12,14 @@ final class NmapEnricher {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
+        final NmapCommands templates;
+        try(InputStream input=context.getAssets().open(NmapCommandsJson.ASSET)) {
+            templates=NmapCommandsJson.parse(NmapRunner.readBounded(input,65536));
+        } catch(Exception e) {
+            notices.add("Nmap template unavailable or invalid: "+DeviceEvidence.clean(
+                    e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));
+            return notices;
+        }
         File data;
         try { data=installData(context); }
         catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); return notices; }
@@ -24,9 +32,10 @@ final class NmapEnricher {
             boolean own=device.getValue().stream().anyMatch(o->o.field.equals("addressOrigin")&&o.value.equals("This phone"));
             if(peer&&!own) responders.add(device.getKey());
         }
-        NmapRunner runner=new NmapRunner(null,cancelled); int attempted=0, enriched=0;
+        NmapRunner runner=new NmapRunner(templates,null,cancelled); int attempted=0, enriched=0;
+        int hostLimit=plan.mode==ScanPlan.Mode.FAST?templates.fastLimit:templates.completeLimit;
         for(String host:responders) {
-            if(cancelled.getAsBoolean()||attempted>=plan.mode.fingerprintLimit) break;
+            if(cancelled.getAsBoolean()||attempted>=hostLimit) break;
             attempted++;
             try {
                 LinkedHashSet<Integer> selected=new LinkedHashSet<>(plan.ports);

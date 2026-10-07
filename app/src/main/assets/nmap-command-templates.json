@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "name": "Droidmap Nmap command templates",
+  "description": "Command templates matching NmapRunner.java. Execute argv directly with ProcessBuilder; do not concatenate a shell command.",
+  "variables": {
+    "binary": {
+      "description": "Absolute path to the packaged Nmap executable."
+    },
+    "dataDir": {
+      "description": "Absolute path to the installed Nmap databases and NSE files."
+    },
+    "libraryDir": {
+      "description": "Parent directory of binary, used as LD_LIBRARY_PATH."
+    },
+    "host": {
+      "description": "Validated single local IP literal, without the IPv6 %interface suffix."
+    },
+    "interface": {
+      "description": "Validated interface scope extracted from an IPv6 zone, for example wlan0."
+    },
+    "ports": {
+      "description": "Comma-separated selected TCP ports plus advertised TCP endpoints.",
+      "maximumDistinctPorts": 256,
+      "minimumPort": 1,
+      "maximumPort": 65535
+    },
+    "openPorts": {
+      "description": "Comma-separated TCP ports confirmed open by the preceding Nmap service scan.",
+      "maximumDistinctPorts": 256
+    },
+    "timeoutMs": {
+      "description": "Configured timeout clamped to 100–3000 ms before substitution.",
+      "default": 200,
+      "minimum": 100,
+      "maximum": 3000
+    }
+  },
+  "execution": {
+    "shell": false,
+    "environment": {
+      "NMAPDIR": "{dataDir}",
+      "LD_LIBRARY_PATH": "{libraryDir}"
+    },
+    "conditionalArgumentGroups": [
+      {
+        "when": "Target is IPv6",
+        "argv": [
+          "-6"
+        ]
+      },
+      {
+        "when": "IPv6 target has an explicit interface zone",
+        "argv": [
+          "-e",
+          "{interface}"
+        ]
+      }
+    ],
+    "argumentOrder": "binary, applicable conditional argument groups in listed order, profile argv",
+    "maximumOutputBytes": 1048576,
+    "outputReadTimeoutSeconds": 2,
+    "cancellation": "Terminate the active process and stop its output reader."
+  },
+  "profiles": {
+    "serviceDetection": {
+      "description": "TCP connect scanning with lightweight service/version detection.",
+      "argv": [
+        "-n",
+        "-sT",
+        "-sV",
+        "-Pn",
+        "--version-light",
+        "--host-timeout",
+        "15s",
+        "--max-retries",
+        "1",
+        "--max-rtt-timeout",
+        "{timeoutMs}ms",
+        "-p",
+        "{ports}",
+        "-oX",
+        "-",
+        "{host}"
+      ],
+      "processTimeoutSeconds": 20,
+      "output": "Nmap XML on stdout",
+      "resultFields": [
+        "openPort",
+        "serviceName",
+        "banner"
+      ]
+    },
+    "vulnerabilityDetection": {
+      "description": "Safe-category vulnerability NSE scripts on Nmap-confirmed open TCP ports.",
+      "requires": "Successful preceding service detection with at least one Nmap-confirmed open port.",
+      "skipWhen": "openPorts is empty",
+      "argv": [
+        "-n",
+        "-sT",
+        "-Pn",
+        "--script",
+        "(vuln and safe) and not brute and not dos and not intrusive and not exploit",
+        "--script-timeout",
+        "10s",
+        "--host-timeout",
+        "30s",
+        "--max-retries",
+        "1",
+        "-p",
+        "{openPorts}",
+        "-oX",
+        "-",
+        "{host}"
+      ],
+      "processTimeoutSeconds": 35,
+      "output": "Nmap XML on stdout",
+      "resultFields": [
+        "script id",
+        "script output",
+        "port"
+      ]
+    }
+  },
+  "selection": {
+    "fast": {
+      "maximumAttemptedDevices": 4
+    },
+    "complete": {
+      "maximumAttemptedDevices": 8
+    },
+    "eligibleDevices": "Hosts with an OPEN/CLOSED TCP response, plus mDNS or IPv6-neighbor observations; the phone's own discovery-only IPv6 addresses are excluded.",
+    "order": "Existing observation order; devices are processed sequentially.",
+    "notices": "Report failures, devices skipped by the host budget, and completed service enrichments."
+  },
+  "exampleBindings": {
+    "binary": "/path/to/libnmap.so",
+    "dataDir": "/path/to/nmap-data",
+    "libraryDir": "/path/to",
+    "host": "192.168.0.109",
+    "interface": "wlan0",
+    "ports": "22,80,443,5060",
+    "openPorts": "80,443",
+    "timeoutMs": 200
+  }
+}

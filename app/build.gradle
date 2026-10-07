@@ -9,8 +9,8 @@ android {
         manifestPlaceholders = [appLabel: parallelInstall ? 'Netmap Lite DNS' : 'Netmap Lite']
         minSdk 26
         targetSdk 35
-        versionCode 17
-        versionName '0.9.3'
+        versionCode 18
+        versionName '0.9.4'
     }
     def stableDebugKey = providers.environmentVariable('NETMAP_DEBUG_KEYSTORE').orNull
     if (stableDebugKey != null) {
@@ -20,6 +20,7 @@ android {
         signingConfigs.debug.keyAlias = 'androiddebugkey'
         signingConfigs.debug.keyPassword = 'android'
     }
+    sourceSets { test.resources.srcDir "src/main/assets" }
     packagingOptions { jniLibs { useLegacyPackaging true } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }

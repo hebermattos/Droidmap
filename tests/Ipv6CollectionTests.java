@@ -74,7 +74,7 @@ public final class Ipv6CollectionTests {
         check(identifier.endpointChecks().size()==1,"Retain discovered-host endpoint checks for exports");
 
         List<List<String>> commands=new ArrayList<>();
-        NmapRunner runner=new NmapRunner(command->{commands.add(new ArrayList<>(command));return new FinishedProcess(xml("fe80::10"));});
+        NmapRunner runner=new NmapRunner(TestNmapTemplates.load(),command->{commands.add(new ArrayList<>(command));return new FinishedProcess(xml("fe80::10"));});
         runner.scan("nmap","data","fe80::10%wlan0",List.of(443),200);
         runner.vulnerabilityScan("nmap","data","fe80::10%wlan0",List.of(443),200);
         for(List<String> command:commands) {
@@ -83,7 +83,7 @@ public final class Ipv6CollectionTests {
             check(command.get(command.size()-1).equals("fe80::10"),"Separate interface zone from literal target");
         }
         AtomicBoolean cancelled=new AtomicBoolean();AtomicReference<FinishedProcess> launched=new AtomicReference<>();
-        NmapRunner cancellable=new NmapRunner(command->{FinishedProcess process=new FinishedProcess(xml("fd00::1"));launched.set(process);cancelled.set(true);return process;},cancelled::get);
+        NmapRunner cancellable=new NmapRunner(TestNmapTemplates.load(),command->{FinishedProcess process=new FinishedProcess(xml("fd00::1"));launched.set(process);cancelled.set(true);return process;},cancelled::get);
         try {cancellable.scan("nmap","data","fd00::1",List.of(80),100);throw new AssertionError("Cancellation ignored");}catch(IOException expected){assertions++;}
         check(launched.get().destroyed,"Cancellation destroys the Nmap process");
         System.out.println("PASS: "+assertions+" IPv6 collection assertions");

@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.9.3 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.9.4 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -198,3 +198,12 @@ The separate Nmap setting defaults to enabled in Fast mode. CI packages the chec
 - Compressed and expanded IPv6 representations share one evidence key. Nmap XML lacking a link-local zone maps only to an unambiguous existing scoped target. HTTP and IPP use bracketed IPv6 authorities. NetBIOS node-status probes are skipped for IPv6.
 
 Silent devices, Wi-Fi client isolation and Android restrictions can still prevent identification. A /64 is not enumerated and finding every IPv6 address is not guaranteed. Names, model, manufacturer, firmware and serial values appear only when a responding service reports them. Run `bash tests/run.sh` for the MAC and IPv6 regression suites as well as the existing scanner/identification checks.
+
+
+### Nmap command templates
+
+The app reads `app/src/main/assets/nmap-command-templates.json` at the start of each Nmap enrichment run. Edit this JSON and rebuild the APK to change command arguments, IPv6 argument groups, environment variables, service/vulnerability process deadlines, output limits and Fast/Complete Nmap host budgets. The packaged file is read directly; it is not copied into persistent app storage and no hardcoded command fallback is used. Missing or malformed templates produce an identification notice and skip Nmap while preserving native scanning.
+
+`profiles.serviceDetection.argv` and `profiles.vulnerabilityDetection.argv` are argument arrays, not shell command strings. Runtime bindings substitute `{host}`, `{ports}` or `{openPorts}`, `{timeoutMs}`, `{interface}`, `{binary}`, `{dataDir}` and `{libraryDir}`. The host remains a validated single local IP; the IPv6 zone becomes a separate interface argument. Vulnerability scans are skipped when Nmap found no open ports. The existing confirmed-port selection, Wi-Fi scope, cancellation and XML parsing behavior remain in code; descriptive JSON fields such as `requires`, `skipWhen`, `selection.order` and `argumentOrder` document that behavior rather than execute expressions.
+
+The JSON specifies host limits from 1–256, process deadlines from 1–300 seconds, output read deadlines from 1–30 seconds and output caps up to 1 MiB. The connection timeout range stays within 100–3000 ms. The default file preserves the existing commands and Fast/Complete limits of 4/8 devices. To use a changed configuration on an installed phone, install the rebuilt APK; runtime file import/editing is not included. Plain Java checks now require Python 3 to generate test input from the actual packaged JSON. Gradle unit tests load that same asset to validate JSON parsing and changed command behavior.
