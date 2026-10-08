@@ -8,6 +8,8 @@ sources=(
   "$classes_dir/TestNmapTemplates.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapCommands.java"
   "$project_dir/tests/NmapCommandTests.java"
+  "$project_dir/app/src/main/java/com/netmap/android/NmapTargets.java"
+  "$project_dir/tests/NmapTargetTests.java"
   "$project_dir/tests/VulnerabilityScriptTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/ScanPlan.java"
   "$project_dir/app/src/main/java/com/netmap/android/IpAddresses.java"
@@ -43,3 +45,5 @@ java -cp "$classes_dir" com.netmap.android.MacAddressTests
 java -cp "$classes_dir" com.netmap.android.NmapCommandTests
 
 java -cp "$classes_dir" com.netmap.android.VulnerabilityScriptTests
+
+java -cp "$classes_dir" com.netmap.android.NmapTargetTests

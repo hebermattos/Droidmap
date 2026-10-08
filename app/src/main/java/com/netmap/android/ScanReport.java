@@ -42,7 +42,7 @@ final class ScanReport {
         }
         if (hosts.isEmpty()) text.append("No responding devices detected.\n\n");
         for(String notice:notices) text.append("Notice: ").append(notice).append("\n");
-        return text.append("Summary\nResponding devices: ").append(hosts.size()).append(" / ").append(plan.hosts.size())
+        return text.append("Summary\nReported targets (not proof of reachability): ").append(hosts.size()).append(" / ").append(plan.hosts.size())
             .append("\nOpen ports: ").append(open).append("\nNo response: ").append(silent).append("\nConnection errors: ").append(errors)
             .append("\nMode: ").append(plan.mode).append("\nAdvertised endpoint checks: ").append(extraCount).append("\nSelected-port checks: ").append(initialCompleted).append(" / ").append(plan.hosts.size() * plan.ports.size())
             .append(cancelled ? "\nPartial scan.\n" : "\n")

@@ -16,14 +16,14 @@ final class NmapCommands {
     final Profile services, vulnerabilities;
     final List<String> ipv6Args, interfaceArgs;
     final Map<String, String> environment;
-    final int maximumOutputBytes, outputReadTimeoutSeconds, fastLimit, completeLimit;
+    final int maximumOutputBytes, outputReadTimeoutSeconds;
     final int minimumTimeoutMs, maximumTimeoutMs;
     private static final Pattern VARIABLE = Pattern.compile("\\{([A-Za-z]+)\\}");
     private static final Set<String> VARIABLES = new HashSet<>(Arrays.asList("binary", "dataDir", "libraryDir", "host", "interface", "ports", "openPorts", "timeoutMs"));
 
     NmapCommands(Profile services, Profile vulnerabilities, List<String> ipv6Args,
             List<String> interfaceArgs, Map<String, String> environment,
-            int outputBytes, int readTimeout, int fastLimit, int completeLimit,
+            int outputBytes, int readTimeout,
             int minimumTimeoutMs, int maximumTimeoutMs) {
         this.services = Objects.requireNonNull(services);
         this.vulnerabilities = Objects.requireNonNull(vulnerabilities);
@@ -37,8 +37,6 @@ final class NmapCommands {
         }
         maximumOutputBytes = bounded(outputBytes, 1, 1048576, "Output size");
         outputReadTimeoutSeconds = bounded(readTimeout, 1, 30, "Output read timeout");
-        this.fastLimit = bounded(fastLimit, 1, 256, "Fast host limit");
-        this.completeLimit = bounded(completeLimit, 1, 256, "Complete host limit");
         this.minimumTimeoutMs = bounded(minimumTimeoutMs, 100, 3000, "Minimum timeout");
         this.maximumTimeoutMs = bounded(maximumTimeoutMs, minimumTimeoutMs, 3000, "Maximum timeout");
     }

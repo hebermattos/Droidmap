@@ -27,13 +27,11 @@ final class NmapCommandsJson {
             else throw new IllegalArgumentException("Unknown Nmap condition: " + condition);
         }
         if (seen.size() != 2) throw new IllegalArgumentException("Missing IPv6 argument groups");
-        JSONObject profiles = root.getJSONObject("profiles"), selection = root.getJSONObject("selection");
+        JSONObject profiles = root.getJSONObject("profiles");
         JSONObject timeout = root.getJSONObject("variables").getJSONObject("timeoutMs");
         return new NmapCommands(profile(profiles.getJSONObject("serviceDetection")),
                 profile(profiles.getJSONObject("vulnerabilityDetection")), ipv6, iface, environment,
                 execution.getInt("maximumOutputBytes"), execution.getInt("outputReadTimeoutSeconds"),
-                selection.getJSONObject("fast").getInt("maximumAttemptedDevices"),
-                selection.getJSONObject("complete").getInt("maximumAttemptedDevices"),
                 timeout.getInt("minimum"), timeout.getInt("maximum"));
     }
     private static NmapCommands.Profile profile(JSONObject profile) throws JSONException {

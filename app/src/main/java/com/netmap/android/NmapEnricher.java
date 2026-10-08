@@ -4,11 +4,11 @@ import android.content.Context;
 import java.io.*;
 import java.util.*;
 
-/** Runs the packaged ARM64 Nmap as bounded, optional enrichment for responsive hosts. */
+/** Runs the packaged ARM64 Nmap as bounded, optional enrichment for all planned and discovered hosts. */
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled) {
+    static List<String> enrich(Context context,ScanPlan plan,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
@@ -24,18 +24,10 @@ final class NmapEnricher {
         try { data=installData(context); }
         catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); return notices; }
 
-        LinkedHashSet<String> responders=new LinkedHashSet<>();
-        for(TcpScanner.Result check:checks)
-            if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) responders.add(check.host);
-        for(Map.Entry<String,List<DeviceEvidence.Observation>> device:evidence.snapshot().entrySet()) {
-            boolean peer=device.getValue().stream().anyMatch(o->o.source.equals("mDNS")||o.source.equals("IPv6 neighbor"));
-            boolean own=device.getValue().stream().anyMatch(o->o.field.equals("addressOrigin")&&o.value.equals("This phone"));
-            if(peer&&!own) responders.add(device.getKey());
-        }
+        List<String> targets=NmapTargets.collect(plan,evidence);
         NmapRunner runner=new NmapRunner(templates,null,cancelled); int attempted=0, enriched=0;
-        int hostLimit=plan.mode==ScanPlan.Mode.FAST?templates.fastLimit:templates.completeLimit;
-        for(String host:responders) {
-            if(cancelled.getAsBoolean()||attempted>=hostLimit) break;
+        for(String host:targets) {
+            if(cancelled.getAsBoolean()) break;
             attempted++;
             try {
                 LinkedHashSet<Integer> selected=new LinkedHashSet<>(plan.ports);
@@ -68,8 +60,8 @@ final class NmapEnricher {
                 notices.add("Nmap "+host+": "+error);
             }
         }
-        if(responders.size()>attempted) notices.add("Nmap host budget reached: "+(responders.size()-attempted)+" observed device(s) not attempted.");
-        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" observed devices.");
+        if(targets.size()>attempted) notices.add("Nmap cancelled: "+(targets.size()-attempted)+" target(s) not attempted.");
+        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" attempted targets; "+targets.size()+" planned/discovered targets.");
         return notices;
     }
 
