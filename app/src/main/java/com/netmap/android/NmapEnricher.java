@@ -26,6 +26,7 @@ final class NmapEnricher {
 
         Map<String,LinkedHashSet<Integer>> targets=NmapTargets.collect(checks,evidence);
         NmapOutputStore outputStore=new NmapOutputStore(context.getFilesDir()); int attempted=0, enriched=0;
+        if(targets.isEmpty()) notices.add("Nmap skipped: no verified-open TCP ports were found.");
         for(Map.Entry<String,LinkedHashSet<Integer>> target:targets.entrySet()) {
             String host=target.getKey();
             if(cancelled.getAsBoolean()) break;
@@ -42,7 +43,8 @@ final class NmapEnricher {
                 LinkedHashSet<Integer> selected=target.getValue();
                 evidence.nmapStatus(host,"Nmap","Running service detection");progress.run();
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,selected,plan.timeoutMs);
-                NmapXmlParser.parse(xml,evidence); evidence.nmapStatus(host,"Nmap","Completed"); enriched++;
+                try {NmapXmlParser.parse(xml,evidence);}
+                catch(Exception parseError) {throw new IOException("Nmap process finished, but XML processing failed: "+parseError.getMessage(),parseError);} evidence.nmapStatus(host,"Nmap","Completed"); enriched++;
                 LinkedHashSet<Integer> openPorts=new LinkedHashSet<>();
                 for(DeviceEvidence.Observation item:evidence.observations(host)) {
                     if(!item.source.equals("Nmap")||!item.field.equals("openPort")||!item.value.endsWith("/tcp")) continue;
@@ -58,7 +60,8 @@ final class NmapEnricher {
                     evidence.add(host,"Nmap vulnerabilities","selectionRule","NSE selects applicable scripts by port and detected service; host-level results are labeled separately.");
                     evidence.nmapStatus(host,"Nmap vulnerabilities","Running vulnerability detection");progress.run();
                     String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
-                    NmapXmlParser.parseVulnerabilities(vulnXml,evidence,openPorts);
+                    try {NmapXmlParser.parseVulnerabilities(vulnXml,evidence,openPorts);}
+                    catch(Exception parseError) {throw new IOException("Nmap process finished, but vulnerability XML processing failed: "+parseError.getMessage(),parseError);}
                     evidence.nmapStatus(host,"Nmap vulnerabilities","Command finished on "+openPorts.size()+" target port(s); see script results. Missing findings do not prove absence of vulnerabilities.");
                 } catch(Exception vulnerabilityError) {
                     evidence.nmapStatus(host,"Nmap vulnerabilities","Failed: "+DeviceEvidence.clean(vulnerabilityError.getMessage()==null?vulnerabilityError.getClass().getSimpleName():vulnerabilityError.getMessage()));

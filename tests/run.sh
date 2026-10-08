@@ -9,6 +9,7 @@ sources=(
   "$project_dir/app/src/main/java/com/netmap/android/NmapCommands.java"
   "$project_dir/tests/NmapCommandTests.java"
   "$project_dir/tests/NmapExecutionTests.java"
+  "$project_dir/tests/AndroidDocumentBuilderFactory.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapOutputStore.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapTargets.java"
   "$project_dir/tests/NmapTargetTests.java"
