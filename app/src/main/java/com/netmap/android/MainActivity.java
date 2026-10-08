@@ -236,7 +236,7 @@ public final class MainActivity extends Activity {
                             chooseDevice();
                             break;
                         case 5:
-                            showText("Full report", resultText);
+                            showReadableReport();
                             break;
                         case 6:
                             exporter.capture(
@@ -255,6 +255,17 @@ public final class MainActivity extends Activity {
                     return true;
                 });
         menu.show();
+    }
+
+    private void showReadableReport() {
+        String capturedReport=report,capturedText=resultText;
+        background.execute(()->{
+            String text;
+            try {text=new ReportPresentation(new org.json.JSONObject(capturedReport)).fullText();}
+            catch(org.json.JSONException error) {text=capturedText.replace("\\n","\n");}
+            String readable=text;
+            runOnUiThread(()->{if(!destroyed)showText("Full report",readable);});
+        });
     }
 
     private void showNmapOutput(String reference) {
