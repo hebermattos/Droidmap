@@ -44,11 +44,21 @@ final class NmapEnricher {
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,selected,plan.timeoutMs);
                 NmapXmlParser.parse(xml,evidence); evidence.add(host,"Nmap","scanStatus","Completed"); enriched++;
                 LinkedHashSet<Integer> openPorts=new LinkedHashSet<>();
-                for(DeviceEvidence.Observation item:evidence.observations(host)) if(item.source.equals("Nmap")&&item.field.equals("openPort")) try { openPorts.add(Integer.parseInt(item.value.split("/",2)[0])); } catch(Exception ignored) {}
+                for(DeviceEvidence.Observation item:evidence.observations(host)) {
+                    if(!item.source.equals("Nmap")||!item.field.equals("openPort")||!item.value.endsWith("/tcp")) continue;
+                    try {
+                        int port=Integer.parseInt(item.value.split("/",2)[0]);
+                        if(selected.contains(port)) openPorts.add(port);
+                    } catch(NumberFormatException ignored) { }
+                }
                 if(!cancelled.getAsBoolean()&&!openPorts.isEmpty()) try {
+                    StringJoiner targetPorts=new StringJoiner(",");
+                    for(int port:openPorts) targetPorts.add(port+"/tcp");
+                    evidence.add(host,"Nmap vulnerabilities","targetPorts",targetPorts.toString());
+                    evidence.add(host,"Nmap vulnerabilities","selectionRule","NSE selects applicable scripts by port and detected service; host-level results are labeled separately.");
                     String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
-                    NmapXmlParser.parseVulnerabilities(vulnXml,evidence);
-                    evidence.add(host,"Nmap vulnerabilities","scanStatus","Completed on "+openPorts.size()+" open port(s)");
+                    NmapXmlParser.parseVulnerabilities(vulnXml,evidence,openPorts);
+                    evidence.add(host,"Nmap vulnerabilities","scanStatus","Command finished on "+openPorts.size()+" target port(s); see script results. Missing findings do not prove absence of vulnerabilities.");
                 } catch(Exception vulnerabilityError) {
                     evidence.add(host,"Nmap vulnerabilities","scanStatus","Failed: "+DeviceEvidence.clean(vulnerabilityError.getMessage()==null?vulnerabilityError.getClass().getSimpleName():vulnerabilityError.getMessage()));
                 }

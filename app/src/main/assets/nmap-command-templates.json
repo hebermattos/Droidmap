@@ -29,7 +29,7 @@
       "maximumDistinctPorts": 256
     },
     "timeoutMs": {
-      "description": "Configured timeout clamped to 100–3000 ms before substitution.",
+      "description": "Configured timeout clamped to 100\u20133000 ms before substitution.",
       "default": 200,
       "minimum": 100,
       "maximum": 3000
@@ -91,12 +91,14 @@
       ]
     },
     "vulnerabilityDetection": {
-      "description": "Safe-category vulnerability NSE scripts on Nmap-confirmed open TCP ports.",
+      "description": "Detect services on confirmed-open TCP ports, then let NSE port/service rules choose applicable safe-category vulnerability scripts, including services on nonstandard ports.",
       "requires": "Successful preceding service detection with at least one Nmap-confirmed open port.",
       "skipWhen": "openPorts is empty",
       "argv": [
         "-n",
         "-sT",
+        "-sV",
+        "--version-light",
         "-Pn",
         "--script",
         "(vuln and safe) and not brute and not dos and not intrusive and not exploit",
@@ -115,9 +117,11 @@
       "processTimeoutSeconds": 35,
       "output": "Nmap XML on stdout",
       "resultFields": [
-        "script id",
-        "script output",
-        "port"
+        "port script id",
+        "port script output",
+        "detected service",
+        "host script id",
+        "host script output"
       ]
     }
   },

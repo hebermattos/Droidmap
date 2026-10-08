@@ -44,7 +44,7 @@ public final class Ipv6CollectionTests {
         String scoped=IpAddresses.canonical("fe80::10%wlan0");
         DeviceEvidence local=new DeviceEvidence(List.of(scoped));
         NmapXmlParser.parse(xml("fe80::10"),local);
-        NmapXmlParser.parseVulnerabilities(xml("fe80::10"),local);
+        NmapXmlParser.parseVulnerabilities(xml("fe80::10"),local,List.of(443));
         check(DeviceEvidence.first(local.observations(scoped),"openPort").equals("443/tcp"),"Map zone-free Nmap output to scoped host");
         check(local.observations(scoped).stream().anyMatch(o->o.source.equals("Nmap vulnerabilities")),"Retain scoped vulnerability evidence");
         check(local.resolveHost("fe80::10%other")==null,"Reject an explicit wrong interface");
