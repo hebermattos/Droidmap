@@ -28,6 +28,9 @@
       "description": "Comma-separated TCP ports confirmed open by the preceding Nmap service scan.",
       "maximumDistinctPorts": 256
     },
+    "xmlOutput": {
+      "description": "Unique temporary XML file allocated by the runner inside dataDir; removed after processing."
+    },
     "timeoutMs": {
       "description": "Configured timeout clamped to 100\u20133000 ms before substitution.",
       "default": 200,
@@ -80,12 +83,14 @@
         "{timeoutMs}ms",
         "-p",
         "{ports}",
-        "-oX",
+        "-oN",
         "-",
+        "-oX",
+        "{xmlOutput}",
         "{host}"
       ],
       "processTimeoutSeconds": 20,
-      "output": "Nmap XML on stdout",
+      "output": "Readable Nmap text on stdout; XML in the temporary xmlOutput file for internal parsing",
       "resultFields": [
         "openPort",
         "serviceName",
@@ -114,12 +119,14 @@
         "1",
         "-p",
         "{openPorts}",
-        "-oX",
+        "-oN",
         "-",
+        "-oX",
+        "{xmlOutput}",
         "{host}"
       ],
       "processTimeoutSeconds": 35,
-      "output": "Nmap XML on stdout",
+      "output": "Readable Nmap text on stdout; XML in the temporary xmlOutput file for internal parsing",
       "resultFields": [
         "port script id",
         "port script output",
@@ -145,3 +152,4 @@
     "timeoutMs": 200
   }
 }
+

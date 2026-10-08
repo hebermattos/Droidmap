@@ -274,18 +274,31 @@ public final class MainActivity extends Activity {
             try {text=NmapOutputStore.read(getFilesDir(),reference);}
             catch(java.io.IOException error) {text="Cannot open Nmap output: "+error.getMessage();}
             String response=text;
-            runOnUiThread(()->{if(!destroyed)showText("Full Nmap output",response);});
+            runOnUiThread(()->{if(!destroyed)showText("Full Nmap output",response,true);});
         });
     }
 
     private void showText(String title, String text) {
+        showText(title,text,false);
+    }
+
+    private void showText(String title, String text, boolean technical) {
         ScrollView scroll = new ScrollView(this);
         TextView content = new TextView(this);
         content.setText(text);
         content.setTextIsSelectable(true);
+        if(technical) {
+            content.setTypeface(android.graphics.Typeface.MONOSPACE);
+            content.setTextSize(13);
+            content.setHorizontallyScrolling(true);
+        }
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         content.setPadding(pad, pad, pad, pad);
-        scroll.addView(content);
+        if(technical) {
+            HorizontalScrollView horizontal=new HorizontalScrollView(this);
+            horizontal.addView(content);
+            scroll.addView(horizontal);
+        } else scroll.addView(content);
         new android.app.AlertDialog.Builder(this)
                 .setTitle(title)
                 .setView(scroll)
@@ -507,3 +520,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+

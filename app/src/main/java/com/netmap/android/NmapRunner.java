@@ -20,7 +20,7 @@ final class NmapRunner {
         String text() {
             return "Profile: "+profile+"\nCommand (argv): "+command+"\nExit code: "+(exitCode==null?"unavailable":exitCode)
                 +"\nDuration: "+durationMs+" ms\nStatus: "+(error.isEmpty()?"Process completed":error)
-                +"\n\nSTDOUT (XML)\n"+stdout+"\n\nSTDERR\n"+stderr;
+                +"\n\nNMAP OUTPUT (TEXT)\n"+stdout+"\n\nERRORS / WARNINGS\n"+stderr;
         }
     }
     private static final class Capture {
@@ -61,7 +61,11 @@ final class NmapRunner {
     }
     private String run(NmapCommands.Profile profile,String binary,String dataDir,String host,Collection<Integer> ports,int timeoutMs)throws Exception{
         Map<String,String> values=templates.bindings(binary,dataDir,host,ports,timeoutMs);
-        List<String> command=templates.command(profile,host,values);
+        File xmlOutput=File.createTempFile("nmap-", ".xml",new File(dataDir));
+        values.put("xmlOutput",xmlOutput.getAbsolutePath());
+        final List<String> command;
+        try {command=templates.command(profile,host,values);}
+        catch(RuntimeException invalidCommand) {xmlOutput.delete();throw invalidCommand;}
         long started=System.nanoTime();
         Process process=null;Integer exitCode=null;String error="";
         Capture stdout=new Capture(templates.maximumOutputBytes),stderr=new Capture(templates.maximumOutputBytes);
@@ -83,7 +87,10 @@ final class NmapRunner {
             err.get(templates.outputReadTimeoutSeconds,TimeUnit.SECONDS);
             if(exitCode!=0)throw new IOException("Nmap exited with code "+exitCode+": "+DeviceEvidence.clean(stderr.text()));
             if(stdout.truncated()||stderr.truncated())throw new IOException("Nmap output exceeds configured limit");
-            return stdout.text();
+            // XML remains machine-readable; stdout is Nmap's normal human-readable output.
+            try(InputStream input=new FileInputStream(xmlOutput)) {
+                return readBounded(input,templates.maximumOutputBytes);
+            }
         } catch(Exception failure) {
             error=failure.getMessage()==null?failure.getClass().getSimpleName():failure.getMessage();
             throw failure;
@@ -97,6 +104,7 @@ final class NmapRunner {
                 try {process.getOutputStream().close();}catch(IOException ignored) { }
             }
             if(out!=null)out.cancel(true);if(err!=null)err.cancel(true);readers.shutdownNow();
+            xmlOutput.delete();
             completed.accept(new Execution(command,profile==templates.services?"Service detection":"Vulnerability detection",
                     stdout.text(),stderr.text(),error,exitCode,TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started)));
         }

@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Real local subprocesses exercise diagnostics without scanning a network. */
 public final class NmapExecutionTests {
     private static int assertions;
+    private static String dataDir;
     private static void check(boolean value,String message){assertions++;if(!value)throw new AssertionError(message);}
     private static NmapCommands templates(int max,int seconds) {
         NmapCommands base=TestNmapTemplates.load();
@@ -15,17 +16,23 @@ public final class NmapExecutionTests {
                 base.ipv6Args,base.interfaceArgs,base.environment,max,1,100,3000);
     }
     private static NmapRunner runner(String script,int max,int seconds,AtomicReference<NmapRunner.Execution> capture) {
-        return new NmapRunner(templates(max,seconds),command->new ProcessBuilder("/bin/sh","-c",script).start(),()->false,capture::set);
+        return runner(script,"<nmaprun></nmaprun>",max,seconds,capture);
     }
-    private static void scan(NmapRunner runner)throws Exception {runner.scan("nmap","data","192.168.1.10",List.of(80),200);}
+    private static NmapRunner runner(String script,String xml,int max,int seconds,AtomicReference<NmapRunner.Execution> capture) {
+        return new NmapRunner(templates(max,seconds),command->{Files.writeString(Path.of(command.get(command.indexOf("-oX")+1)),xml);return new ProcessBuilder("/bin/sh","-c",script).start();},()->false,capture::set);
+    }
+    private static void scan(NmapRunner runner)throws Exception {runner.scan("nmap",dataDir,"192.168.1.10",List.of(80),200);}
     private static void fails(NmapRunner runner,String expected)throws Exception {
         try {scan(runner);throw new AssertionError("Expected "+expected);}catch(IOException error){check(error.getMessage().contains(expected),expected);}
     }
     public static void main(String[] args)throws Exception {
+        dataDir=Files.createTempDirectory("nmap-xml-test").toString();
         AtomicReference<NmapRunner.Execution> capture=new AtomicReference<>();
-        NmapRunner success=runner("printf '<nmaprun></nmaprun>'; printf 'warning: test\\n' >&2",1024,2,capture);
-        String xml=success.scan("nmap","data","192.168.1.10",List.of(80),200);
-        check(xml.equals("<nmaprun></nmaprun>"),"stderr must not corrupt XML");
+        NmapRunner success=runner("printf 'PORT   STATE SERVICE\\n80/tcp open  http\\n'; printf 'warning: test\\n' >&2",1024,2,capture);
+        String xml=success.scan("nmap",dataDir,"192.168.1.10",List.of(80),200);
+        check(xml.equals("<nmaprun></nmaprun>"),"XML file remains separate from text and stderr");
+        check(capture.get().stdout.equals("PORT   STATE SERVICE\n80/tcp open  http\n"),"readable text captured verbatim");
+        check(!capture.get().text().contains("<nmaprun>"),"technical log displays text instead of XML");
         NmapXmlParser.parse(xml,new DeviceEvidence(List.of("192.168.1.10")));
         check(capture.get().stderr.equals("warning: test\n"),"preserve warning newlines");
         check(capture.get().exitCode==0&&capture.get().error.isEmpty(),"successful exit status");
@@ -48,11 +55,18 @@ public final class NmapExecutionTests {
         check(capture.get().stderr.contains("truncated"),"stderr bound enforced");
         scan(runner("i=0; while [ $i -lt 10000 ]; do printf '0123456789abcdef'; printf 'fedcba9876543210' >&2; i=$((i+1)); done",1048576,5,capture));
         check(capture.get().stdout.length()==160000&&capture.get().stderr.length()==160000,"both pipes drained concurrently");
-        check(capture.get().text().contains("STDOUT (XML)")&&capture.get().text().contains("STDERR"),"diagnostic format");
+        check(capture.get().text().contains("NMAP OUTPUT (TEXT)")&&capture.get().text().contains("ERRORS / WARNINGS"),"diagnostic format");
         NmapRunner.Execution longOutput=capture.get();
-        scan(runner("printf 'not XML'",1024,2,capture));
-        try {NmapXmlParser.parse(capture.get().stdout,new DeviceEvidence(List.of("192.168.1.10")));throw new AssertionError("Invalid XML accepted");}
-        catch(org.xml.sax.SAXException expected){check(capture.get().stdout.equals("not XML"),"XML parse failure retains raw response");}
+        fails(runner("printf 'text'","x".repeat(2000),1024,2,capture),"limit");
+        String vulnXml="<nmaprun><host><address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"80\"><state state=\"open\"/><script id=\"test\" output=\"script evidence\"/></port></ports></host></nmaprun>";
+        NmapRunner vulnRunner=runner("printf '80/tcp open http\\n| test: script evidence\\n'",vulnXml,1024,2,capture);
+        DeviceEvidence vulnEvidence=new DeviceEvidence(List.of("192.168.1.10"));
+        NmapXmlParser.parseVulnerabilities(vulnRunner.vulnerabilityScan("nmap",dataDir,"192.168.1.10",List.of(80),200),vulnEvidence,List.of(80));
+        check(vulnEvidence.observations("192.168.1.10").stream().anyMatch(item->item.value.equals("script evidence")),"vulnerability evidence parsed from separate XML");
+        check(capture.get().stdout.contains("| test: script evidence"),"vulnerability text shown in full output");
+        String invalidXml=runner("printf 'Readable result'","not XML",1024,2,capture).scan("nmap",dataDir,"192.168.1.10",List.of(80),200);
+        try {NmapXmlParser.parse(invalidXml,new DeviceEvidence(List.of("192.168.1.10")));throw new AssertionError("Invalid XML accepted");}
+        catch(org.xml.sax.SAXException expected){check(capture.get().stdout.equals("Readable result"),"XML parse failure retains readable response");}
         Path dir=Files.createTempDirectory("nmap-output-test");
         try {
             NmapOutputStore store=new NmapOutputStore(dir.toFile());
@@ -130,6 +144,9 @@ public final class NmapExecutionTests {
         } finally {
             if(previousFactory==null)System.clearProperty(factoryProperty);else System.setProperty(factoryProperty,previousFactory);
         }
+        try(java.util.stream.Stream<Path> paths=Files.list(Path.of(dataDir))){check(paths.count()==0,"temporary XML removed after success, errors, timeout and cancellation");}
+        Files.delete(Path.of(dataDir));
         System.out.println("PASS: "+assertions+" Nmap execution/output assertions");
     }
 }
+
