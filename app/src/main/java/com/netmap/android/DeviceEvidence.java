@@ -16,6 +16,7 @@ public final class DeviceEvidence {
         Endpoint(int port,String source,String serviceType) { this.port=port; this.source=source; this.serviceType=serviceType; }
     }
     private final Map<String,Map<Integer,Endpoint>> endpoints=new LinkedHashMap<>();
+    private final Map<String,Map<String,Observation>> nmapDiagnostics=new LinkedHashMap<>();
     private final Set<String> allowed;
     private final java.util.function.Predicate<String> discoveryScope;
     private int discovered;
@@ -75,9 +76,21 @@ public final class DeviceEvidence {
     }
     public synchronized List<Observation> observations(String host) { return new ArrayList<>(devices.getOrDefault(IpAddresses.canonical(host),Collections.emptyList())); }
     public synchronized boolean hasObservations(String host) { return devices.containsKey(IpAddresses.canonical(host)); }
+    public synchronized void nmapOutput(String host,String source,String reference) {
+        host=IpAddresses.canonical(host);
+        if(!allowed.contains(host)||(!source.equals("Nmap")&&!source.equals("Nmap vulnerabilities")))return;
+        nmapDiagnostics.computeIfAbsent(host,key->new LinkedHashMap<>()).put(source+" output",new Observation(source,"outputFile",clean(reference)));
+    }
+    public synchronized void nmapStatus(String host,String source,String status) {
+        host=IpAddresses.canonical(host);
+        if(!allowed.contains(host)||(!source.equals("Nmap")&&!source.equals("Nmap vulnerabilities")))return;
+        nmapDiagnostics.computeIfAbsent(host,key->new LinkedHashMap<>()).put(source+" status",new Observation(source,"scanStatus",clean(status)));
+    }
     public synchronized Map<String,List<Observation>> snapshot() {
         Map<String,List<Observation>> result = new LinkedHashMap<>();
-        devices.forEach((ip,items) -> result.put(ip, new ArrayList<>(items))); return result;
+        devices.forEach((ip,items) -> result.put(ip, new ArrayList<>(items)));
+        nmapDiagnostics.forEach((ip,items)->result.computeIfAbsent(ip,key->new ArrayList<>()).addAll(items.values()));
+        return result;
     }
     public static String clean(String value) {
         String cleaned=value.replaceAll("[\\p{Cntrl}&&[^\\t\\n]]", "").replaceAll("\\s+", " ").trim();

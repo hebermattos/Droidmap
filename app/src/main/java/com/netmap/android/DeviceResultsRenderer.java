@@ -13,17 +13,19 @@ final class DeviceResultsRenderer {
     private final LinearLayout deviceList;
     private final ScrollView resultsScroll;
     private final Set<String> expandedDevices;
+    private final java.util.function.Consumer<String> openNmapOutput;
     private List<String> lastDevices = new ArrayList<>();
 
     DeviceResultsRenderer(
             Context context,
             LinearLayout deviceList,
             ScrollView resultsScroll,
-            Set<String> expandedDevices) {
+            Set<String> expandedDevices, java.util.function.Consumer<String> openNmapOutput) {
         this.context = context;
         this.deviceList = deviceList;
         this.resultsScroll = resultsScroll;
         this.expandedDevices = expandedDevices;
+        this.openNmapOutput = openNmapOutput;
     }
 
     List<String> render(String report) {
@@ -178,8 +180,8 @@ final class DeviceResultsRenderer {
         parent.addView(heading);
     }
 
-    private void detailValue(LinearLayout parent, String label, String value) {
-        if (value.isEmpty()) return;
+    private TextView detailValue(LinearLayout parent, String label, String value) {
+        if (value.isEmpty()) return null;
         TextView caption = new TextView(context);
         caption.setText(label);
         caption.setTextSize(12);
@@ -191,6 +193,15 @@ final class DeviceResultsRenderer {
         content.setTextSize(15);
         content.setTextIsSelectable(true);
         parent.addView(content);
+        return content;
+    }
+
+    private void nmapValue(LinearLayout parent,String label,String value,String reference) {
+        TextView content=detailValue(parent,label,value);
+        if(content!=null&&!reference.isEmpty()) {
+            content.setContentDescription(label+": "+value+". Tap to view full Nmap output.");
+            content.setOnClickListener(view->openNmapOutput.accept(reference));
+        }
     }
 
     private void populateDeviceDetails(
@@ -286,6 +297,7 @@ final class DeviceResultsRenderer {
                 detailValue(details, "Reason " + (i + 1), reasons.optString(i));
         }
         Map<String, List<JSONObject>> sources = new LinkedHashMap<>();
+        String serviceOutput="",vulnerabilityOutput="";
         List<JSONObject> nmap = new ArrayList<>();
         List<JSONObject> vulnerabilities = new ArrayList<>();
         JSONArray observations = device.optJSONArray("evidence");
@@ -294,12 +306,18 @@ final class DeviceResultsRenderer {
                 JSONObject item = observations.optJSONObject(i);
                 if (item != null) {
                     String source = item.optString("source", "Unknown source");
+                    if(item.optString("field").equals("outputFile")) {
+                        if(source.equals("Nmap"))serviceOutput=item.optString("value");
+                        else if(source.equals("Nmap vulnerabilities"))vulnerabilityOutput=item.optString("value");
+                        continue;
+                    }
                     if (source.equals("Nmap vulnerabilities")) vulnerabilities.add(item);
                     else if (source.startsWith("Nmap")) nmap.add(item);
                     else sources.computeIfAbsent(source, ignored -> new ArrayList<>()).add(item);
                 }
             }
         detailSection(details, "Nmap");
+        if(!serviceOutput.isEmpty())nmapValue(details,"Full output","Tap a Nmap result to view the full command response.",serviceOutput);
         if (nmap.isEmpty()) {
             detailValue(details, "Service detection", "No Nmap results for this device.");
         } else {
@@ -308,13 +326,14 @@ final class DeviceResultsRenderer {
                 String label = source.equals("Nmap")
                         ? evidenceLabel(item.optString("field"))
                         : source.replace("Nmap service ", "Port ") + " • " + evidenceLabel(item.optString("field"));
-                detailValue(details, label, item.optString("value"));
+                nmapValue(details, label, item.optString("value"),serviceOutput);
             }
         }
         detailSection(details, "Nmap vulnerabilities");
+        if(!vulnerabilityOutput.isEmpty())nmapValue(details,"Full output","Tap a vulnerability result to view the full command response.",vulnerabilityOutput);
         if (vulnerabilities.isEmpty()) detailValue(details, "Safe checks", "No vulnerability findings reported.");
         else for (JSONObject item : vulnerabilities)
-            detailValue(details, evidenceLabel(item.optString("field")), item.optString("value"));
+            nmapValue(details, evidenceLabel(item.optString("field")), item.optString("value"),vulnerabilityOutput);
         detailValue(details, "Scope", "NSE selects vulnerability scripts by target port and detected service. Host-level results are labeled separately. Brute force, DoS, intrusive and exploit scripts are excluded. Missing findings do not prove absence of vulnerabilities.");
         detailSection(details, "Other evidence by source");
         if (sources.isEmpty())
