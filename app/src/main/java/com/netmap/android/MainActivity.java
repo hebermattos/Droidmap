@@ -74,8 +74,8 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView title = new TextView(this);
-        title.setText("Droidmap");
-        title.setTextSize(26);
+        title.setText("Droidmap v" + BuildConfig.VERSION_NAME);
+        title.setTextSize(22);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         Button options = new Button(this);
         options.setText("Options");
@@ -274,23 +274,48 @@ public final class MainActivity extends Activity {
             try {text=NmapOutputStore.read(getFilesDir(),reference);}
             catch(java.io.IOException error) {text="Cannot open Nmap output: "+error.getMessage();}
             String response=text;
-            runOnUiThread(()->{if(!destroyed)showText("Full Nmap output",response);});
+            runOnUiThread(()->{if(!destroyed)showText("Full Nmap output",response,true);});
         });
     }
 
     private void showText(String title, String text) {
+        showText(title,text,false);
+    }
+
+    private void showText(String title, String text, boolean technical) {
         ScrollView scroll = new ScrollView(this);
         TextView content = new TextView(this);
-        content.setText(text);
+        android.text.SpannableString styled=new android.text.SpannableString(text);
+        if(!technical) {
+            java.util.regex.Matcher headings=java.util.regex.Pattern.compile(
+                    "(?m)^(SCAN SUMMARY|DEVICE · .+|Ports and services|Findings|Additional evidence|SCAN NOTICES|HISTORY COMPARISON)$").matcher(text);
+            while(headings.find())styled.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                    headings.start(),headings.end(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        content.setText(styled);
+        content.setLineSpacing(4*getResources().getDisplayMetrics().density,1f);
         content.setTextIsSelectable(true);
+        if(technical) {
+            content.setTypeface(android.graphics.Typeface.MONOSPACE);
+            content.setTextSize(13);
+            content.setHorizontallyScrolling(true);
+        }
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         content.setPadding(pad, pad, pad, pad);
-        scroll.addView(content);
-        new android.app.AlertDialog.Builder(this)
+        if(technical) {
+            HorizontalScrollView horizontal=new HorizontalScrollView(this);
+            horizontal.addView(content);
+            scroll.addView(horizontal);
+        } else scroll.addView(content);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this)
                 .setTitle(title)
                 .setView(scroll)
                 .setPositiveButton("Close", null)
-                .show();
+                .create();
+        dialog.show();
+        android.view.Window window=dialog.getWindow();
+        if(window!=null)window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.round(getResources().getDisplayMetrics().heightPixels*0.85f));
     }
 
     private void chooseDevice() {
@@ -507,3 +532,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+

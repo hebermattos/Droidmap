@@ -19,7 +19,7 @@ final class NmapCommands {
     final int maximumOutputBytes, outputReadTimeoutSeconds;
     final int minimumTimeoutMs, maximumTimeoutMs;
     private static final Pattern VARIABLE = Pattern.compile("\\{([A-Za-z]+)\\}");
-    private static final Set<String> VARIABLES = new HashSet<>(Arrays.asList("binary", "dataDir", "libraryDir", "host", "interface", "ports", "openPorts", "timeoutMs"));
+    private static final Set<String> VARIABLES = new HashSet<>(Arrays.asList("binary", "dataDir", "libraryDir", "host", "interface", "ports", "openPorts", "timeoutMs", "xmlOutput"));
 
     NmapCommands(Profile services, Profile vulnerabilities, List<String> ipv6Args,
             List<String> interfaceArgs, Map<String, String> environment,
@@ -103,3 +103,4 @@ final class NmapCommands {
         return result;
     }
 }
+

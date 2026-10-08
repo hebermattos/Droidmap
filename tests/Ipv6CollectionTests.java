@@ -74,9 +74,10 @@ public final class Ipv6CollectionTests {
         check(identifier.endpointChecks().size()==1,"Retain discovered-host endpoint checks for exports");
 
         List<List<String>> commands=new ArrayList<>();
-        NmapRunner runner=new NmapRunner(TestNmapTemplates.load(),command->{commands.add(new ArrayList<>(command));return new FinishedProcess(xml("fe80::10"));});
-        runner.scan("nmap","data","fe80::10%wlan0",List.of(443),200);
-        runner.vulnerabilityScan("nmap","data","fe80::10%wlan0",List.of(443),200);
+        java.nio.file.Path data=java.nio.file.Files.createTempDirectory("nmap-ipv6-test");
+        NmapRunner runner=new NmapRunner(TestNmapTemplates.load(),command->{commands.add(new ArrayList<>(command));java.nio.file.Files.writeString(java.nio.file.Path.of(command.get(command.indexOf("-oX")+1)),xml("fe80::10"));return new FinishedProcess("Readable IPv6 result");});
+        runner.scan("nmap",data.toString(),"fe80::10%wlan0",List.of(443),200);
+        runner.vulnerabilityScan("nmap",data.toString(),"fe80::10%wlan0",List.of(443),200);
         for(List<String> command:commands) {
             check(command.contains("-6")&&command.contains("-n"),"Use IPv6 and disable unbound Nmap DNS");
             check(command.contains("-e")&&command.contains("wlan0"),"Select Wi-Fi scope for Nmap");
@@ -84,8 +85,9 @@ public final class Ipv6CollectionTests {
         }
         AtomicBoolean cancelled=new AtomicBoolean();AtomicReference<FinishedProcess> launched=new AtomicReference<>();
         NmapRunner cancellable=new NmapRunner(TestNmapTemplates.load(),command->{FinishedProcess process=new FinishedProcess(xml("fd00::1"));launched.set(process);cancelled.set(true);return process;},cancelled::get);
-        try {cancellable.scan("nmap","data","fd00::1",List.of(80),100);throw new AssertionError("Cancellation ignored");}catch(IOException expected){assertions++;}
+        try {cancellable.scan("nmap",data.toString(),"fd00::1",List.of(80),100);throw new AssertionError("Cancellation ignored");}catch(IOException expected){assertions++;}
         check(launched.get().destroyed,"Cancellation destroys the Nmap process");
+        java.nio.file.Files.delete(data);
         System.out.println("PASS: "+assertions+" IPv6 collection assertions");
     }
     private static final class FinishedProcess extends Process {
@@ -101,3 +103,4 @@ public final class Ipv6CollectionTests {
         public Process destroyForcibly(){destroyed=true;return this;}
     }
 }
+

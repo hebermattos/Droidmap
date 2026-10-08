@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.0 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -10,6 +10,10 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - `DeviceProfile` makes typed decisions using `DeviceConfidence`; `IdentificationStatus` expresses completion. JSON and text reports retain their existing labels and schema version 5.
 
 ## Features
+
+- Reports use one metric per line, stacked port/service entries on device cards, and bold section headings in the full report. Report dialogs use most of the screen, with selectable text and scrolling.
+
+- The screen header displays Droidmap and the installed app version, sourced from the build configuration.
 
 - A black-and-white radar/network launcher icon, with adaptive masks on Android 8+ and themed monochrome icons on Android 13+.
 
@@ -204,7 +208,7 @@ Silent devices, Wi-Fi client isolation and Android restrictions can still preven
 
 The app reads `app/src/main/assets/nmap-command-templates.json` at the start of each Nmap enrichment run. Edit this JSON and rebuild the APK to change command arguments, IPv6 argument groups, environment variables, service/vulnerability process deadlines, output limits. The packaged file is read directly; it is not copied into persistent app storage and no hardcoded command fallback is used. Missing or malformed templates produce an identification notice and skip Nmap while preserving native scanning.
 
-`profiles.serviceDetection.argv` and `profiles.vulnerabilityDetection.argv` are argument arrays, not shell command strings. Runtime bindings substitute `{host}`, `{ports}` or `{openPorts}`, `{timeoutMs}`, `{interface}`, `{binary}`, `{dataDir}` and `{libraryDir}`. The host remains a validated single local IP; the IPv6 zone becomes a separate interface argument. Vulnerability scans are skipped when Nmap found no open ports. The existing confirmed-port selection, Wi-Fi scope, cancellation and XML parsing behavior remain in code; descriptive JSON fields such as `requires`, `skipWhen`, `selection.order` and `argumentOrder` document that behavior rather than execute expressions.
+`profiles.serviceDetection.argv` and `profiles.vulnerabilityDetection.argv` are argument arrays, not shell command strings. Runtime bindings substitute `{host}`, `{ports}` or `{openPorts}`, `{timeoutMs}`, `{interface}`, `{binary}`, `{dataDir}`, `{libraryDir}` and `{xmlOutput}`. The host remains a validated single local IP; the IPv6 zone becomes a separate interface argument. Vulnerability scans are skipped when Nmap found no open ports. The existing confirmed-port selection, Wi-Fi scope, cancellation and XML parsing behavior remain in code; descriptive JSON fields such as `requires`, `skipWhen`, `selection.order` and `argumentOrder` document that behavior rather than execute expressions.
 
 The JSON specifies process deadlines from 1–300 seconds, output read deadlines from 1–30 seconds and output caps up to 1 MiB. The connection timeout range stays within 100–3000 ms. The template has no Fast/Complete host-count limit. To use a changed configuration on an installed phone, install the rebuilt APK; runtime file import/editing is not included. Plain Java checks now require Python 3 to generate test input from the actual packaged JSON. Gradle unit tests load that same asset to validate JSON parsing and changed command behavior.
 
@@ -220,7 +224,7 @@ Nmap target selection includes every found device with an OPEN TCP check in the 
 
 ### Nmap execution diagnostics
 
-Live scan details show the running profile, then its completed or failed status. Expand **Nmap diagnostics** in a device card and tap **View full technical log** for the service or vulnerability profile to open a scrollable, selectable response. The response includes the exact argv, profile, exit code (when available), elapsed time, execution error, full captured XML stdout and separate stderr. Warnings no longer corrupt the XML parser. Launch failures, nonzero exits, timeouts and cancellations retain their diagnostics; a successful process exit does not by itself establish successful XML parsing or the absence of vulnerabilities. The existing scan status reports parsing errors.
+Live scan details show the running profile, then its completed or failed status. Expand **Nmap diagnostics** in a device card and tap **View full technical log** for the service or vulnerability profile to open a scrollable, selectable response. The response starts with the profile, exit code (when available), elapsed time and execution status, followed by full captured readable Nmap text and separate errors/warnings. Exact command arguments appear last, one argument per line, so a long executable path does not obscure the results. Nmap writes XML to a unique temporary file for internal parsing and prints normal readable output on stdout. The temporary file is bounded and removed after every execution; XML does not appear in the log. A monospace font and horizontal scrolling preserve the port table alignment. Warnings remain separate from both text results and XML parsing. Launch failures, nonzero exits, timeouts and cancellations retain their diagnostics; a successful process exit does not by itself establish successful XML parsing or the absence of vulnerabilities. The existing scan status reports parsing errors.
 
 Diagnostics are read and written off the UI thread and survive activity recreation and app restart. Output is captured up to the JSON-configured byte limit **per stream**; exceeding it fails enrichment and explicitly marks the captured output as truncated. Files are limited to 3 MiB each, 32 MiB per scan and 64 MiB total, retaining at most eight scan directories. Storage failures are visible; older scan output is removed when the total budget is reached. Saved JSON contains run-scoped local output references, not the raw file contents; exported JSON does not transfer those local files to another device. Older reports cannot display output captured before this feature.
 
@@ -231,3 +235,4 @@ Version 0.9.9 packages and installs `nse_main.lua` together with all runtime dat
 ## Reading reports
 
 Version 0.10.0 starts with scan completion/partial status, device and unique open TCP endpoint counts, alert/failure counts, and Nmap execution totals. Filters show All, Open ports, Alerts or Failures without changing scan/export data. Device cards keep IP/name, probable type, open ports, Nmap status and vulnerability status visible. Expand a card for a port/service/product table, finding scope/evidence/suggested action, identification, diagnostics and additional sourced metadata. Alerts distinguish explicit reported vulnerability evidence from warnings and inconclusive or informational results; no finding is automatically authenticated or confirmed. Missing results are labeled Not executed, never interpreted as a clean vulnerability assessment. Technical logs are opened separately from Nmap diagnostics. Full report follows the same summary/device grouping with real line breaks; JSON keeps the existing complete evidence and checks.
+

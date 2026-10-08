@@ -141,8 +141,8 @@ final class ReportPresentation {
         for(Device device:devices) {
             ports+=device.ports.size();if(device.hasAlerts())alerts++;if(device.hasFailures())failures++;
         }
-        return scanStatus()+"\nTarget: "+json.optString("target")+"\nDevices: "+devices.size()+"   Open TCP endpoints: "+ports
-            +"\nDevices with alerts: "+alerts+"   Devices with Nmap failures: "+failures
+        return scanStatus()+"\nTarget: "+json.optString("target")+"\nDevices: "+devices.size()+"\nOpen TCP endpoints: "+ports
+            +"\nDevices with alerts: "+alerts+"\nDevices with Nmap failures: "+failures
             +"\nNmap services: "+profileCounts(false)+"\nNmap vulnerabilities: "+profileCounts(true)
             +(json.optBoolean("nmapEnabled",true)?"":"\nNmap was disabled for this scan.");
     }
@@ -187,3 +187,4 @@ final class ReportPresentation {
     }
     static String label(String field){String label=field.replaceAll("([a-z0-9])([A-Z])","$1 $2").replace('_',' ');return label.isEmpty()?"Observation":Character.toUpperCase(label.charAt(0))+label.substring(1);}
 }
+
