@@ -74,8 +74,8 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView title = new TextView(this);
-        title.setText("Droidmap");
-        title.setTextSize(26);
+        title.setText("Droidmap v" + BuildConfig.VERSION_NAME);
+        title.setTextSize(22);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         Button options = new Button(this);
         options.setText("Options");
