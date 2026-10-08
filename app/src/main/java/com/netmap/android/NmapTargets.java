@@ -2,12 +2,17 @@ package com.netmap.android;
 
 import java.util.*;
 
-/** All validated planned and discovered targets, without a mode-dependent Nmap host budget. */
+/** Every found host with verified-open TCP ports; no mode-dependent host budget. */
 final class NmapTargets {
-    static List<String> collect(ScanPlan plan, DeviceEvidence evidence) {
-        LinkedHashSet<String> targets = new LinkedHashSet<>();
-        for (String host : plan.hosts) targets.add(IpAddresses.canonical(host));
-        targets.addAll(evidence.snapshot().keySet());
-        return new ArrayList<>(targets);
+    static Map<String, LinkedHashSet<Integer>> collect(Collection<TcpScanner.Result> checks,
+            DeviceEvidence evidence) {
+        Map<String, LinkedHashSet<Integer>> targets = new LinkedHashMap<>();
+        for (TcpScanner.Result check : checks) {
+            if (check.state != TcpScanner.State.OPEN || check.port < 1 || check.port > 65535
+                    || !evidence.isAllowed(check.host)) continue;
+            String host = IpAddresses.canonical(check.host);
+            targets.computeIfAbsent(host, key -> new LinkedHashSet<>()).add(check.port);
+        }
+        return targets;
     }
 }

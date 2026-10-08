@@ -119,7 +119,9 @@ public final class ScanService extends Service {
             if(!tcp.isCancelled()) {
                 identity.identify(results);
                 if(nmapEnabled&&!tcp.isCancelled()) {
-                    nmapNotices=NmapEnricher.enrich(this,plan,evidence,tcp::isCancelled);
+                    List<TcpScanner.Result> observedChecks=new ArrayList<>(results);
+                    observedChecks.addAll(identity.endpointChecks());
+                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,tcp::isCancelled);
                 }
             }
             List<String> enrichmentNotices=nmapNotices;

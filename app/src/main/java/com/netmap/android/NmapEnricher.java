@@ -4,11 +4,11 @@ import android.content.Context;
 import java.io.*;
 import java.util.*;
 
-/** Runs the packaged ARM64 Nmap as bounded, optional enrichment for all planned and discovered hosts. */
+/** Runs the packaged ARM64 Nmap as bounded, optional enrichment for all found hosts with verified-open TCP ports. */
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled) {
+    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
@@ -24,15 +24,14 @@ final class NmapEnricher {
         try { data=installData(context); }
         catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); return notices; }
 
-        List<String> targets=NmapTargets.collect(plan,evidence);
+        Map<String,LinkedHashSet<Integer>> targets=NmapTargets.collect(checks,evidence);
         NmapRunner runner=new NmapRunner(templates,null,cancelled); int attempted=0, enriched=0;
-        for(String host:targets) {
+        for(Map.Entry<String,LinkedHashSet<Integer>> target:targets.entrySet()) {
+            String host=target.getKey();
             if(cancelled.getAsBoolean()) break;
             attempted++;
             try {
-                LinkedHashSet<Integer> selected=new LinkedHashSet<>(plan.ports);
-                for(DeviceEvidence.Endpoint endpoint:evidence.endpoints().getOrDefault(host,Collections.emptyList()))
-                    if(selected.size()<256) selected.add(endpoint.port);
+                LinkedHashSet<Integer> selected=target.getValue();
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,selected,plan.timeoutMs);
                 NmapXmlParser.parse(xml,evidence); evidence.add(host,"Nmap","scanStatus","Completed"); enriched++;
                 LinkedHashSet<Integer> openPorts=new LinkedHashSet<>();
@@ -61,7 +60,7 @@ final class NmapEnricher {
             }
         }
         if(targets.size()>attempted) notices.add("Nmap cancelled: "+(targets.size()-attempted)+" target(s) not attempted.");
-        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" attempted targets; "+targets.size()+" planned/discovered targets.");
+        if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" attempted targets; "+targets.size()+" found targets with open TCP ports.");
         return notices;
     }
 

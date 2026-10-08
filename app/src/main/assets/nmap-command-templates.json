@@ -19,7 +19,7 @@
       "description": "Validated interface scope extracted from an IPv6 zone, for example wlan0."
     },
     "ports": {
-      "description": "Comma-separated selected TCP ports plus advertised TCP endpoints.",
+      "description": "Comma-separated TCP ports verified OPEN for this device by the initial scan or advertised endpoint checks.",
       "maximumDistinctPorts": 256,
       "minimumPort": 1,
       "maximumPort": 65535
@@ -126,8 +126,8 @@
     }
   },
   "selection": {
-    "eligibleDevices": "Every validated IP in the scan plan and every admitted discovered IP, including silent targets.",
-    "order": "Planned addresses first, then discovered addresses; duplicates removed. Devices are processed sequentially.",
+    "eligibleDevices": "Every found device with verified-open TCP ports from initial or advertised endpoint checks. No Fast/Complete host-count limit.",
+    "order": "Verified-open check order, with duplicate hosts and ports removed. Devices are processed sequentially.",
     "notices": "Report per-target failures, cancellations and completed service enrichments."
   },
   "exampleBindings": {
