@@ -49,7 +49,7 @@ final class DeviceResultsRenderer {
     private int dp(int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
     private TextView value(LinearLayout parent,String text) {
         TextView view=new TextView(context);view.setText(text);view.setTextSize(14);
-        view.setTextIsSelectable(true);view.setPadding(0,dp(5),0,dp(5));parent.addView(view);return view;
+        view.setTextIsSelectable(true);view.setLineSpacing(dp(2),1f);view.setPadding(0,dp(5),0,dp(5));parent.addView(view);return view;
     }
     private void detail(LinearLayout parent,String label,String text){if(!text.isEmpty())value(parent,label+": "+text);}
     private void filters() {
@@ -118,7 +118,7 @@ final class DeviceResultsRenderer {
             if(reasons!=null)for(int i=0;i<reasons.length();i++)detail(body,"Evidence",reasons.optString(i));
             value(body,"Names and models are reported metadata. Probable type and suggested manufacturer are inferred.");
         });
-        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",true,body->portTable(body,device));
+        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",true,body->portList(body,device));
         section(parent,prefix+"findings","Vulnerabilities and alerts",true,body->{
             detail(body,"Analysis",device.vulnerabilitySummary());
             if(device.findings.isEmpty())value(body,device.vulnerabilityStatus==ReportPresentation.Status.COMPLETED?"No script findings reported. This does not prove absence of vulnerabilities.":"No vulnerability assessment completed for this device.");
@@ -149,17 +149,17 @@ final class DeviceResultsRenderer {
             }
         });
     }
-    private void portTable(LinearLayout body,ReportPresentation.Device device) {
+    private void portList(LinearLayout body,ReportPresentation.Device device) {
         if(device.ports.isEmpty()){value(body,"No open TCP ports observed.");return;}
-        TableLayout table=new TableLayout(context);table.setStretchAllColumns(true);table.setShrinkAllColumns(true);body.addView(table,new LinearLayout.LayoutParams(-1,-2));
-        tableRow(table,true,"Port","Service detected","Version / product");
-        for(int port:device.ports)tableRow(table,false,port+"/TCP",device.services.getOrDefault(port,"Not identified"),device.versions.getOrDefault(port,"Not identified"));
+        for(int port:device.ports) {
+            TextView title=value(body,port+"/TCP · "+device.services.getOrDefault(port,"Service not identified"));
+            title.setTypeface(null,android.graphics.Typeface.BOLD);
+            detail(body,"Version / product",device.versions.getOrDefault(port,"Not identified"));
+            View divider=new View(context);divider.setBackgroundColor(Color.rgb(55,55,55));
+            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
+            line.setMargins(0,dp(6),0,dp(6));body.addView(divider,line);
+        }
         value(body,"Only successful TCP connections or Nmap-confirmed open ports appear here.");
-    }
-    private void tableRow(TableLayout table,boolean header,String... values) {
-        TableRow row=new TableRow(context);if(header)row.setBackgroundColor(Color.rgb(45,45,45));
-        for(String text:values){TextView cell=new TextView(context);cell.setText(text);cell.setTextSize(13);cell.setPadding(dp(5),dp(8),dp(5),dp(8));cell.setTextIsSelectable(true);if(header)cell.setTypeface(null,android.graphics.Typeface.BOLD);row.addView(cell);}
-        table.addView(row);
     }
     private void diagnostic(LinearLayout body,String profile,ReportPresentation.Status status,String message,String reference) {
         detail(body,profile,status.label);
@@ -171,3 +171,4 @@ final class DeviceResultsRenderer {
         } else if(!message.isEmpty())detail(body,"Execution details",message);
     }
 }
+

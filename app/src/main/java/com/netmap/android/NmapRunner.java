@@ -18,9 +18,11 @@ final class NmapRunner {
             this.stdout=stdout;this.stderr=stderr;this.error=error;this.exitCode=exitCode;this.durationMs=durationMs;
         }
         String text() {
-            return "Profile: "+profile+"\nCommand (argv): "+command+"\nExit code: "+(exitCode==null?"unavailable":exitCode)
+            return "Profile: "+profile+"\nExit code: "+(exitCode==null?"unavailable":exitCode)
                 +"\nDuration: "+durationMs+" ms\nStatus: "+(error.isEmpty()?"Process completed":error)
-                +"\n\nNMAP OUTPUT (TEXT)\n"+stdout+"\n\nERRORS / WARNINGS\n"+stderr;
+                +"\n\nNMAP OUTPUT (TEXT)\n"+(stdout.isEmpty()?"No output captured.":stdout)
+                +"\n\nERRORS / WARNINGS\n"+(stderr.isEmpty()?"None reported.":stderr)
+                +"\n\nCOMMAND ARGUMENTS\n"+String.join("\n",command);
         }
     }
     private static final class Capture {

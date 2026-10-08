@@ -11,6 +11,8 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 
 ## Features
 
+- Reports use one metric per line, stacked port/service entries on device cards, and bold section headings in the full report. Report dialogs use most of the screen, with selectable text and scrolling.
+
 - The screen header displays Droidmap and the installed app version, sourced from the build configuration.
 
 - A black-and-white radar/network launcher icon, with adaptive masks on Android 8+ and themed monochrome icons on Android 13+.
@@ -222,7 +224,7 @@ Nmap target selection includes every found device with an OPEN TCP check in the 
 
 ### Nmap execution diagnostics
 
-Live scan details show the running profile, then its completed or failed status. Expand **Nmap diagnostics** in a device card and tap **View full technical log** for the service or vulnerability profile to open a scrollable, selectable response. The response includes the exact argv, profile, exit code (when available), elapsed time, execution error, full captured readable Nmap text and separate errors/warnings. Nmap writes XML to a unique temporary file for internal parsing and prints normal readable output on stdout. The temporary file is bounded and removed after every execution; XML does not appear in the log. A monospace font and horizontal scrolling preserve the port table alignment. Warnings remain separate from both text results and XML parsing. Launch failures, nonzero exits, timeouts and cancellations retain their diagnostics; a successful process exit does not by itself establish successful XML parsing or the absence of vulnerabilities. The existing scan status reports parsing errors.
+Live scan details show the running profile, then its completed or failed status. Expand **Nmap diagnostics** in a device card and tap **View full technical log** for the service or vulnerability profile to open a scrollable, selectable response. The response starts with the profile, exit code (when available), elapsed time and execution status, followed by full captured readable Nmap text and separate errors/warnings. Exact command arguments appear last, one argument per line, so a long executable path does not obscure the results. Nmap writes XML to a unique temporary file for internal parsing and prints normal readable output on stdout. The temporary file is bounded and removed after every execution; XML does not appear in the log. A monospace font and horizontal scrolling preserve the port table alignment. Warnings remain separate from both text results and XML parsing. Launch failures, nonzero exits, timeouts and cancellations retain their diagnostics; a successful process exit does not by itself establish successful XML parsing or the absence of vulnerabilities. The existing scan status reports parsing errors.
 
 Diagnostics are read and written off the UI thread and survive activity recreation and app restart. Output is captured up to the JSON-configured byte limit **per stream**; exceeding it fails enrichment and explicitly marks the captured output as truncated. Files are limited to 3 MiB each, 32 MiB per scan and 64 MiB total, retaining at most eight scan directories. Storage failures are visible; older scan output is removed when the total budget is reached. Saved JSON contains run-scoped local output references, not the raw file contents; exported JSON does not transfer those local files to another device. Older reports cannot display output captured before this feature.
 
