@@ -11,7 +11,7 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 curl --fail --location --retry 3 --output "$ARCHIVE" "$URL"
 echo "$SHA256  $ARCHIVE" | sha256sum --check -
-tar -xjf "$ARCHIVE" -C "$WORK"
+tar --no-same-owner -xjf "$ARCHIVE" -C "$WORK"
 
 SOURCE="$WORK/nmap-7.31"
 test -x "$SOURCE/bin/nmap"

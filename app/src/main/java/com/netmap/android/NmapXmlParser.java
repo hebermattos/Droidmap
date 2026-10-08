@@ -5,10 +5,7 @@ import java.io.*;import javax.xml.parsers.*;import org.w3c.dom.*;
 /** Parses bounded Nmap XML into Droidmap evidence without trusting external entity content. */
 final class NmapXmlParser {
     static void parse(String xml,DeviceEvidence evidence)throws Exception{
-        if(xml==null||xml.length()>1024*1024)throw new IOException("Nmap XML is too large");
-        xml=xml.replace("<!DOCTYPE nmaprun>","");
-        DocumentBuilderFactory factory=DocumentBuilderFactory.newInstance();factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);factory.setFeature("http://xml.org/sax/features/external-general-entities",false);factory.setFeature("http://xml.org/sax/features/external-parameter-entities",false);factory.setXIncludeAware(false);factory.setExpandEntityReferences(false);
-        Document doc=factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));NodeList hosts=doc.getElementsByTagName("host");
+        Document doc=parseDocument(xml);NodeList hosts=doc.getElementsByTagName("host");
         for(int i=0;i<hosts.getLength();i++){Element host=(Element)hosts.item(i);String ip="";NodeList addresses=host.getElementsByTagName("address");
             for(int j=0;j<addresses.getLength();j++){Element a=(Element)addresses.item(j);String type=a.getAttribute("addrtype");if("ipv4".equals(type)||"ipv6".equals(type)){ip=a.getAttribute("addr");break;}}
             ip=evidence.resolveHost(ip);if(ip==null||ip.isEmpty())continue;NodeList names=host.getElementsByTagName("hostname");if(names.getLength()>0)evidence.add(ip,"Nmap","dnsHostname",((Element)names.item(0)).getAttribute("name"));
@@ -22,10 +19,8 @@ final class NmapXmlParser {
         }
     }
     static void parseVulnerabilities(String xml,DeviceEvidence evidence,java.util.Collection<Integer> targetPorts)throws Exception{
-        if(xml==null||xml.isEmpty())return;if(xml.length()>1024*1024)throw new IOException("Nmap vulnerability XML is too large");
-        xml=xml.replace("<!DOCTYPE nmaprun>","");
-        DocumentBuilderFactory factory=DocumentBuilderFactory.newInstance();factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);factory.setFeature("http://xml.org/sax/features/external-general-entities",false);factory.setFeature("http://xml.org/sax/features/external-parameter-entities",false);factory.setXIncludeAware(false);factory.setExpandEntityReferences(false);
-        Document doc=factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));NodeList hosts=doc.getElementsByTagName("host");
+        if(xml==null||xml.isEmpty())return;
+        Document doc=parseDocument(xml);NodeList hosts=doc.getElementsByTagName("host");
         for(int i=0;i<hosts.getLength();i++){Element host=(Element)hosts.item(i);String ip="";NodeList addresses=host.getElementsByTagName("address");for(int j=0;j<addresses.getLength();j++){Element a=(Element)addresses.item(j);String type=a.getAttribute("addrtype");if("ipv4".equals(type)||"ipv6".equals(type)){ip=a.getAttribute("addr");break;}}ip=evidence.resolveHost(ip);if(ip==null||ip.isEmpty())continue;
             boolean eligible=false;
             NodeList ports=host.getElementsByTagName("port");
@@ -52,6 +47,26 @@ final class NmapXmlParser {
         }
 
     }
+    private static Document parseDocument(String xml)throws Exception {
+        if(xml==null||xml.length()>1024*1024)throw new IOException("Nmap XML is missing or too large");
+        // Android's factory does not support the Xerces DTD/entity feature flags.
+        // Nmap emits this bare declaration; reject all other declarations before parsing.
+        xml=xml.replace("<!DOCTYPE nmaprun>","");
+        if(xml.contains("<!DOCTYPE")||xml.contains("<!ENTITY"))
+            throw new org.xml.sax.SAXException("Nmap XML must not contain DTD or entity declarations");
+        DocumentBuilderFactory factory=DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        factory.setValidating(false);
+        DocumentBuilder builder=factory.newDocumentBuilder();
+        builder.setEntityResolver((publicId,systemId)->{
+            throw new org.xml.sax.SAXException("External XML entities are forbidden");
+        });
+        Document document=builder.parse(new ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        if(document.getDocumentElement()==null||!"nmaprun".equals(document.getDocumentElement().getTagName()))
+            throw new org.xml.sax.SAXException("Expected an Nmap XML response");
+        return document;
+    }
+
     private static void recordScripts(NodeList scripts,String ip,String scope,DeviceEvidence evidence) {
         for(int k=0;k<scripts.getLength();k++) {
             Element script=(Element)scripts.item(k);

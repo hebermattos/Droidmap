@@ -100,6 +100,36 @@ public final class NmapExecutionTests {
         } finally {
             try(java.util.stream.Stream<Path> paths=Files.walk(dir)){paths.sorted(Comparator.reverseOrder()).forEach(path->{try{Files.delete(path);}catch(IOException error){throw new UncheckedIOException(error);}});}
         }
+        // The host JDK accepts Xerces flags; reproduce Android's factory contract explicitly.
+        String factoryProperty="javax.xml.parsers.DocumentBuilderFactory";
+        String previousFactory=System.getProperty(factoryProperty);
+        System.setProperty(factoryProperty,AndroidDocumentBuilderFactory.class.getName());
+        try {
+            String host="192.168.1.10";
+            String response="<?xml version=\"1.0\"?><!DOCTYPE nmaprun><nmaprun><host>"
+                    +"<address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"80\">"
+                    +"<state state=\"open\"/><service name=\"http\"/><script id=\"test\" output=\"a &amp; b\"/>"
+                    +"</port></ports></host></nmaprun>";
+            DeviceEvidence parsed=new DeviceEvidence(List.of(host));
+            NmapXmlParser.parse(response,parsed);
+            NmapXmlParser.parseVulnerabilities(response,parsed,List.of(80));
+            check(parsed.observations(host).stream().anyMatch(item->item.field.equals("openPort")&&item.value.equals("80/tcp")),
+                    "service XML parses without unsupported Android factory flags");
+            check(parsed.observations(host).stream().anyMatch(item->item.source.equals("Nmap vulnerabilities")&&item.value.equals("a & b")),
+                    "vulnerability XML and predefined entities parse on Android-compatible factory");
+            for(String bad:List.of(
+                    "<!DOCTYPE nmaprun SYSTEM \"file:///etc/passwd\"><nmaprun/>",
+                    "<!DOCTYPE nmaprun [<!ENTITY e SYSTEM \"http://127.0.0.1:9/\">]><nmaprun>&e;</nmaprun>",
+                    "<!DOCTYPE nmaprun [<!ENTITY e 'expanded'>]><nmaprun>&e;</nmaprun>",
+                    "<other/>")) {
+                try {NmapXmlParser.parse(bad,parsed);throw new AssertionError("Unsafe or non-Nmap XML accepted");}
+                catch(org.xml.sax.SAXException expected){check(true,"invalid XML rejected before external entity resolution");}
+                try {NmapXmlParser.parseVulnerabilities(bad,parsed,List.of(80));throw new AssertionError("Unsafe vulnerability XML accepted");}
+                catch(org.xml.sax.SAXException expected){check(true,"vulnerability parser enforces the same XML policy");}
+            }
+        } finally {
+            if(previousFactory==null)System.clearProperty(factoryProperty);else System.setProperty(factoryProperty,previousFactory);
+        }
         System.out.println("PASS: "+assertions+" Nmap execution/output assertions");
     }
 }
