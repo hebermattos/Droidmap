@@ -14,16 +14,15 @@ public class NmapCommandsJsonTest {
             return new String(input.readAllBytes(),StandardCharsets.UTF_8);
         }
     }
-    @Test public void packagedJsonControlsArgumentsAndBudgets() throws Exception {
+    @Test public void packagedJsonControlsArgumentsAndDeadlines() throws Exception {
         JSONObject root=new JSONObject(asset());
         NmapCommands original=NmapCommandsJson.parse(root.toString());
-        assertEquals(4,original.fastLimit); assertEquals(8,original.completeLimit);
+        assertEquals(20,original.services.processTimeoutSeconds);
         JSONObject profile=root.getJSONObject("profiles").getJSONObject("serviceDetection");
         profile.put("argv",new JSONArray(List.of("--version-all","-p","{ports}","{host}")));
         profile.put("processTimeoutSeconds",42);
-        root.getJSONObject("selection").getJSONObject("fast").put("maximumAttemptedDevices",12);
         NmapCommands changed=NmapCommandsJson.parse(root.toString());
-        assertEquals(12,changed.fastLimit); assertEquals(42,changed.services.processTimeoutSeconds);
+        assertEquals(42,changed.services.processTimeoutSeconds);
         List<String> command=changed.command(changed.services,"192.168.0.1",changed.bindings("nmap","data","192.168.0.1",List.of(80),200));
         assertTrue(command.contains("--version-all")); assertFalse(command.contains("--version-light"));
     }

@@ -19,7 +19,7 @@
       "description": "Validated interface scope extracted from an IPv6 zone, for example wlan0."
     },
     "ports": {
-      "description": "Comma-separated selected TCP ports plus advertised TCP endpoints.",
+      "description": "Comma-separated TCP ports verified OPEN for this device by the initial scan or advertised endpoint checks.",
       "maximumDistinctPorts": 256,
       "minimumPort": 1,
       "maximumPort": 65535
@@ -126,15 +126,9 @@
     }
   },
   "selection": {
-    "fast": {
-      "maximumAttemptedDevices": 4
-    },
-    "complete": {
-      "maximumAttemptedDevices": 8
-    },
-    "eligibleDevices": "Hosts with an OPEN/CLOSED TCP response, plus mDNS or IPv6-neighbor observations; the phone's own discovery-only IPv6 addresses are excluded.",
-    "order": "Existing observation order; devices are processed sequentially.",
-    "notices": "Report failures, devices skipped by the host budget, and completed service enrichments."
+    "eligibleDevices": "Every found device with verified-open TCP ports from initial or advertised endpoint checks. No Fast/Complete host-count limit.",
+    "order": "Verified-open check order, with duplicate hosts and ports removed. Devices are processed sequentially.",
+    "notices": "Report per-target failures, cancellations and completed service enrichments."
   },
   "exampleBindings": {
     "binary": "/path/to/libnmap.so",

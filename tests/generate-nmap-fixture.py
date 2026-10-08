@@ -19,6 +19,5 @@ timeout = config['variables']['timeoutMs']
 values = [profile('serviceDetection'), profile('vulnerabilityDetection'),
           strings(groups['Target is IPv6']), strings(groups['IPv6 target has an explicit interface zone']), env,
           execution['maximumOutputBytes'], execution['outputReadTimeoutSeconds'],
-          config['selection']['fast']['maximumAttemptedDevices'], config['selection']['complete']['maximumAttemptedDevices'],
           timeout['minimum'], timeout['maximum']]
 Path(sys.argv[2]).write_text('package com.netmap.android;\nfinal class TestNmapTemplates {\nstatic NmapCommands load(){return new NmapCommands(' + ','.join(map(str, values)) + ');}\n}\n')
