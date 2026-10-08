@@ -80,7 +80,7 @@ final class NmapEnricher {
     private static File installData(Context context) throws IOException {
         File dir=new File(context.getFilesDir(),"nmap-data");
         if(!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create data directory");
-        List<String> names=new ArrayList<>(Arrays.asList("nmap-service-probes","nmap-services","nmap-protocols","nmap-rpc","scripts/script.db"));
+        List<String> names=new ArrayList<>(Arrays.asList("nse_main.lua","nmap-service-probes","nmap-services","nmap-protocols","nmap-rpc","scripts/script.db"));
         try(BufferedReader manifest=new BufferedReader(new InputStreamReader(context.getAssets().open("nmap-data/nse-files.txt")))) { String line; while((line=manifest.readLine())!=null) if(!line.trim().isEmpty()&&!names.contains(line)) names.add(line); }
         for(String name:names) {
             File target=new File(dir,name);

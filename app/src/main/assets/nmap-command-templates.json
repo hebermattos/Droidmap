@@ -65,6 +65,8 @@
     "serviceDetection": {
       "description": "TCP connect scanning with lightweight service/version detection.",
       "argv": [
+        "--datadir",
+        "{dataDir}",
         "-n",
         "-sT",
         "-sV",
@@ -95,6 +97,8 @@
       "requires": "Successful preceding service detection with at least one Nmap-confirmed open port.",
       "skipWhen": "openPorts is empty",
       "argv": [
+        "--datadir",
+        "{dataDir}",
         "-n",
         "-sT",
         "-sV",
