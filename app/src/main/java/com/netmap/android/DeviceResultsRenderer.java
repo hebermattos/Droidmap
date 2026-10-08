@@ -315,7 +315,7 @@ final class DeviceResultsRenderer {
         if (vulnerabilities.isEmpty()) detailValue(details, "Safe checks", "No vulnerability findings reported.");
         else for (JSONObject item : vulnerabilities)
             detailValue(details, evidenceLabel(item.optString("field")), item.optString("value"));
-        detailValue(details, "Scope", "Safe NSE vulnerability checks on Nmap-confirmed open ports only. Brute force, DoS, intrusive and exploit scripts are excluded.");
+        detailValue(details, "Scope", "NSE selects vulnerability scripts by target port and detected service. Host-level results are labeled separately. Brute force, DoS, intrusive and exploit scripts are excluded. Missing findings do not prove absence of vulnerabilities.");
         detailSection(details, "Other evidence by source");
         if (sources.isEmpty())
             detailValue(details, "Evidence", "No identification metadata collected.");

@@ -26,6 +26,7 @@ public final class NmapCommandTests {
         List<String> vuln = template.command(template.vulnerabilities, "192.168.0.109", template.bindings("nmap","data","192.168.0.109",List.of(443),200));
         check(vuln.get(vuln.indexOf("--script")+1).equals("(vuln and safe) and not brute and not dos and not intrusive and not exploit"), "Keep NSE expression as one argv token");
         check(vuln.contains("443"), "Bind confirmed open ports");
+        check(vuln.contains("-sV") && vuln.contains("--version-light"), "Detect actual services before vulnerability script rules, including nonstandard ports");
         NmapCommands.Profile changed = new NmapCommands.Profile(List.of("--version-all","--host-timeout","25s","-p","{ports}","{host}"),42);
         check(template.command(changed,"192.168.0.109",template.bindings("nmap","data","192.168.0.109",List.of(80),200)).contains("25s"), "Edited profile arguments control command");
         check(changed.processTimeoutSeconds==42, "Edited profile controls process deadline");

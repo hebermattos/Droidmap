@@ -33,7 +33,7 @@ public class NmapXmlParserTest {
     @Test public void parsesSafeVulnerabilityScriptOutput() throws Exception {
         String ip="192.168.1.10"; DeviceEvidence evidence=new DeviceEvidence(Collections.singleton(ip));
         String xml="<?xml version=\"1.0\"?><nmaprun><host><address addr=\"192.168.1.10\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"443\"><state state=\"open\"/><script id=\"ssl-poodle\" output=\"VULNERABLE: test finding\"/></port></ports></host></nmaprun>";
-        NmapXmlParser.parseVulnerabilities(xml,evidence);
+        NmapXmlParser.parseVulnerabilities(xml,evidence,List.of(443));
         assertTrue(evidence.observations(ip).stream().anyMatch(x->x.source.equals("Nmap vulnerabilities") && x.field.contains("443") && x.value.contains("VULNERABLE")));
     }
 }
