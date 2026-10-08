@@ -126,7 +126,7 @@ public final class MainActivity extends Activity {
         scroll.addView(deviceList);
         layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(layout);
-        resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices);
+        resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput);
         if (state != null) {
             pendingScan = state.getParcelable("pendingScan");
             exporter.restore(state);
@@ -255,6 +255,16 @@ public final class MainActivity extends Activity {
                     return true;
                 });
         menu.show();
+    }
+
+    private void showNmapOutput(String reference) {
+        background.execute(()->{
+            String text;
+            try {text=NmapOutputStore.read(getFilesDir(),reference);}
+            catch(java.io.IOException error) {text="Cannot open Nmap output: "+error.getMessage();}
+            String response=text;
+            runOnUiThread(()->{if(!destroyed)showText("Full Nmap output",response);});
+        });
     }
 
     private void showText(String title, String text) {
