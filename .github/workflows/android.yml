@@ -34,6 +34,8 @@ jobs:
         run: bash tests/run.sh
       - name: Test, build and lint Android app
         run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon
+      - name: Verify packaged Nmap runtime data
+        run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

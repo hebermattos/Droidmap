@@ -19,13 +19,15 @@ JNI="$ROOT/app/src/main/jniLibs/arm64-v8a"
 DATA="$ROOT/app/src/main/assets/nmap-data"
 mkdir -p "$JNI" "$DATA"
 cp "$SOURCE/bin/nmap" "$JNI/libnmap.so"
-for f in nmap-service-probes nmap-services nmap-protocols nmap-rpc; do
+for f in nse_main.lua nmap-service-probes nmap-services nmap-protocols nmap-rpc nmap-mac-prefixes nmap-os-db nmap-payloads; do
   test -s "$SOURCE/share/nmap/$f"
   cp "$SOURCE/share/nmap/$f" "$DATA/$f"
 done
 rm -rf "$DATA/scripts" "$DATA/nselib"
 cp -R "$SOURCE/share/nmap/scripts" "$DATA/scripts"
 cp -R "$SOURCE/share/nmap/nselib" "$DATA/nselib"
-(cd "$DATA" && find scripts nselib -type f -print | LC_ALL=C sort > nse-files.txt)
+(cd "$DATA" && find nse_main.lua nmap-* scripts nselib -type f -print | LC_ALL=C sort > nse-files.txt)
 test -s "$DATA/scripts/script.db"
 test -s "$DATA/nse-files.txt"
+
+python3 "$ROOT/tests/verify-nmap-data.py" --assets "$DATA"
