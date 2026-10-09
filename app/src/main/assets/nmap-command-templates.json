@@ -75,12 +75,8 @@
         "-sV",
         "-Pn",
         "--version-light",
-        "--host-timeout",
-        "15s",
         "--max-retries",
         "1",
-        "--max-rtt-timeout",
-        "{timeoutMs}ms",
         "-p",
         "{ports}",
         "-oN",
@@ -89,7 +85,7 @@
         "{xmlOutput}",
         "{host}"
       ],
-      "processTimeoutSeconds": 20,
+      "processTimeoutSeconds": 0,
       "output": "Readable Nmap text on stdout; XML in the temporary xmlOutput file for internal parsing",
       "resultFields": [
         "openPort",
@@ -111,10 +107,6 @@
         "-Pn",
         "--script",
         "(vuln and safe) and not brute and not dos and not intrusive and not exploit",
-        "--script-timeout",
-        "10s",
-        "--host-timeout",
-        "30s",
         "--max-retries",
         "1",
         "-p",
@@ -125,7 +117,7 @@
         "{xmlOutput}",
         "{host}"
       ],
-      "processTimeoutSeconds": 35,
+      "processTimeoutSeconds": 0,
       "output": "Readable Nmap text on stdout; XML in the temporary xmlOutput file for internal parsing",
       "resultFields": [
         "port script id",
@@ -152,4 +144,3 @@
     "timeoutMs": 200
   }
 }
-

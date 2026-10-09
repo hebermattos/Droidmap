@@ -10,7 +10,7 @@ final class NmapCommands {
         final int processTimeoutSeconds;
         Profile(List<String> argv, int timeout) {
             this.argv = tokens(argv);
-            processTimeoutSeconds = bounded(timeout, 1, 300, "Process timeout");
+            processTimeoutSeconds = bounded(timeout, 0, 300, "Process timeout (0 disables deadline)");
         }
     }
     final Profile services, vulnerabilities;

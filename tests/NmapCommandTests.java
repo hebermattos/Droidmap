@@ -20,7 +20,7 @@ public final class NmapCommandTests {
         check(command.get(command.indexOf("-oN")+1).equals("-"),"Normal text is explicitly sent to stdout");
         check(command.get(command.indexOf("-oX")+1).equals("/data/temporary scan.xml"),"XML file is separate from readable stdout and remains one argv token");
         check(command.get(0).equals("/data/lib/libnmap.so"), "Select runtime binary");
-        check(command.contains("80,443") && command.contains("200ms"), "Bind ports and timeout");
+        check(command.contains("80,443") && !command.contains("200ms"), "Bind ports without imposing scanner timeout");
         check(!command.contains("-6") && !command.contains("-e"), "IPv4 omits IPv6 flags");
         check(command.get(command.indexOf("--datadir")+1).equals("/data/nmap-data"), "Service scan explicitly selects installed NSE data");
         check(template.environment(values).get("NMAPDIR").equals("/data/nmap-data"), "Bind environment");
@@ -28,19 +28,22 @@ public final class NmapCommandTests {
         command = template.command(template.services, "fe80::10%wlan0", values);
         check(command.contains("-6") && command.contains("-e") && command.contains("wlan0"), "Apply IPv6 conditional argument groups");
         check(command.get(command.size()-1).equals("fe80::10"), "Strip zone from literal target");
-        check(command.contains("100ms"), "Clamp minimum timeout");
-        check(template.command(template.services, "fd00::10", bindings(template,"nmap","data","fd00::10",List.of(80),4000)).contains("3000ms"), "Clamp maximum timeout");
+        check(values.get("timeoutMs").equals("100"), "Retain optional timeout binding for custom templates");
+        check(bindings(template,"nmap","data","fd00::10",List.of(80),4000).get("timeoutMs").equals("3000"), "Clamp optional custom timeout binding");
         List<String> vuln = template.command(template.vulnerabilities, "192.168.0.109", bindings(template,"nmap","data","192.168.0.109",List.of(443),200));
         check(vuln.get(vuln.indexOf("--script")+1).equals("(vuln and safe) and not brute and not dos and not intrusive and not exploit"), "Keep NSE expression as one argv token");
         check(vuln.get(vuln.indexOf("--datadir")+1).equals("data"), "Vulnerability scan explicitly selects installed NSE data");
         check(vuln.contains("443"), "Bind confirmed open ports");
         check(vuln.contains("-sV") && vuln.contains("--version-light"), "Detect actual services before vulnerability script rules, including nonstandard ports");
+        check(template.services.processTimeoutSeconds==0 && template.vulnerabilities.processTimeoutSeconds==0, "Both packaged profiles have no process deadline");
+        for(List<String> argsList:List.of(command,vuln))
+            check(!argsList.contains("--host-timeout") && !argsList.contains("--script-timeout") && !argsList.contains("--max-rtt-timeout"), "No imposed Nmap host, script or RTT timeout");
         NmapCommands.Profile changed = new NmapCommands.Profile(List.of("--version-all","--host-timeout","25s","-p","{ports}","{host}"),42);
         check(template.command(changed,"192.168.0.109",bindings(template,"nmap","data","192.168.0.109",List.of(80),200)).contains("25s"), "Edited profile arguments control command");
         check(changed.processTimeoutSeconds==42, "Edited profile controls process deadline");
         rejects(() -> new NmapCommands.Profile(List.of("{unknown}"),20));
         rejects(() -> new NmapCommands.Profile(List.of("{host"),20));
-        rejects(() -> new NmapCommands.Profile(List.of("-n"),0));
+        rejects(() -> new NmapCommands.Profile(List.of("-n"),-1));
         rejects(() -> bindings(template,"nmap","data","8.8.8.8",List.of(80),200));
         rejects(() -> bindings(template,"nmap","data","192.168.0.0/24",List.of(80),200));
         rejects(() -> bindings(template,"nmap","data","192.168.0.109",List.of(0),200));
