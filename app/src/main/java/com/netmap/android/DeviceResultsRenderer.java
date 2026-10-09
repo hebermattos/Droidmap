@@ -30,7 +30,7 @@ final class DeviceResultsRenderer {
         if(report.isEmpty()){value(deviceList,"Discover devices on your local network. Use Options to adjust the scan.");return lastDevices;}
         try {
             ReportPresentation model=new ReportPresentation(new JSONObject(report));
-            TextView summary=value(deviceList,model.summary());summary.setTextSize(17);
+            overview(model);
             filters();int shown=0;
             for(ReportPresentation.Device device:model.devices) {
                 lastDevices.add(device.ip); // Reanalysis retains the entire inventory, independent of the filter.
@@ -42,25 +42,71 @@ final class DeviceResultsRenderer {
             if(notices!=null&&notices.length()>0)section(deviceList,"scan-notices","Scan notices ("+notices.length()+")",false,body->{
                 for(int i=0;i<notices.length();i++)value(body,notices.optString(i));
             });
-            value(deviceList,"Tap a device for details. Full report and JSON export are in Options.");
+            value(deviceList,"Use Show details to expand a device. Full report and JSON export are in Options.");
         } catch(JSONException error){value(deviceList,"Summary unavailable. Open Full report in Options.");}
         resultsScroll.post(()->resultsScroll.scrollTo(0,scrollPosition));return lastDevices;
     }
     private int dp(int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
     private TextView value(LinearLayout parent,String text) {
         TextView view=new TextView(context);view.setText(text);view.setTextSize(14);
-        view.setTextIsSelectable(true);view.setLineSpacing(dp(2),1f);view.setPadding(0,dp(5),0,dp(5));parent.addView(view);return view;
+        view.setGravity(android.view.Gravity.START);view.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        view.setTextColor(Color.WHITE);view.setTextIsSelectable(true);view.setLineSpacing(dp(2),1f);
+        view.setPadding(0,dp(4),0,dp(4));parent.addView(view,new LinearLayout.LayoutParams(-1,-2));return view;
     }
-    private void detail(LinearLayout parent,String label,String text){if(!text.isEmpty())value(parent,label+": "+text);}
+    private void detail(LinearLayout parent,String label,String text) {
+        if(text.isEmpty())return;
+        LinearLayout field=new LinearLayout(context);field.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(6),0,dp(6));parent.addView(field,margin);
+        TextView caption=value(field,label);caption.setTextSize(12);caption.setTextColor(Color.LTGRAY);caption.setPadding(0,0,0,dp(2));
+        TextView content=value(field,text);content.setPadding(0,0,0,0);
+    }
+    private LinearLayout panel(LinearLayout parent) {
+        LinearLayout panel=new LinearLayout(context);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(14),dp(12),dp(14),dp(12));
+        android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
+        shape.setColor(Color.rgb(20,20,20));shape.setCornerRadius(dp(12));shape.setStroke(dp(1),Color.rgb(55,55,55));panel.setBackground(shape);
+        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(10),0,dp(6));parent.addView(panel,margin);return panel;
+    }
+    private Button action(LinearLayout parent) {
+        Button button=new Button(context);button.setAllCaps(false);button.setTextSize(14);button.setTextColor(Color.WHITE);
+        button.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);button.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        button.setMinHeight(dp(48));button.setMinimumHeight(dp(48));button.setMinWidth(0);button.setMinimumWidth(0);button.setPadding(0,dp(8),0,dp(8));
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Color.rgb(65,65,65)),new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),null));
+        parent.addView(button,new LinearLayout.LayoutParams(-1,-2));return button;
+    }
+    private void divider(LinearLayout parent) {
+        View divider=new View(context);divider.setBackgroundColor(Color.rgb(55,55,55));
+        LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(8),0,dp(8));parent.addView(divider,line);
+    }
+    private void overview(ReportPresentation model) {
+        LinearLayout card=panel(deviceList);
+        TextView title=value(card,"Scan overview");title.setTextSize(18);title.setTypeface(null,android.graphics.Typeface.BOLD);
+        String[] lines=model.summary().split("\n");
+        TextView state=value(card,lines[0]);state.setTypeface(null,android.graphics.Typeface.BOLD);
+        for(int i=1;i<lines.length;i++) {
+            final String line=lines[i];
+            // Keep the long execution counts available without dominating the overview.
+            if(line.startsWith("Nmap services:")||line.startsWith("Nmap vulnerabilities:"))continue;
+            value(card,line);
+        }
+        section(card,"overview-analysis","Nmap execution status",false,body->{
+            for(String line:lines)if(line.startsWith("Nmap services:")||line.startsWith("Nmap vulnerabilities:")) {
+                int colon=line.indexOf(':');detail(body,line.substring(0,colon),line.substring(colon+1).trim());
+            }
+        });
+    }
     private void filters() {
         HorizontalScrollView scroll=new HorizontalScrollView(context);scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout row=new LinearLayout(context);row.setOrientation(LinearLayout.HORIZONTAL);scroll.addView(row);deviceList.addView(scroll);
         for(ReportPresentation.Filter option:ReportPresentation.Filter.values()) {
-            Button button=new Button(context);button.setAllCaps(false);button.setText(option.label);
+            Button button=new Button(context);button.setAllCaps(false);button.setText(option.label);button.setTextSize(14);
+            button.setMinHeight(dp(48));button.setMinimumHeight(dp(48));button.setMinWidth(0);button.setMinimumWidth(0);button.setPadding(dp(12),dp(8),dp(12),dp(8));
             button.setSelected(filter==option);button.setContentDescription(option.label+(filter==option?", selected":""));
             button.setTextColor(filter==option?Color.BLACK:Color.WHITE);
-            button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(filter==option?Color.WHITE:Color.rgb(45,45,45)));
-            row.addView(button);button.setOnClickListener(v->{filter=option;render(lastReport);});
+            android.graphics.drawable.GradientDrawable background=new android.graphics.drawable.GradientDrawable();
+            background.setColor(filter==option?Color.WHITE:Color.rgb(45,45,45));background.setCornerRadius(dp(8));
+            button.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Color.GRAY),background,null));
+            LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-2,-2);margin.setMargins(0,dp(6),dp(8),dp(6));row.addView(button,margin);button.setOnClickListener(v->{filter=option;render(lastReport);});
         }
     }
     private String ports(SortedSet<Integer> ports) {
@@ -70,35 +116,41 @@ final class DeviceResultsRenderer {
         return result+(ports.size()>8?" (+"+(ports.size()-8)+" more)":"");
     }
     private void addDeviceCard(ReportPresentation.Device device) {
-        LinearLayout card=new LinearLayout(context);card.setOrientation(LinearLayout.VERTICAL);
-        android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
-        shape.setColor(Color.rgb(20,20,20));shape.setCornerRadius(dp(12));shape.setStroke(dp(1),Color.rgb(55,55,55));card.setBackground(shape);
-        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(10),0,0);deviceList.addView(card,margin);
-        String name=device.name.replaceAll("\\s+"," ").trim();if(name.length()>64)name=name.substring(0,61)+"…";
-        String summary=device.ip+(name.isEmpty()?"":" · "+name)+"\nProbable type: "+device.json.optString("probableType","Unknown")
-            +"\nOpen TCP ports: "+ports(device.ports)+"\nNmap: "+device.serviceStatus.label+"\nVulnerabilities: "+device.vulnerabilitySummary();
-        Button toggle=new Button(context);toggle.setAllCaps(false);toggle.setTextSize(15);
-        toggle.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);toggle.setPadding(dp(14),dp(10),dp(14),dp(10));card.addView(toggle,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout details=new LinearLayout(context);details.setOrientation(LinearLayout.VERTICAL);details.setPadding(dp(14),0,dp(14),dp(14));card.addView(details);
+        LinearLayout card=panel(deviceList);
+        TextView address=value(card,device.ip);address.setTextSize(18);address.setTypeface(null,android.graphics.Typeface.BOLD);
+        if(!device.name.isEmpty())detail(card,"Name",device.name);
+        detail(card,"Probable type",device.json.optString("probableType","Unknown"));
+        detail(card,"Open TCP ports",ports(device.ports));
+        detail(card,"Nmap service analysis",device.serviceStatus.label);
+        detail(card,"Vulnerability analysis",device.vulnerabilitySummary());
+        divider(card);
+        Button toggle=action(card);
+        LinearLayout details=new LinearLayout(context);details.setOrientation(LinearLayout.VERTICAL);card.addView(details,new LinearLayout.LayoutParams(-1,-2));
         boolean expanded=expandedDevices.contains(device.ip);
-        if(expanded)populate(details,device);details.setVisibility(expanded?View.VISIBLE:View.GONE);expansionLabel(toggle,summary,expanded);
+        if(expanded)populate(details,device);details.setVisibility(expanded?View.VISIBLE:View.GONE);deviceToggleLabel(toggle,device.ip,expanded);
         toggle.setOnClickListener(v->{
             boolean show=details.getVisibility()!=View.VISIBLE;
             if(show&&details.getChildCount()==0)populate(details,device);
             details.setVisibility(show?View.VISIBLE:View.GONE);
             if(show)expandedDevices.add(device.ip);else expandedDevices.remove(device.ip);
-            expansionLabel(toggle,summary,show);
+            deviceToggleLabel(toggle,device.ip,show);
         });
     }
-    private void expansionLabel(Button button,String summary,boolean expanded) {
-        button.setText(summary+"\n"+(expanded?"▾ Hide details":"▸ Show details"));
-        button.setContentDescription(summary+". "+(expanded?"Collapse":"Expand")+" device details.");
+    private void deviceToggleLabel(Button button,String ip,boolean expanded) {
+        button.setText(expanded?"▾ Hide details":"▸ Show details");
+        button.setContentDescription((expanded?"Collapse":"Expand")+" details for "+ip);
+    }
+    private void sectionLabel(Button button,String title,boolean expanded) {
+        button.setText((expanded?"▾ ":"▸ ")+title);
+        button.setTypeface(null,android.graphics.Typeface.BOLD);
+        button.setContentDescription(title+". "+(expanded?"Collapse":"Expand")+" section.");
     }
     private void section(LinearLayout parent,String key,String title,boolean initiallyOpen,java.util.function.Consumer<LinearLayout> populate) {
-        Button toggle=new Button(context);toggle.setAllCaps(false);toggle.setTextSize(14);toggle.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);parent.addView(toggle,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);parent.addView(body);
-        boolean open=sectionStates.getOrDefault(key,initiallyOpen);if(open)populate.accept(body);body.setVisibility(open?View.VISIBLE:View.GONE);expansionLabel(toggle,title,open);
-        toggle.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;if(show&&body.getChildCount()==0)populate.accept(body);body.setVisibility(show?View.VISIBLE:View.GONE);sectionStates.put(key,show);expansionLabel(toggle,title,show);});
+        divider(parent);
+        Button toggle=action(parent);
+        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);parent.addView(body,new LinearLayout.LayoutParams(-1,-2));
+        boolean open=sectionStates.getOrDefault(key,initiallyOpen);if(open)populate.accept(body);body.setVisibility(open?View.VISIBLE:View.GONE);sectionLabel(toggle,title,open);
+        toggle.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;if(show&&body.getChildCount()==0)populate.accept(body);body.setVisibility(show?View.VISIBLE:View.GONE);sectionStates.put(key,show);sectionLabel(toggle,title,show);});
     }
     private void populate(LinearLayout parent,ReportPresentation.Device device) {
         String prefix=device.ip+":";
@@ -155,9 +207,7 @@ final class DeviceResultsRenderer {
             TextView title=value(body,port+"/TCP · "+device.services.getOrDefault(port,"Service not identified"));
             title.setTypeface(null,android.graphics.Typeface.BOLD);
             detail(body,"Version / product",device.versions.getOrDefault(port,"Not identified"));
-            View divider=new View(context);divider.setBackgroundColor(Color.rgb(55,55,55));
-            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
-            line.setMargins(0,dp(6),0,dp(6));body.addView(divider,line);
+            divider(body);
         }
         value(body,"Only successful TCP connections or Nmap-confirmed open ports appear here.");
     }
@@ -167,8 +217,9 @@ final class DeviceResultsRenderer {
         if(status==ReportPresentation.Status.CANCELLED)value(body,"The analysis was cancelled; results may be incomplete.");
         if(status==ReportPresentation.Status.NOT_RUN)value(body,"No execution recorded for this profile. It may be disabled, waiting, or have no eligible open ports.");
         if(!reference.isEmpty()) {
-            Button log=new Button(context);log.setAllCaps(false);log.setText("View full technical log · "+profile);body.addView(log,new LinearLayout.LayoutParams(-1,-2));log.setOnClickListener(v->openNmapOutput.accept(reference));
+            Button log=action(body);log.setText("View full log · "+profile);log.setOnClickListener(v->openNmapOutput.accept(reference));
         } else if(!message.isEmpty())detail(body,"Execution details",message);
     }
 }
+
 
