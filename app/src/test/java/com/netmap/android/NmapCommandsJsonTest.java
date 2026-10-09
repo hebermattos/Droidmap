@@ -17,7 +17,8 @@ public class NmapCommandsJsonTest {
     @Test public void packagedJsonControlsArgumentsAndDeadlines() throws Exception {
         JSONObject root=new JSONObject(asset());
         NmapCommands original=NmapCommandsJson.parse(root.toString());
-        assertEquals(20,original.services.processTimeoutSeconds);
+        assertEquals(0,original.services.processTimeoutSeconds);
+        assertEquals(0,original.vulnerabilities.processTimeoutSeconds);
         JSONObject profile=root.getJSONObject("profiles").getJSONObject("serviceDetection");
         profile.put("argv",new JSONArray(List.of("--version-all","-p","{ports}","{host}")));
         profile.put("processTimeoutSeconds",42);

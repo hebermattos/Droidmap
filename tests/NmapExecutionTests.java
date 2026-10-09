@@ -44,8 +44,10 @@ public final class NmapExecutionTests {
         check(capture.get().exitCode==null&&capture.get().error.contains("Cannot execute"),"launch failure retained");
         fails(runner("printf 'before timeout'; exec sleep 5",1024,1,capture),"timed out");
         check(capture.get().stdout.equals("before timeout"),"timeout retains partial output");
+        scan(runner("sleep 1.2; printf 'finished without deadline'",1024,0,capture));
+        check(capture.get().error.isEmpty() && capture.get().durationMs>=1000 && capture.get().stdout.equals("finished without deadline"), "Unlimited profile waits for completion beyond a finite test deadline");
         long started=System.nanoTime();
-        NmapRunner cancelled=new NmapRunner(templates(1024,5),command->new ProcessBuilder("/bin/sh","-c","printf 'before cancel'; exec sleep 5").start(),
+        NmapRunner cancelled=new NmapRunner(templates(1024,0),command->new ProcessBuilder("/bin/sh","-c","printf 'before cancel'; exec sleep 5").start(),
                 ()->System.nanoTime()-started>200_000_000L,capture::set);
         fails(cancelled,"cancelled");
         check(capture.get().stdout.equals("before cancel")&&capture.get().durationMs<2000,"cancellation is prompt and retains output");

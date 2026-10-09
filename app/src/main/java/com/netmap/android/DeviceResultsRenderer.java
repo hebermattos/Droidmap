@@ -66,6 +66,15 @@ final class DeviceResultsRenderer {
         shape.setColor(Color.rgb(20,20,20));shape.setCornerRadius(dp(12));shape.setStroke(dp(1),Color.rgb(55,55,55));panel.setBackground(shape);
         LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(10),0,dp(6));parent.addView(panel,margin);return panel;
     }
+    private LinearLayout expandedBody(LinearLayout parent) {
+        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(12),dp(8),dp(12),dp(8));
+        android.graphics.drawable.GradientDrawable background=new android.graphics.drawable.GradientDrawable();
+        background.setColor(Color.rgb(48,48,48));background.setCornerRadius(dp(8));
+        background.setStroke(dp(1),Color.rgb(80,80,80));body.setBackground(background);
+        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(6),0,dp(6));
+        parent.addView(body,margin);return body;
+    }
     private Button action(LinearLayout parent) {
         Button button=new Button(context);button.setAllCaps(false);button.setTextSize(14);button.setTextColor(Color.WHITE);
         button.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);button.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
@@ -125,7 +134,7 @@ final class DeviceResultsRenderer {
         detail(card,"Vulnerability analysis",device.vulnerabilitySummary());
         divider(card);
         Button toggle=action(card);
-        LinearLayout details=new LinearLayout(context);details.setOrientation(LinearLayout.VERTICAL);card.addView(details,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout details=expandedBody(card);
         boolean expanded=expandedDevices.contains(device.ip);
         if(expanded)populate(details,device);details.setVisibility(expanded?View.VISIBLE:View.GONE);deviceToggleLabel(toggle,device.ip,expanded);
         toggle.setOnClickListener(v->{
@@ -148,7 +157,7 @@ final class DeviceResultsRenderer {
     private void section(LinearLayout parent,String key,String title,boolean initiallyOpen,java.util.function.Consumer<LinearLayout> populate) {
         divider(parent);
         Button toggle=action(parent);
-        LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);parent.addView(body,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout body=expandedBody(parent);
         boolean open=sectionStates.getOrDefault(key,initiallyOpen);if(open)populate.accept(body);body.setVisibility(open?View.VISIBLE:View.GONE);sectionLabel(toggle,title,open);
         toggle.setOnClickListener(v->{boolean show=body.getVisibility()!=View.VISIBLE;if(show&&body.getChildCount()==0)populate.accept(body);body.setVisibility(show?View.VISIBLE:View.GONE);sectionStates.put(key,show);sectionLabel(toggle,title,show);});
     }

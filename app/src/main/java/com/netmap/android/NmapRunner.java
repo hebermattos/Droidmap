@@ -49,7 +49,7 @@ final class NmapRunner {
         long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(seconds);
         while(!process.waitFor(100,TimeUnit.MILLISECONDS)) {
             if(cancelled.getAsBoolean()||Thread.currentThread().isInterrupted()) throw new IOException("Nmap cancelled");
-            if(System.nanoTime()>=deadline) throw new IOException(timeoutMessage);
+            if(seconds>0&&System.nanoTime()>=deadline) throw new IOException(timeoutMessage);
         }
         if(cancelled.getAsBoolean()) throw new IOException("Nmap cancelled");
     }
