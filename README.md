@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.2 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -10,6 +10,8 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - `DeviceProfile` makes typed decisions using `DeviceConfidence`; `IdentificationStatus` expresses completion. JSON and text reports retain their existing labels and schema version 5.
 
 ## Features
+
+- Device cards share a single left alignment and consistent padding. IP addresses are headings; field labels sit above selectable values. Dedicated Show/Hide details controls and single-line section toggles separate actions from content. Nmap execution counts expand from the scan overview.
 
 - Reports use one metric per line, stacked port/service entries on device cards, and bold section headings in the full report. Report dialogs use most of the screen, with selectable text and scrolling.
 
@@ -235,4 +237,5 @@ Version 0.9.9 packages and installs `nse_main.lua` together with all runtime dat
 ## Reading reports
 
 Version 0.10.0 starts with scan completion/partial status, device and unique open TCP endpoint counts, alert/failure counts, and Nmap execution totals. Filters show All, Open ports, Alerts or Failures without changing scan/export data. Device cards keep IP/name, probable type, open ports, Nmap status and vulnerability status visible. Expand a card for a port/service/product table, finding scope/evidence/suggested action, identification, diagnostics and additional sourced metadata. Alerts distinguish explicit reported vulnerability evidence from warnings and inconclusive or informational results; no finding is automatically authenticated or confirmed. Missing results are labeled Not executed, never interpreted as a clean vulnerability assessment. Technical logs are opened separately from Nmap diagnostics. Full report follows the same summary/device grouping with real line breaks; JSON keeps the existing complete evidence and checks.
+
 

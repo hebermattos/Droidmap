@@ -293,6 +293,8 @@ public final class MainActivity extends Activity {
                     headings.start(),headings.end(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         content.setText(styled);
+        content.setGravity(android.view.Gravity.START);
+        content.setTextAlignment(android.view.View.TEXT_ALIGNMENT_VIEW_START);
         content.setLineSpacing(4*getResources().getDisplayMetrics().density,1f);
         content.setTextIsSelectable(true);
         if(technical) {
@@ -532,4 +534,5 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+
 
