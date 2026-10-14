@@ -16,6 +16,7 @@ public final class NmapCommandTests {
     public static void main(String[] args) {
         NmapCommands template = TestNmapTemplates.load();
         Map<String,String> values = bindings(template,"/data/lib/libnmap.so", "/data/nmap-data", "192.168.0.109", List.of(80,443), 200);
+        check(bindings(template,"/data/lib/libnmap.so", "/data/nmap-data", "192.168.0.1", ScanPlan.parsePorts(ScanPlan.ALL_PORTS), 200).get("ports").equals("1-65535"),"All ports use compact argv");
         List<String> command = template.command(template.services, "192.168.0.109", values);
         check(command.get(command.indexOf("-oN")+1).equals("-"),"Normal text is explicitly sent to stdout");
         check(command.get(command.indexOf("-oX")+1).equals("/data/temporary scan.xml"),"XML file is separate from readable stdout and remains one argv token");

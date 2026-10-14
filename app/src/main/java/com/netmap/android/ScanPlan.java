@@ -11,6 +11,7 @@ public final class ScanPlan {
         Mode(int retries,int identificationSeconds,int discoverySeconds,int fingerprintLimit){this.retries=retries;this.identificationSeconds=identificationSeconds;this.discoverySeconds=discoverySeconds;this.fingerprintLimit=fingerprintLimit;}
         public int nextTimeout(int timeout){return Math.min(3000,timeout*2);}
     }
+    public static final String ALL_PORTS="1-65535";
     public static final String FAST_PORTS="21,22,23,53,80,139,443,445,554,1080,1883,3389,5060,8000,8009,8080,8443,8888,9100";
     public static final String COMPLETE_PORTS=FAST_PORTS+",81,135,389,515,631,989,990,1433,1521,3306,5432,5900,5985,5986,8001,8081,8090,9000,9090,10000";
     public final Mode mode; public final List<String> hosts; public final List<Integer> ports; public final int timeoutMs; public final boolean adaptive;
@@ -18,6 +19,7 @@ public final class ScanPlan {
     public ScanPlan(String target,String portText,int timeoutMs,Mode mode){this(target,portText,timeoutMs,mode,false);}
     public ScanPlan(String target,String portText,int timeoutMs,Mode mode,boolean adaptive){
         this.adaptive=adaptive;this.mode=Objects.requireNonNull(mode);hosts=parseHosts(target);ports=parsePorts(portText);
+        if(hosts.size()>1 && ports.size()>256) throw new IllegalArgumentException("Select a single IP to scan more than 256 ports.");
         if(timeoutMs<100||timeoutMs>3000) throw new IllegalArgumentException("Timeout must be 100–3000 ms.");this.timeoutMs=timeoutMs;
     }
     public static List<String> parseHosts(String input){
@@ -61,5 +63,5 @@ public final class ScanPlan {
     private static boolean isPrivate(long ip){return(ip>>>24)==10||(ip>>>20)==0xac1||(ip>>>16)==0xc0a8;}
     private static String format(long ip){return(ip>>>24)+"."+((ip>>>16)&255)+"."+((ip>>>8)&255)+"."+(ip&255);}
     private static int number(String value){if(!value.matches("[0-9]{1,5}"))throw new IllegalArgumentException("Invalid numeric value: "+value);return Integer.parseInt(value);}
-    public static List<Integer> parsePorts(String text){TreeSet<Integer> ports=new TreeSet<>();for(String token:text.split(",",-1)){String[] range=token.trim().split("-",-1);if(range.length>2)throw new IllegalArgumentException("Use ports such as 22,80,443,8000-8010.");int start=number(range[0].trim()),end=range.length==2?number(range[1].trim()):start;if(start<1||end>65535||end<start||end-start>=256)throw new IllegalArgumentException("Use 1–65535 and at most 256 distinct ports.");for(int p=start;p<=end;p++)ports.add(p);if(ports.size()>256)throw new IllegalArgumentException("Select at most 256 distinct ports.");}return Collections.unmodifiableList(new ArrayList<>(ports));}
+    public static List<Integer> parsePorts(String text){TreeSet<Integer> ports=new TreeSet<>();for(String token:text.split(",",-1)){String[] range=token.trim().split("-",-1);if(range.length>2)throw new IllegalArgumentException("Use ports such as 22,80,443,8000-8010.");int start=number(range[0].trim()),end=range.length==2?number(range[1].trim()):start;if(start<1||end>65535||end<start||end-start>=65535)throw new IllegalArgumentException("Use TCP ports 1–65535.");for(int p=start;p<=end;p++)ports.add(p);}return Collections.unmodifiableList(new ArrayList<>(ports));}
 }

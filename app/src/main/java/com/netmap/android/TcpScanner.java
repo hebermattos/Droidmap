@@ -57,10 +57,18 @@ public final class TcpScanner {
             }
             List<String> ordered=new ArrayList<>(plan.hosts);
             if(plan.adaptive) ordered.sort((a,b)->Boolean.compare(responding.contains(b),responding.contains(a)));
-            for(String host:ordered) for(int port:plan.ports) {
-                if(cancelled.get()) break;
-                if(plan.adaptive && port==seed) continue;
-                workers.submit(()->task(plan,host,port,policy,responding,results,complete,total,listener));
+            // Fixed worker loops avoid queuing one Future per selected port.
+            AtomicInteger next = new AtomicInteger();
+            for (int worker = 0; worker < Math.min(32, total); worker++) {
+                workers.submit(() -> {
+                    int index;
+                    while (!cancelled.get() && (index = next.getAndIncrement()) < total) {
+                        String host = ordered.get(index / plan.ports.size());
+                        int port = plan.ports.get(index % plan.ports.size());
+                        if (plan.adaptive && port == seed) continue;
+                        task(plan, host, port, policy, responding, results, complete, total, listener);
+                    }
+                });
             }
             workers.shutdown();
             while (!workers.awaitTermination(100, TimeUnit.MILLISECONDS)) {

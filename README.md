@@ -29,7 +29,7 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - Track completed connections, cancel scans and export full or partial results as JSON.
 - Choose Fast or Complete mode. Complete expands the default port preset, retries timed-out TCP connections once with a doubled timeout and extends identification/discovery budgets. Custom port selections are preserved when switching modes.
 - Verify advertised TCP endpoints, including ports outside the selected list; use HTTP announcements to read nonstandard HTTP ports.
-- Bound scanning to 32 concurrent connections, 256 addresses and 256 distinct selected ports, plus at most 16 announced endpoints per device.
+- Bound scanning to 32 concurrent connections, 256 addresses and 256 distinct selected ports for network scans (up to 65535 for one IP), plus at most 16 announced endpoints per device.
 
 ## Build and install
 
@@ -191,7 +191,7 @@ SMB uses only unauthenticated SMB2 NEGOTIATE on port 445 or announced SMB TCP en
 
 ## Nmap enrichment (ARM64)
 
-The separate Nmap setting defaults to enabled in Fast mode. CI packages the checksum-pinned ARM64 Android Nmap archive and its databases/NSE files. Enrichment uses TCP connect scanning (`-sT`) without root. IPv6 commands include `-6`; link-local targets select the Wi-Fi interface with `-e`. Nmap DNS is disabled (`-n`) so PTR lookup stays in Droidmap's Wi-Fi-bound local DNS path. Service detection targets only verified-open TCP ports from the native scan and advertised endpoint checks, capped at 256 ports per host. Both Fast and Complete attempt every found device with at least one verified-open TCP port. Each Nmap service scan targets only that device’s open ports from initial TCP checks and verified advertised endpoints. Silent/closed checks and unverified announcements are excluded. There is no Nmap host-count cap; duplicate hosts/ports are removed and targets run sequentially. Cancellation can stop remaining targets. Safe vulnerability checks retain their separate evidence section and operate only on Nmap-confirmed open ports. Cancelling stops the active process. Missing ARM64 support or data records a notice and preserves native scan results.
+The separate Nmap setting defaults to enabled in Fast mode. CI packages the checksum-pinned ARM64 Android Nmap archive and its databases/NSE files. Enrichment uses TCP connect scanning (`-sT`) without root. IPv6 commands include `-6`; link-local targets select the Wi-Fi interface with `-e`. Nmap DNS is disabled (`-n`) so PTR lookup stays in Droidmap's Wi-Fi-bound local DNS path. Service detection targets only verified-open TCP ports from the native scan and advertised endpoint checks, up to 65535 ports per host, with compact ranges in command arguments. Both Fast and Complete attempt every found device with at least one verified-open TCP port. Each Nmap service scan targets only that device’s open ports from initial TCP checks and verified advertised endpoints. Silent/closed checks and unverified announcements are excluded. There is no Nmap host-count cap; duplicate hosts/ports are removed and targets run sequentially. Cancellation can stop remaining targets. Safe vulnerability checks retain their separate evidence section and operate only on Nmap-confirmed open ports. Cancelling stops the active process. Missing ARM64 support or data records a notice and preserves native scan results.
 
 ## IPv6 information collection (0.9.1)
 
@@ -239,3 +239,11 @@ Version 0.9.9 packages and installs `nse_main.lua` together with all runtime dat
 Version 0.10.0 starts with scan completion/partial status, device and unique open TCP endpoint counts, alert/failure counts, and Nmap execution totals. Filters show All, Open ports, Alerts or Failures without changing scan/export data. Device cards keep IP/name, probable type, open ports, Nmap status and vulnerability status visible. Expand a card for a port/service/product table, finding scope/evidence/suggested action, identification, diagnostics and additional sourced metadata. Alerts distinguish explicit reported vulnerability evidence from warnings and inconclusive or informational results; no finding is automatically authenticated or confirmed. Missing results are labeled Not executed, never interpreted as a clean vulnerability assessment. Technical logs are opened separately from Nmap diagnostics. Full report follows the same summary/device grouping with real line breaks; JSON keeps the existing complete evidence and checks.
 
 
+
+## Single IP and all TCP ports
+
+In **Options → Scan a single IP**, enter a local address such as `192.168.0.1`, choose **Use IP**, then start the scan. Single-IP scans keep discovery and Nmap targets restricted to that IP.
+
+In **Options → Scan settings**, enable **All TCP ports (1–65535, single IP)** and save. This checks every TCP port; it does not scan UDP. Disable it to return to the custom port field. More than 256 ports requires a single IP; network scans retain their existing limit. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports can take several minutes; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
+
+Version 0.11.0 preserves the existing package IDs and signing configuration.
