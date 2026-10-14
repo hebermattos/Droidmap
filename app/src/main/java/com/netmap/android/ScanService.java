@@ -74,7 +74,7 @@ public final class ScanService extends Service {
             if(Build.VERSION.SDK_INT>=29) startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
             else startForeground(NOTIFICATION,notification);
             scanner=new TcpScanner();
-            DeviceEvidence evidence=new DeviceEvidence(plan.hosts,wifi::accepts);
+            DeviceEvidence evidence=new DeviceEvidence(plan.hosts,host -> plan.hosts.size()>1 && wifi.accepts(host));
             identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
             identifier.startDiscovery();
             discovery=new NsdDiscovery(this,evidence,plan.mode,wifi); discovery.start();

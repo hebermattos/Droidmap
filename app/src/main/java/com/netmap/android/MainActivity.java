@@ -211,6 +211,7 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 1, 0, "Scan settings").setEnabled(idle);
         menu.getMenu().add(0, 2, 1, "Use Wi-Fi network").setEnabled(idle);
         menu.getMenu().add(0, 7, 2, "Scan all Wi-Fi IPs").setEnabled(idle);
+        menu.getMenu().add(0, 8, 2, "Scan a single IP").setEnabled(idle);
         menu.getMenu().add(0, 3, 2, "History").setEnabled(idle);
         menu.getMenu()
                 .add(0, 4, 3, "Reanalyze a device")
@@ -228,6 +229,9 @@ public final class MainActivity extends Activity {
                             break;
                         case 3:
                             showHistory();
+                            break;
+                        case 8:
+                            selectSingleIp();
                             break;
                         case 7:
                             selectAllWifiIps();
@@ -255,6 +259,34 @@ public final class MainActivity extends Activity {
                     return true;
                 });
         menu.show();
+    }
+
+    private void selectSingleIp() {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("192.168.0.1");
+        String current = target.getText().toString().trim();
+        if (!current.contains("/")) input.setText(current);
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle("Scan a single IP")
+                .setView(input)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Use IP", null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    String value = input.getText().toString().trim();
+                    try {
+                        if (value.contains("/") || ScanPlan.parseHosts(value).size() != 1)
+                            throw new IllegalArgumentException("Enter one local IP without a network prefix.");
+                        target.setText(value);
+                        target.setError(null);
+                        dialog.dismiss();
+                    } catch (IllegalArgumentException error) {
+                        input.setError(error.getMessage());
+                    }
+                }));
+        dialog.show();
     }
 
     private void showReadableReport() {

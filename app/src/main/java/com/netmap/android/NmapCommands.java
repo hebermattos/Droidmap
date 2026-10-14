@@ -74,11 +74,9 @@ final class NmapCommands {
         if (binary == null || binary.trim().isEmpty() || dataDir == null || dataDir.trim().isEmpty())
             throw new IllegalArgumentException("Missing Nmap binary or data directory");
         if (ScanPlan.parseHosts(host).size() != 1) throw new IllegalArgumentException("Nmap requires one local literal IP");
-        if (ports.size() > 256) throw new IllegalArgumentException("Select at most 256 ports");
-        StringJoiner selected = new StringJoiner(",");
+        if (ports.size() > 65535) throw new IllegalArgumentException("Select at most 65535 ports");
         for (Integer port : ports) {
             if (port == null || port < 1 || port > 65535) throw new IllegalArgumentException("Invalid Nmap port");
-            selected.add(port.toString());
         }
         Map<String, String> values = new HashMap<>();
         values.put("binary", binary); values.put("dataDir", dataDir);
@@ -86,9 +84,20 @@ final class NmapCommands {
         values.put("host", ScanPlan.stripZone(host));
         String zone = IpAddresses.zoneSuffix(host);
         values.put("interface", zone.isEmpty() ? "" : zone.substring(1));
-        values.put("ports", selected.toString()); values.put("openPorts", selected.toString());
+        String portSelection = compactPorts(ports);
+        values.put("ports", portSelection); values.put("openPorts", portSelection);
         values.put("timeoutMs", Integer.toString(Math.max(minimumTimeoutMs, Math.min(maximumTimeoutMs, timeoutMs))));
         return values;
+    }
+    private static String compactPorts(Collection<Integer> ports) {
+        List<Integer> sorted = new ArrayList<>(new TreeSet<>(ports));
+        StringJoiner selection = new StringJoiner(",");
+        for (int i = 0; i < sorted.size(); i++) {
+            int start = sorted.get(i), end = start;
+            while (i + 1 < sorted.size() && sorted.get(i + 1) == end + 1) end = sorted.get(++i);
+            selection.add(start == end ? Integer.toString(start) : start + "-" + end);
+        }
+        return selection.toString();
     }
     List<String> command(Profile profile, String host, Map<String, String> values) {
         List<String> command = new ArrayList<>(); command.add(values.get("binary"));

@@ -31,8 +31,16 @@ final class ScanSettingsDialog {
                         context,
                         form,
                         "TCP ports (comma-separated or ranges)",
-                        current.ports,
+                        current.ports.equals(ScanPlan.ALL_PORTS)
+                                ? (current.mode == ScanPlan.Mode.FAST ? ScanPlan.FAST_PORTS : ScanPlan.COMPLETE_PORTS)
+                                : current.ports,
                         R.id.ports);
+        CheckBox allPorts = new CheckBox(context);
+        allPorts.setText("All TCP ports (1–65535, single IP)");
+        allPorts.setChecked(current.ports.equals(ScanPlan.ALL_PORTS));
+        ports.setEnabled(!allPorts.isChecked());
+        form.addView(allPorts);
+        allPorts.setOnCheckedChangeListener((button, checked) -> ports.setEnabled(!checked));
         EditText timeout =
                 field(
                         context,
@@ -94,7 +102,7 @@ final class ScanSettingsDialog {
                                                 timeout.setError("Enter 100–3000 ms");
                                                 return;
                                             }
-                                            String portValues = ports.getText().toString().trim();
+                                            String portValues = allPorts.isChecked() ? ScanPlan.ALL_PORTS : ports.getText().toString().trim();
                                             try {
                                                 ScanPlan.parsePorts(portValues);
                                             } catch (IllegalArgumentException e) {
