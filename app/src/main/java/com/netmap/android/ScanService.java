@@ -30,6 +30,7 @@ public final class ScanService extends Service {
     private String networkScope;
     private boolean identificationPartial;
     private boolean nmapEnabled;
+    private boolean portsOnly;
     private String nmapArgs="";
     private long lastNotification;
     private int acceptedPreview;
@@ -67,7 +68,7 @@ public final class ScanService extends Service {
                 plan=new ScanPlan(normalized,intent.getStringExtra("ports"),requested.timeoutMs,requested.mode,requested.adaptive);
             } else plan=requested;
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
-        networkScope=NetworkScope.current(this,plan); identificationPartial=false; nmapEnabled=intent.getBooleanExtra("nmap",true); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
+        networkScope=NetworkScope.current(this,plan); identificationPartial=false; portsOnly=intent.getBooleanExtra("portsOnly",false); nmapEnabled=!portsOnly && intent.getBooleanExtra("nmap",true); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
@@ -77,8 +78,9 @@ public final class ScanService extends Service {
             scanner=new TcpScanner();
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts,host -> plan.hosts.size()>1 && wifi.accepts(host));
             identifier=new DeviceIdentifier(plan,evidence); identifier.setHostnameLookup(WifiReverseDns.create(this,plan,evidence));
-            identifier.startDiscovery();
-            discovery=new NsdDiscovery(this,evidence,plan.mode,wifi); discovery.start();
+            if(!portsOnly) identifier.startDiscovery();
+            discovery=new NsdDiscovery(this,evidence,plan.mode,wifi);
+            if(!portsOnly) discovery.start();
             TcpScanner tcp=scanner; DeviceIdentifier identity=identifier; NsdDiscovery nsd=discovery;
             long started=runId;
             worker.execute(() -> scan(plan,target,started,tcp,identity,nsd,evidence,wifi));
@@ -94,7 +96,7 @@ public final class ScanService extends Service {
         try {
             // Write the interruption marker before any network checks.
             store.save(latest);
-            identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
+            if(!portsOnly) identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
             AtomicInteger completed=new AtomicInteger(); AtomicLong lastUpdate=new AtomicLong();
             Queue<TcpScanner.Result> liveChecks=new ConcurrentLinkedQueue<>();
             Set<String> liveResponders=ConcurrentHashMap.newKeySet();
@@ -111,17 +113,17 @@ public final class ScanService extends Service {
             });
             List<TcpScanner.Result> evidenceChecks = results instanceof PackedScanResults
                     ? ((PackedScanResults)results).evidenceChecks() : results;
-            if (!tcp.isCancelled() && wifi.links != null) {
+            if (!portsOnly && !tcp.isCancelled() && wifi.links != null) {
                 identity.addNotices(Ipv4MacDiscovery.collect(wifi.links.getInterfaceName(),
                         host -> wifi.links.getLinkAddresses().stream()
                                 .anyMatch(local -> WifiReverseDns.inSubnet(local, host)),
                         evidence, tcp::isCancelled, android.os.Build.VERSION.SDK_INT < 29));
             }
             preview(target,tcp,evidence,liveChecks,Collections.emptyList(),true);
-            main.post(() -> {if(!destroyed && scanner==tcp && !tcp.isCancelled()) publish("Identifying devices…",results.size(),true);});
-            if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
+            if(!portsOnly) main.post(() -> {if(!destroyed && scanner==tcp && !tcp.isCancelled()) publish("Identifying devices…",results.size(),true);});
+            if(!portsOnly && !tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
             List<String> nmapNotices=Collections.emptyList();
-            if(!tcp.isCancelled()) {
+            if(!portsOnly && !tcp.isCancelled()) {
                 identity.identify(evidenceChecks);
                 if(nmapEnabled&&!tcp.isCancelled()) {
                     List<TcpScanner.Result> observedChecks=new ArrayList<>(evidenceChecks);
@@ -158,10 +160,11 @@ public final class ScanService extends Service {
             catch(Exception e) {changes="History unavailable: "+e.getClass().getSimpleName();}
             parsed.put("historyComparison",changes);
             parsed.put("nmapEnabled",nmapEnabled);
+            parsed.put("portsOnly",portsOnly);
             parsed.put("nmapCustomArgs",nmapArgs);
             String text=new ReportPresentation(parsed).fullText();
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
-                cancelled?"Cancelled — partial results":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
+                cancelled?"Cancelled — partial results":portsOnly?"IP and port scan completed":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
             try {store.save(result);} catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
             ScanSnapshot complete=result; main.post(() -> finish(complete));
         } catch(Exception e) {finishError(e);}
