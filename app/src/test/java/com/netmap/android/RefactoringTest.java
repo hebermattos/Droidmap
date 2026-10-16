@@ -20,25 +20,6 @@ public class RefactoringTest {
     }
 
     @Test
-    public void networkSelectionOffersCompatiblePortsWithoutChangingSingleIpSettings() {
-        ScanSettings all = new ScanSettings(ScanPlan.ALL_PORTS, 350, ScanPlan.Mode.COMPLETE, false, false);
-        org.junit.Assert.assertSame(all, all.forNetworkTarget("192.168.0.1"));
-        ScanSettings network = all.forNetworkTarget("192.168.0.0/24");
-        org.junit.Assert.assertEquals(ScanPlan.COMPLETE_PORTS, network.ports);
-        org.junit.Assert.assertEquals(350, network.timeoutMs);
-        org.junit.Assert.assertFalse(network.adaptive);
-        org.junit.Assert.assertFalse(network.nmap);
-        org.junit.Assert.assertEquals(ScanPlan.Mode.COMPLETE, network.mode);
-        org.junit.Assert.assertEquals(254, new ScanPlan("192.168.0.0/24", network.ports, network.timeoutMs).hosts.size());
-        org.junit.Assert.assertEquals(ScanPlan.ALL_PORTS, all.ports);
-        org.junit.Assert.assertSame(network, network.forNetworkTarget("192.168.0.0/24"));
-        ScanSettings fast = new ScanSettings("1-300", 200, ScanPlan.Mode.FAST, true);
-        org.junit.Assert.assertEquals(ScanPlan.FAST_PORTS, fast.forNetworkTarget("192.168.0.0/24").ports);
-        ScanSettings custom = new ScanSettings("80,8080", 200, ScanPlan.Mode.FAST, true);
-        org.junit.Assert.assertSame(custom, custom.forNetworkTarget("192.168.0.0/24"));
-    }
-
-    @Test
     public void capturedExportSurvivesANewerScan() throws Exception {
         ExportRequest request = new ExportRequest("original", 1);
         assertEquals(

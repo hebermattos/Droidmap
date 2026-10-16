@@ -28,13 +28,6 @@ final class ScanSettings {
                 ScanPlan.COMPLETE_PORTS, timeoutMs, ScanPlan.Mode.COMPLETE, adaptive, nmap);
     }
 
-    ScanSettings forNetworkTarget(String target) {
-        if (ScanPlan.parseHosts(target).size() <= 1 || ScanPlan.parsePorts(ports).size() <= 256)
-            return this;
-        return new ScanSettings(mode == ScanPlan.Mode.FAST ? ScanPlan.FAST_PORTS : ScanPlan.COMPLETE_PORTS,
-                timeoutMs, mode, adaptive, nmap);
-    }
-
     String summary() {
         return (mode == ScanPlan.Mode.FAST ? "Fast" : "Complete")
                 + " • "

@@ -96,9 +96,11 @@ public final class ScanService extends Service {
             identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
             AtomicInteger completed=new AtomicInteger(); AtomicLong lastUpdate=new AtomicLong();
             Queue<TcpScanner.Result> liveChecks=new ConcurrentLinkedQueue<>();
+            Set<String> liveResponders=ConcurrentHashMap.newKeySet();
             identity.setProgressListener(host -> preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
             List<TcpScanner.Result> results=tcp.scan(plan,(result,count,total) -> {
-                if(result.state==TcpScanner.State.OPEN || result.state==TcpScanner.State.CLOSED) liveChecks.add(result);
+                if(result.state==TcpScanner.State.OPEN
+                        || result.state==TcpScanner.State.CLOSED && liveResponders.add(result.host)) liveChecks.add(result);
                 preview(target,tcp,evidence,liveChecks,Collections.emptyList(),false);
                 completed.accumulateAndGet(count,Math::max); long now=SystemClock.elapsedRealtime(),previous=lastUpdate.get();
                 if(now-previous>=250 && lastUpdate.compareAndSet(previous,now)) main.post(() -> {
@@ -106,6 +108,8 @@ public final class ScanService extends Service {
                     publish("Checked "+completed.get()+" / "+total+" TCP connections",completed.get(),true);
                 });
             });
+            List<TcpScanner.Result> evidenceChecks = results instanceof PackedScanResults
+                    ? ((PackedScanResults)results).evidenceChecks() : results;
             if (!tcp.isCancelled() && wifi.links != null) {
                 identity.addNotices(Ipv4MacDiscovery.collect(wifi.links.getInterfaceName(),
                         host -> wifi.links.getLinkAddresses().stream()
@@ -117,9 +121,9 @@ public final class ScanService extends Service {
             if(!tcp.isCancelled()) nsd.awaitCompletion(tcp::isCancelled);
             List<String> nmapNotices=Collections.emptyList();
             if(!tcp.isCancelled()) {
-                identity.identify(results);
+                identity.identify(evidenceChecks);
                 if(nmapEnabled&&!tcp.isCancelled()) {
-                    List<TcpScanner.Result> observedChecks=new ArrayList<>(results);
+                    List<TcpScanner.Result> observedChecks=new ArrayList<>(evidenceChecks);
                     observedChecks.addAll(identity.endpointChecks());
                     lastPreview.set(0);
                     main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nmap…",results.size(),true);});
@@ -132,7 +136,7 @@ public final class ScanService extends Service {
                 if(destroyed || scanner!=tcp) return;
                 nsd.stop(); finishing=true;
                 Map<String,List<DeviceEvidence.Observation>> identified=evidence.snapshot();
-                for(TcpScanner.Result check:results) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) identified.computeIfAbsent(check.host,k->new ArrayList<>());
+                for(TcpScanner.Result check:evidenceChecks) if(check.state==TcpScanner.State.OPEN || check.state==TcpScanner.State.CLOSED) identified.computeIfAbsent(check.host,k->new ArrayList<>());
                 List<String> notices=identity.notices(); notices.addAll(enrichmentNotices); notices.addAll(nsd.notices());
                 if(evidence.isDiscoveryLimited()) notices.add("IPv6 address discovery limit reached; evidence is partial.");
                 if(identity.isTimedOut()) notices.add("Identification time budget reached; evidence is partial.");
@@ -145,13 +149,6 @@ public final class ScanService extends Service {
     private void saveReport(ScanPlan plan,String target,long started,List<TcpScanner.Result> results,List<TcpScanner.Result> extra,
                             Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,boolean cancelled) {
         try {
-            List<TcpScanner.Result> checks=new ArrayList<>(results); Map<String,Integer> index=new HashMap<>();
-            for(int i=0;i<checks.size();i++) index.put(checks.get(i).host+":"+checks.get(i).port,i);
-            for(TcpScanner.Result check:extra) {
-                Integer found=index.get(check.host+":"+check.port);
-                if(found==null) {index.put(check.host+":"+check.port,checks.size()); checks.add(check);}
-                else if(checks.get(found).state==TcpScanner.State.NO_RESPONSE) checks.set(found,check);
-            }
             JSONObject parsed=new JSONObject(ScanReport.json(results,plan,target,cancelled,started,identified,notices,extra));
             boolean networkChanged=!networkScope.equals(NetworkScope.current(this,plan));
             boolean partial=ScanReport.completion(parsed,networkScope,networkChanged,identificationPartial,cancelled);

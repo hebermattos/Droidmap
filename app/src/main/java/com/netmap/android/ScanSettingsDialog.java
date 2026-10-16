@@ -36,7 +36,7 @@ final class ScanSettingsDialog {
                                 : current.ports,
                         R.id.ports);
         CheckBox allPorts = new CheckBox(context);
-        allPorts.setText("All TCP ports (1–65535, single IP)");
+        allPorts.setText("All TCP ports (1–65535)");
         allPorts.setChecked(current.ports.equals(ScanPlan.ALL_PORTS));
         ports.setEnabled(!allPorts.isChecked());
         form.addView(allPorts);

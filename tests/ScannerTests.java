@@ -34,7 +34,16 @@ public final class ScannerTests {
         for (String bad : List.of("", "80,", "0", "65536", "90-80", "a", "1-2-3")) rejects(() -> ScanPlan.parsePorts(bad));
         ScanPlan all = new ScanPlan("192.168.0.1", ScanPlan.ALL_PORTS, 200);
         check(all.ports.size()==65535 && all.ports.get(0)==1 && all.ports.get(65534)==65535,"All TCP ports inclusive");
-        rejects(() -> new ScanPlan("192.168.0.0/24", ScanPlan.ALL_PORTS, 200));
+        ScanPlan wholeNetwork = new ScanPlan("192.168.0.0/24", ScanPlan.ALL_PORTS, 200);
+        check(wholeNetwork.hosts.size()==254 && wholeNetwork.ports.size()==65535,"Every network IP and TCP port is selectable");
+        AtomicInteger networkCount = new AtomicInteger();
+        ScanPlan pair = new ScanPlan("192.168.0.0/31", ScanPlan.ALL_PORTS, 100, ScanPlan.Mode.FAST, true);
+        List<TcpScanner.Result> networkResults = new TcpScanner((host,port,timeout) -> port==8080 ? TcpScanner.State.OPEN : TcpScanner.State.CLOSED)
+                .scan(pair,(r,c,t) -> networkCount.incrementAndGet());
+        check(networkResults instanceof PackedScanResults && networkResults.size()==131070 && networkCount.get()==131070,"All network ports execute with packed storage");
+        check(((PackedScanResults)networkResults).evidenceChecks().size()==4,"Keep all open endpoints and responding hosts");
+        int visited=0; for (TcpScanner.Result result : networkResults) { check(result.attempts==1 && result.timeoutMs==100,"Packed timing metadata round trip"); visited++; }
+        check(visited==131070,"Packed iteration retains every completed result");
         AtomicInteger allCount = new AtomicInteger();
         TcpScanner allScanner = new TcpScanner((host,port,timeout) -> TcpScanner.State.CLOSED);
         check(allScanner.scan(all,(r,c,t) -> {if(t!=65535) throw new AssertionError("Full port progress total");allCount.incrementAndGet();}).size()==65535 && allCount.get()==65535,"Every port scanned once");
