@@ -62,7 +62,7 @@ final class ScanSettingsDialog {
         nmapArgs.setEnabled(nmap.isChecked());
         nmap.setOnCheckedChangeListener((button, checked) -> nmapArgs.setEnabled(checked));
         TextView nmapHelp = new TextView(context);
-        nmapHelp.setText("Allowed: DNS/reason/verbosity, timing, retries and version intensity. Ports, targets, output, data paths and NSE scripts are controlled by Droidmap.");
+        nmapHelp.setText("Custom Nmap arguments. They are passed directly as process arguments; Droidmap does not invoke a shell.");
         form.addView(nmapHelp);
         TextView help = new TextView(context);
         help.setText(
@@ -116,8 +116,6 @@ final class ScanSettingsDialog {
                                                 ports.setError(e.getMessage());
                                                 return;
                                             }
-                                            try { NmapCustomArgs.parse(nmapArgs.getText().toString()); }
-                                            catch (IllegalArgumentException e) { nmapArgs.setError(e.getMessage()); return; }
                                             ScanSettings updated =
                                                     new ScanSettings(
                                                             portValues,

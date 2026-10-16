@@ -24,7 +24,6 @@ final class ScanSettings {
         this.mode = java.util.Objects.requireNonNull(mode);
         this.adaptive = adaptive;
         this.nmap = nmap;
-        NmapCustomArgs.parse(nmapArgs);
         this.nmapArgs = nmapArgs == null ? "" : nmapArgs.trim();
     }
 
