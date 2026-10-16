@@ -17,6 +17,7 @@ sources=(
   "$project_dir/app/src/main/java/com/netmap/android/ScanPlan.java"
   "$project_dir/app/src/main/java/com/netmap/android/IpAddresses.java"
   "$project_dir/app/src/main/java/com/netmap/android/TcpScanner.java"
+  "$project_dir/app/src/main/java/com/netmap/android/PackedScanResults.java"
   "$project_dir/app/src/main/java/com/netmap/android/AdaptivePolicy.java"
   "$project_dir/app/src/main/java/com/netmap/android/DeviceEvidence.java"
   "$project_dir/app/src/main/java/com/netmap/android/DeviceIdentifier.java"
@@ -35,10 +36,12 @@ sources=(
   "$project_dir/tests/MacAddressTests.java"
   "$project_dir/tests/Ipv6CollectionTests.java"
   "$project_dir/tests/ScannerTests.java"
+  "$project_dir/tests/PackedScanTests.java"
   "$project_dir/tests/IdentificationTests.java"
 )
 javac -d "$classes_dir" "${sources[@]}"
 java -cp "$classes_dir" com.netmap.android.ScannerTests
+java -Xmx96m -cp "$classes_dir" com.netmap.android.PackedScanTests
 java -cp "$classes_dir" com.netmap.android.IdentificationTests
 
 java -cp "$classes_dir" com.netmap.android.Ipv6CollectionTests

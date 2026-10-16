@@ -43,7 +43,8 @@ public final class TcpScanner {
     public boolean isCancelled() { return cancelled.get(); }
     public List<Result> scan(ScanPlan plan, Listener listener) throws InterruptedException {
         ExecutorService workers = Executors.newFixedThreadPool(32);
-        List<Result> results = Collections.synchronizedList(new ArrayList<>());
+        List<Result> results = plan.hosts.size() * plan.ports.size() > 65535
+                ? new PackedScanResults(plan) : Collections.synchronizedList(new ArrayList<>());
         AtomicInteger complete = new AtomicInteger();
         int total = plan.hosts.size() * plan.ports.size();
         try {
@@ -58,9 +59,10 @@ public final class TcpScanner {
             List<String> ordered=new ArrayList<>(plan.hosts);
             if(plan.adaptive) ordered.sort((a,b)->Boolean.compare(responding.contains(b),responding.contains(a)));
             // Fixed worker loops avoid queuing one Future per selected port.
+            List<java.util.concurrent.Future<?>> pending = new ArrayList<>();
             AtomicInteger next = new AtomicInteger();
             for (int worker = 0; worker < Math.min(32, total); worker++) {
-                workers.submit(() -> {
+                pending.add(workers.submit(() -> {
                     int index;
                     while (!cancelled.get() && (index = next.getAndIncrement()) < total) {
                         String host = ordered.get(index / plan.ports.size());
@@ -68,11 +70,15 @@ public final class TcpScanner {
                         if (plan.adaptive && port == seed) continue;
                         task(plan, host, port, policy, responding, results, complete, total, listener);
                     }
-                });
+                }));
             }
             workers.shutdown();
             while (!workers.awaitTermination(100, TimeUnit.MILLISECONDS)) {
                 if (cancelled.get()) { workers.shutdownNow(); cancel(); }
+            }
+            if (!cancelled.get()) for (java.util.concurrent.Future<?> future : pending) {
+                try { future.get(); }
+                catch (java.util.concurrent.ExecutionException e) { throw new IllegalStateException("Probe failed", e.getCause()); }
             }
         } catch (InterruptedException e) {
             cancel();
@@ -81,6 +87,7 @@ public final class TcpScanner {
             workers.shutdownNow();
             for (Socket socket : active) try { socket.close(); } catch (IOException ignored) { }
         }
+        if (results instanceof PackedScanResults) return results;
         List<Result> snapshot = new ArrayList<>(results);
         snapshot.sort((a, b) -> {
             int hostOrder = ScanPlan.compareHosts(a.host, b.host);

@@ -19,7 +19,6 @@ public final class ScanPlan {
     public ScanPlan(String target,String portText,int timeoutMs,Mode mode){this(target,portText,timeoutMs,mode,false);}
     public ScanPlan(String target,String portText,int timeoutMs,Mode mode,boolean adaptive){
         this.adaptive=adaptive;this.mode=Objects.requireNonNull(mode);hosts=parseHosts(target);ports=parsePorts(portText);
-        if(hosts.size()>1 && ports.size()>256) throw new IllegalArgumentException("Select a single IP to scan more than 256 ports.");
         if(timeoutMs<100||timeoutMs>3000) throw new IllegalArgumentException("Timeout must be 100–3000 ms.");this.timeoutMs=timeoutMs;
     }
     public static List<String> parseHosts(String input){

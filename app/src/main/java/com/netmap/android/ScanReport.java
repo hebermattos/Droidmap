@@ -49,12 +49,23 @@ final class ScanReport {
             .append("\nNo response can mean filtering, timeout or an offline device. Names and models are self-reported; probable types are inferred from advertised services. An open port does not establish a vulnerability.").toString();
     }
     static String json(List<TcpScanner.Result> results, ScanPlan plan, String target, boolean cancelled, long started, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,List<TcpScanner.Result> endpointChecks) throws Exception {
-        JSONObject report = new JSONObject(); report.put("schemaVersion", 5); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
+        JSONObject report = new JSONObject(); report.put("schemaVersion", results instanceof PackedScanResults ? 6 : 5); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
         report.put("startedAtEpochMs", started); report.put("finishedAtEpochMs", System.currentTimeMillis());
         report.put("cancelled", cancelled); report.put("timeoutMs", plan.timeoutMs); report.put("ports", new JSONArray(plan.ports));
         report.put("plannedChecks", plan.hosts.size() * plan.ports.size()); report.put("completedChecks", results.size());
         JSONArray checks = new JSONArray();
-        for (TcpScanner.Result result : results) { JSONObject check = new JSONObject(); check.put("ip", result.host); check.put("port", result.port); check.put("protocol", "tcp"); check.put("state", result.state.name()); check.put("attempts",result.attempts); check.put("finalTimeoutMs",result.timeoutMs); checks.put(check); }
+        List<TcpScanner.Result> detailChecks = results instanceof PackedScanResults
+                ? ((PackedScanResults)results).evidenceChecks() : results;
+        if (results instanceof PackedScanResults) {
+            PackedScanResults packed = (PackedScanResults)results;
+            JSONArray hosts = new JSONArray();
+            for (int i = 0; i < plan.hosts.size(); i++) hosts.put(new JSONObject()
+                    .put("ip", plan.hosts.get(i)).put("data", packed.encodedHost(i)));
+            report.put("packedChecks", new JSONObject().put("encoding", "deflate-base64-u16be-v1")
+                    .put("hosts", hosts));
+            report.put("checksCoverage", "Every OPEN check and one CLOSED check per responding host; all initial checks are preserved in packedChecks.");
+        }
+        for (TcpScanner.Result result : detailChecks) { JSONObject check = new JSONObject(); check.put("ip", result.host); check.put("port", result.port); check.put("protocol", "tcp"); check.put("state", result.state.name()); check.put("attempts",result.attempts); check.put("finalTimeoutMs",result.timeoutMs); checks.put(check); }
         JSONArray extraChecks=new JSONArray();
         for(TcpScanner.Result result:endpointChecks) { JSONObject entry=new JSONObject(); entry.put("ip",result.host); entry.put("port",result.port); entry.put("protocol","tcp"); entry.put("state",result.state.name()); entry.put("attempts",result.attempts); entry.put("finalTimeoutMs",result.timeoutMs); extraChecks.put(entry); }
         report.put("advertisedEndpointChecks",extraChecks);

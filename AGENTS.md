@@ -36,11 +36,11 @@ Java filenames in the table are relative to `app/src/main/java/com/netmap/androi
 ## Scan and identification invariants
 
 - Retain RFC 1918 literal IPv4 validation and the /24–/32 target limit. IPv6 literals must be validated against the connected Wi-Fi link, with interface scope for link-local and prefix matching for global unicast. Never enumerate an IPv6 /64. Loopback is allowed only inside test harnesses, not through the app target field.
-- Preserve configured bounds: at most 256 target addresses, 256 selected ports for network scans (up to 65535 on a single IP), 32 concurrent TCP checks and 16 advertised endpoints per device. Keep observation, parser, discovery, DNS and history limits explicit. Additional IPv6 discovery is capped at 256 addresses; mDNS tracking is capped at 32 callbacks and 16 addresses per update.
+- Preserve configured bounds: at most 256 target addresses, 65535 selected TCP ports per address, 32 concurrent TCP checks and 16 advertised endpoints per device. Keep observation, parser, discovery, DNS and history limits explicit. Additional IPv6 discovery is capped at 256 addresses; mDNS tracking is capped at 32 callbacks and 16 addresses per update.
 - Check every selected host/port unless cancelled. Performance optimizations must not silently omit silent addresses or ports. Keep retry behavior and progress counts consistent with `ScanPlan`.
 - Respect the entered timeout and custom port selection. Keep factory defaults and one-time preference migrations consistent with the implemented UI and README; do not reset saved custom values on every launch.
 - `OPEN` requires a successful TCP connection. Explicit refusal is `CLOSED`; timeouts and other failures must not establish reachability. Missing observations do not prove a device is offline.
-- Use typed confidence/status values for decisions; format their labels only at evidence, UI or report boundaries. Preserve schema 5 labels when refactoring.
+- Use typed confidence/status values for decisions; format their labels only at evidence, UI or report boundaries. Preserve existing wire labels when refactoring. Large scans use schema 6 with lossless packedChecks; small scans retain schema 5.
 - Preserve source evidence and distinguish reported metadata from inferred identity. Port numbers or DNS names alone must not identify hardware or manufacturer. Unknown devices remain unknown.
 - Preserve initial TCP checks separately from advertised endpoint checks in JSON. Verify announced TCP endpoints before labeling them open; a UDP announcement is not an open TCP port.
 - Keep probes read-only. Do not send print jobs, modify devices, authenticate or exploit vulnerabilities as part of identification.

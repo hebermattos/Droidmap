@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.3 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.12.0 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -29,7 +29,7 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - Track completed connections, cancel scans and export full or partial results as JSON.
 - Choose Fast or Complete mode. Complete expands the default port preset, retries timed-out TCP connections once with a doubled timeout and extends identification/discovery budgets. Custom port selections are preserved when switching modes.
 - Verify advertised TCP endpoints, including ports outside the selected list; use HTTP announcements to read nonstandard HTTP ports.
-- Bound scanning to 32 concurrent connections, 256 addresses and 256 distinct selected ports for network scans (up to 65535 for one IP), plus at most 16 announced endpoints per device.
+- Bound scanning to 32 concurrent connections, 256 addresses and 65535 selected TCP ports per address, plus at most 16 announced endpoints per device.
 
 ## Build and install
 
@@ -244,6 +244,14 @@ Version 0.10.0 starts with scan completion/partial status, device and unique ope
 
 In **Options → Scan a single IP**, enter a local address such as `192.168.0.1`, choose **Use IP**, then start the scan. Single-IP scans keep discovery and Nmap targets restricted to that IP.
 
-In **Options → Scan settings**, enable **All TCP ports (1–65535, single IP)** and save. This checks every TCP port; it does not scan UDP. Disable it to return to the custom port field. More than 256 ports requires a single IP; network scans retain their existing limit. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports can take several minutes; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
+In **Options → Scan settings**, enable **All TCP ports (1–65535)** and save. This checks every TCP port; it does not scan UDP. Disable it to return to the custom port field. All selected IPs can scan all 65535 TCP ports. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports on a network can take hours; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
 
-Version 0.11.0 preserves the existing package IDs and signing configuration.
+Version 0.12.0 preserves the existing package IDs and signing configuration.
+
+## Large scan result encoding
+
+Scans exceeding 65535 planned checks use lossless packed storage (two bytes per planned connection, about 32 MiB for 256 × 65535 checks). Worker count remains bounded to 32 and every selected IP/port is checked unless cancelled. Live previews retain open checks and one closed check per responding host instead of millions of closed checks. No saved port selection is replaced when changing targets.
+
+Large scans export schema 6. The `checks` array contains every open initial check and one representative closed initial check per responding host for display, Nmap and history compatibility. `completedChecks` is the full completed connection count. All initial checks, including closed, silent and error results, are preserved in `packedChecks`; advertised endpoint checks remain separate. Small scans retain schema 5 and their full `checks` array.
+
+For each entry of `packedChecks.hosts`, Base64-decode `data` and inflate the zlib/deflate stream (`encoding: deflate-base64-u16be-v1`). Read unsigned 16-bit big-endian words in the order of the report's sorted `ports` array. Zero means the check was unfinished (for example after cancellation); otherwise `word & 3` maps to OPEN, CLOSED, NO_RESPONSE, ERROR in that order, `(word >> 2) & 3` is attempts and `word >> 4` is finalTimeoutMs. The decoded length is exactly twice the selected port count. Existing storage and Nmap output budgets still apply; exceeding a persistence budget is reported explicitly.
