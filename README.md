@@ -1,6 +1,6 @@
 # Droidmap
 
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.10.3 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.11.1 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
 
 ## Code ownership
 
@@ -247,3 +247,5 @@ In **Options → Scan a single IP**, enter a local address such as `192.168.0.1`
 In **Options → Scan settings**, enable **All TCP ports (1–65535, single IP)** and save. This checks every TCP port; it does not scan UDP. Disable it to return to the custom port field. More than 256 ports requires a single IP; network scans retain their existing limit. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports can take several minutes; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
 
 Version 0.11.0 preserves the existing package IDs and signing configuration.
+
+Version 0.11.1 fixes switching from all-port single-IP scans to network scans. Selecting a Wi-Fi network, or starting a manually entered network, offers the matching Fast/Complete port preset when the saved selection exceeds 256 ports. Accepting updates the settings summary and saved ports; Cancel preserves the existing settings. Custom lists within the network limit remain unchanged.

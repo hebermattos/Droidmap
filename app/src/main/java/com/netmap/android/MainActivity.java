@@ -425,6 +425,7 @@ public final class MainActivity extends Activity {
                     ScanPlan.parseHosts(value);
                     target.setText(value);
                     target.setError(null);
+                    offerNetworkPorts(value, () -> {});
                     status.setText(allIps
                             ? "All " + ScanPlan.parseHosts(value).size()
                                     + " usable Wi-Fi IPv4 addresses selected. Tap Start scan."
@@ -440,8 +441,33 @@ public final class MainActivity extends Activity {
                         + " manually.");
     }
 
+    private boolean offerNetworkPorts(String targetValue, Runnable onAccepted) {
+        ScanSettings compatible;
+        try { compatible = settings.forNetworkTarget(targetValue); }
+        catch (IllegalArgumentException invalidTarget) { return false; }
+        if (compatible == settings) return false;
+        String mode = compatible.mode == ScanPlan.Mode.FAST ? "Fast" : "Complete";
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Choose ports for the network scan")
+                .setMessage("The selected port list exceeds the network limit of 256 ports. "
+                        + "All 65535 TCP ports can be scanned on a single IP. "
+                        + "Use the " + mode + " preset (" + ScanPlan.parsePorts(compatible.ports).size()
+                        + " ports) to scan every IP in this network, or edit ports in Scan settings.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Use " + mode + " ports", (dialog, which) -> {
+                    settings = compatible;
+                    settingsStore.save(settings);
+                    updateSettingsSummary();
+                    target.setError(null);
+                    onAccepted.run();
+                })
+                .show();
+        return true;
+    }
+
     private void begin() {
         String targetValue = target.getText().toString().trim();
+        if (offerNetworkPorts(targetValue, this::begin)) return;
         try {
             new ScanPlan(
                     targetValue,
