@@ -8,6 +8,7 @@ final class NmapRunner {
     private final java.util.function.BooleanSupplier cancelled;
     private final NmapCommands templates;
     private final java.util.function.Consumer<Execution> completed;
+    private final List<String> customArgs;
     static final class Execution {
         final List<String> command;
         final String profile, stdout, stderr, error;
@@ -40,10 +41,11 @@ final class NmapRunner {
         synchronized boolean truncated(){return truncated;}
         synchronized String text(){return new String(bytes.toByteArray(),StandardCharsets.UTF_8)+(truncated?"\n[Output truncated: configured byte limit exceeded]":"");}
     }
-    NmapRunner(NmapCommands templates,Launcher launcher){this(templates,launcher,()->false);}
-    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled){this(templates,launcher,cancelled,result->{});}
-    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<Execution> completed) {
-        this.templates=Objects.requireNonNull(templates);this.launcher=launcher;this.cancelled=cancelled;this.completed=completed;
+    NmapRunner(NmapCommands templates,Launcher launcher){this(templates,launcher,()->false,result->{},Collections.emptyList());}
+    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled){this(templates,launcher,cancelled,result->{},Collections.emptyList());}
+    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<Execution> completed){this(templates,launcher,cancelled,completed,Collections.emptyList());}
+    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<Execution> completed,List<String> customArgs) {
+        this.templates=Objects.requireNonNull(templates);this.launcher=launcher;this.cancelled=cancelled;this.completed=completed;this.customArgs=Collections.unmodifiableList(new ArrayList<>(customArgs));
     }
     private void awaitExit(Process process,int seconds,String timeoutMessage)throws Exception {
         long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(seconds);
@@ -66,7 +68,7 @@ final class NmapRunner {
         File xmlOutput=File.createTempFile("nmap-", ".xml",new File(dataDir));
         values.put("xmlOutput",xmlOutput.getAbsolutePath());
         final List<String> command;
-        try {command=templates.command(profile,host,values);}
+        try {command=templates.command(profile,host,values,customArgs);}
         catch(RuntimeException invalidCommand) {xmlOutput.delete();throw invalidCommand;}
         long started=System.nanoTime();
         Process process=null;Integer exitCode=null;String error="";

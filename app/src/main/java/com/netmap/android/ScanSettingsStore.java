@@ -27,7 +27,8 @@ final class ScanSettingsStore {
                         ? ScanPlan.Mode.COMPLETE
                         : ScanPlan.Mode.FAST,
                 preferences.getBoolean("adaptive", true),
-                preferences.getBoolean("nmap", true));
+                preferences.getBoolean("nmap", true),
+                preferences.getString("nmapArgs", ""));
     }
 
     void save(ScanSettings settings) {
@@ -38,6 +39,7 @@ final class ScanSettingsStore {
                 .putBoolean("complete", settings.mode == ScanPlan.Mode.COMPLETE)
                 .putBoolean("adaptive", settings.adaptive)
                 .putBoolean("nmap", settings.nmap)
+                .putString("nmapArgs", settings.nmapArgs)
                 .apply();
     }
 }

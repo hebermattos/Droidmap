@@ -30,6 +30,7 @@ public final class ScanService extends Service {
     private String networkScope;
     private boolean identificationPartial;
     private boolean nmapEnabled;
+    private String nmapArgs="";
     private long lastNotification;
     private int acceptedPreview;
     private final AtomicInteger previewVersion=new AtomicInteger();
@@ -66,7 +67,7 @@ public final class ScanService extends Service {
                 plan=new ScanPlan(normalized,intent.getStringExtra("ports"),requested.timeoutMs,requested.mode,requested.adaptive);
             } else plan=requested;
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
-        networkScope=NetworkScope.current(this,plan); identificationPartial=false; nmapEnabled=intent.getBooleanExtra("nmap",true);
+        networkScope=NetworkScope.current(this,plan); identificationPartial=false; nmapEnabled=intent.getBooleanExtra("nmap",true); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
@@ -127,7 +128,7 @@ public final class ScanService extends Service {
                     observedChecks.addAll(identity.endpointChecks());
                     lastPreview.set(0);
                     main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nmap…",results.size(),true);});
-                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,tcp::isCancelled,
+                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,nmapArgs,tcp::isCancelled,
                             ()->preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
                 }
             }
@@ -157,6 +158,7 @@ public final class ScanService extends Service {
             catch(Exception e) {changes="History unavailable: "+e.getClass().getSimpleName();}
             parsed.put("historyComparison",changes);
             parsed.put("nmapEnabled",nmapEnabled);
+            parsed.put("nmapCustomArgs",nmapArgs);
             String text=new ReportPresentation(parsed).fullText();
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
                 cancelled?"Cancelled — partial results":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);

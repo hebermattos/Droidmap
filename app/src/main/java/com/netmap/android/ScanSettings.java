@@ -8,10 +8,13 @@ final class ScanSettings {
     final ScanPlan.Mode mode;
     final boolean adaptive;
     final boolean nmap;
+    final String nmapArgs;
 
-    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive) { this(ports,timeoutMs,mode,adaptive,true); }
+    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive) { this(ports,timeoutMs,mode,adaptive,true,""); }
 
-    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap) {
+    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap) { this(ports,timeoutMs,mode,adaptive,nmap,""); }
+
+    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap, String nmapArgs) {
         ScanPlan.parsePorts(ports);
         if (timeoutMs < 100 || timeoutMs > 3000) {
             throw new IllegalArgumentException("Timeout must be 100–3000 ms.");
@@ -21,11 +24,13 @@ final class ScanSettings {
         this.mode = java.util.Objects.requireNonNull(mode);
         this.adaptive = adaptive;
         this.nmap = nmap;
+        NmapCustomArgs.parse(nmapArgs);
+        this.nmapArgs = nmapArgs == null ? "" : nmapArgs.trim();
     }
 
     ScanSettings completeDefaults() {
         return new ScanSettings(
-                ScanPlan.COMPLETE_PORTS, timeoutMs, ScanPlan.Mode.COMPLETE, adaptive, nmap);
+                ScanPlan.COMPLETE_PORTS, timeoutMs, ScanPlan.Mode.COMPLETE, adaptive, nmap, nmapArgs);
     }
 
     String summary() {

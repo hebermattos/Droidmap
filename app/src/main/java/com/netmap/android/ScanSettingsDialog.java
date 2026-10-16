@@ -57,6 +57,13 @@ final class ScanSettingsDialog {
         nmap.setText("Nmap service detection");
         nmap.setChecked(current.nmap);
         form.addView(nmap);
+        EditText nmapArgs = field(context, form, "Nmap global parameters (optional)", current.nmapArgs, android.view.View.generateViewId());
+        nmapArgs.setHint("-n --reason -T3 --host-timeout 20s");
+        nmapArgs.setEnabled(nmap.isChecked());
+        nmap.setOnCheckedChangeListener((button, checked) -> nmapArgs.setEnabled(checked));
+        TextView nmapHelp = new TextView(context);
+        nmapHelp.setText("Allowed: DNS/reason/verbosity, timing, retries and version intensity. Ports, targets, output, data paths and NSE scripts are controlled by Droidmap.");
+        form.addView(nmapHelp);
         TextView help = new TextView(context);
         help.setText(
                 "Complete mode uses more default ports, retries and longer device discovery. Custom"
@@ -109,6 +116,8 @@ final class ScanSettingsDialog {
                                                 ports.setError(e.getMessage());
                                                 return;
                                             }
+                                            try { NmapCustomArgs.parse(nmapArgs.getText().toString()); }
+                                            catch (IllegalArgumentException e) { nmapArgs.setError(e.getMessage()); return; }
                                             ScanSettings updated =
                                                     new ScanSettings(
                                                             portValues,
@@ -117,7 +126,8 @@ final class ScanSettingsDialog {
                                                                     ? ScanPlan.Mode.FAST
                                                                     : ScanPlan.Mode.COMPLETE,
                                                             adaptive.isChecked(),
-                                                            nmap.isChecked());
+                                                            nmap.isChecked(),
+                                                            nmapArgs.getText().toString());
                                             onSave.accept(updated);
                                             dialog.dismiss();
                                         }));

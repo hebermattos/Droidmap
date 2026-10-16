@@ -8,7 +8,7 @@ import java.util.*;
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,java.util.function.BooleanSupplier cancelled,Runnable progress) {
+    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,String customArgs,java.util.function.BooleanSupplier cancelled,Runnable progress) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
@@ -24,6 +24,9 @@ final class NmapEnricher {
         try { data=installData(context); }
         catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); return notices; }
 
+        final List<String> parsedCustomArgs;
+        try { parsedCustomArgs=NmapCustomArgs.parse(customArgs); }
+        catch(IllegalArgumentException e) { notices.add("Nmap custom parameters rejected: "+e.getMessage()); return notices; }
         Map<String,LinkedHashSet<Integer>> targets=NmapTargets.collect(checks,evidence);
         NmapOutputStore outputStore=new NmapOutputStore(context.getFilesDir()); int attempted=0, enriched=0;
         if(targets.isEmpty()) notices.add("Nmap skipped: no verified-open TCP ports were found.");
@@ -38,7 +41,7 @@ final class NmapEnricher {
                     evidence.add(host,source,"outputStatus",storageError.getMessage());
                     notices.add("Nmap "+host+" output unavailable: "+storageError.getMessage());
                 }
-            });
+            },parsedCustomArgs);
             try {
                 LinkedHashSet<Integer> selected=target.getValue();
                 evidence.nmapStatus(host,"Nmap","Running service detection");progress.run();

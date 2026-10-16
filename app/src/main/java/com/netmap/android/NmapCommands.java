@@ -99,10 +99,12 @@ final class NmapCommands {
         }
         return selection.toString();
     }
-    List<String> command(Profile profile, String host, Map<String, String> values) {
+    List<String> command(Profile profile, String host, Map<String, String> values) { return command(profile,host,values,Collections.emptyList()); }
+    List<String> command(Profile profile, String host, Map<String, String> values, List<String> customArgs) {
         List<String> command = new ArrayList<>(); command.add(values.get("binary"));
         if (ScanPlan.isIpv6(host)) for (String arg : ipv6Args) command.add(expand(arg, values));
         if (!IpAddresses.zoneSuffix(host).isEmpty()) for (String arg : interfaceArgs) command.add(expand(arg, values));
+        command.addAll(customArgs);
         for (String arg : profile.argv) command.add(expand(arg, values));
         return command;
     }
