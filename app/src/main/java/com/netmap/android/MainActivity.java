@@ -97,6 +97,13 @@ public final class MainActivity extends Activity {
         start = new Button(this);
         start.setText("Start scan");
         layout.addView(start);
+        Button quickScan = new Button(this);
+        quickScan.setText("Discover IPs and open ports");
+        quickScan.setContentDescription("Scan Wi-Fi IP addresses and TCP ports only");
+        layout.addView(quickScan);
+        quickScan.setOnClickListener(v -> {
+            if (!scanRunning && !startingScan && selectWifiNetwork(true)) begin(true);
+        });
         start.setOnClickListener(
                 v -> {
                     if (!scanRunning) begin();
@@ -401,11 +408,11 @@ public final class MainActivity extends Activity {
         selectWifiNetwork(false);
     }
 
-    private void selectWifiNetwork(boolean allIps) {
+    private boolean selectWifiNetwork(boolean allIps) {
         ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         if (cm == null) {
             status.setText("Wi-Fi network information is unavailable.");
-            return;
+            return false;
         }
         String limitNotice = "";
         for (Network network : cm.getAllNetworks()) {
@@ -429,7 +436,7 @@ public final class MainActivity extends Activity {
                             ? "All " + ScanPlan.parseHosts(value).size()
                                     + " usable Wi-Fi IPv4 addresses selected. Tap Start scan."
                             : "Wi-Fi range selected. Tap Start scan.");
-                    return;
+                    return true;
                 } catch (IllegalArgumentException error) {
                     if (allIps && address.getPrefixLength() < 24) limitNotice = error.getMessage();
                 }
@@ -438,9 +445,14 @@ public final class MainActivity extends Activity {
         status.setText(
                 !limitNotice.isEmpty() ? limitNotice : "No private Wi-Fi IPv4 network found. Connect to Wi-Fi or enter a target"
                         + " manually.");
+        return false;
     }
 
     private void begin() {
+        begin(false);
+    }
+
+    private void begin(boolean portsOnly) {
         String targetValue = target.getText().toString().trim();
         try {
             new ScanPlan(
@@ -461,8 +473,9 @@ public final class MainActivity extends Activity {
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
                         .putExtra("adaptive", settings.adaptive)
-                        .putExtra("nmap", settings.nmap)
-                        .putExtra("nmapArgs", settings.nmapArgs);
+                        .putExtra("nmap", !portsOnly && settings.nmap)
+                        .putExtra("portsOnly", portsOnly)
+                        .putExtra("nmapArgs", portsOnly ? "" : settings.nmapArgs);
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                         != android.content.pm.PackageManager.PERMISSION_GRANTED
