@@ -97,13 +97,6 @@ public final class MainActivity extends Activity {
         start = new Button(this);
         start.setText("Start scan");
         layout.addView(start);
-        Button quickScan = new Button(this);
-        quickScan.setText("Discover IPs and open ports");
-        quickScan.setContentDescription("Scan Wi-Fi IP addresses and TCP ports only");
-        layout.addView(quickScan);
-        quickScan.setOnClickListener(v -> {
-            if (!scanRunning && !startingScan && selectWifiNetwork(true)) begin(true);
-        });
         start.setOnClickListener(
                 v -> {
                     if (!scanRunning) begin();
@@ -126,6 +119,13 @@ public final class MainActivity extends Activity {
         status.setPadding(0, pad / 2, 0, pad / 2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         layout.addView(status);
+        Button quickScan = new Button(this);
+        quickScan.setText("Discover IPs and open ports");
+        quickScan.setContentDescription("Scan Wi-Fi IP addresses and TCP ports only");
+        layout.addView(quickScan);
+        quickScan.setOnClickListener(v -> {
+            if (!scanRunning && !startingScan && selectWifiNetwork(true)) begin(true);
+        });
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         deviceList = new LinearLayout(this);
