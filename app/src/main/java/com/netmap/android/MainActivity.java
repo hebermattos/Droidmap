@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private EditText target;
     private Button start;
+    private final List<Button> toolButtons = new ArrayList<>();
     private TextView settingsSummary;
     private LinearLayout deviceList;
     private final Set<String> expandedDevices = new HashSet<>();
@@ -95,12 +96,12 @@ public final class MainActivity extends Activity {
         layout.addView(settingsSummary);
         updateSettingsSummary();
         start = new Button(this);
-        start.setText("Start scan");
+        start.setText("Cancel running scan");
         layout.addView(start);
+        start.setVisibility(android.view.View.GONE);
         start.setOnClickListener(
                 v -> {
-                    if (!scanRunning) begin();
-                    else {
+                    if (scanRunning) {
                         ScanSnapshot snapshot = ScanService.snapshot();
                         if (snapshot != null && snapshot.running)
                             startService(
@@ -119,13 +120,10 @@ public final class MainActivity extends Activity {
         status.setPadding(0, pad / 2, 0, pad / 2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         layout.addView(status);
-        Button quickScan = new Button(this);
-        quickScan.setText("Discover IPs and open ports");
-        quickScan.setContentDescription("Scan Wi-Fi IP addresses and TCP ports only");
-        layout.addView(quickScan);
-        quickScan.setOnClickListener(v -> {
-            if (!scanRunning && !startingScan && selectWifiNetwork(true)) begin(true);
-        });
+        addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
+        addToolButton(layout, "Scan TCP ports", "Check IP addresses and TCP ports only", "ports");
+        addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
+        addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         deviceList = new LinearLayout(this);
@@ -181,7 +179,8 @@ public final class MainActivity extends Activity {
         startingScan = false;
         displayedSnapshot = snapshot;
         scanRunning = snapshot.running;
-        start.setText(scanRunning ? "Cancel scan" : "Start scan");
+        start.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
+        for (Button button : toolButtons) button.setEnabled(!scanRunning && !startingScan);
         start.setEnabled(!scanRunning || snapshot.cancellable);
         target.setEnabled(!scanRunning);
         progress.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
@@ -219,7 +218,6 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 3, 2, "Nmap settings").setEnabled(!scanRunning);
         menu.getMenu().add(0, 4, 3, "History & reanalysis");
         menu.getMenu().add(0, 5, 4, "Reports & export");
-        menu.getMenu().add(0, 6, 5, "Nuclei vulnerability scan").setEnabled(!scanRunning);
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: showTargetOptions(); break;
@@ -227,7 +225,6 @@ public final class MainActivity extends Activity {
                 case 3: showNmapSettings(); break;
                 case 4: showHistoryOptions(); break;
                 case 5: showReportOptions(); break;
-                case 6: showNucleiSettings(); break;
                 default: return false;
             }
             return true;
@@ -291,18 +288,6 @@ public final class MainActivity extends Activity {
                 .addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_TITLE, "droidmap-scan.json");
         startActivityForResult(intent, 10);
-    }
-
-    private void showNucleiSettings() {
-        boolean enabled=getPreferences(MODE_PRIVATE).getBoolean("nucleiEnabled",false);
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Nuclei vulnerability scan")
-                .setSingleChoiceItems(new String[]{"Disabled","Enabled (requires packaged Android ARM64 Nuclei binary)"},enabled?1:0,
-                        (dialog,choice)->{
-                            getPreferences(MODE_PRIVATE).edit().putBoolean("nucleiEnabled",choice==1).apply();
-                            dialog.dismiss();
-                        })
-                .setNegativeButton("Cancel",null).show();
     }
 
     private void showNmapSettings() {
@@ -494,11 +479,23 @@ public final class MainActivity extends Activity {
         return false;
     }
 
-    private void begin() {
-        begin(false);
+    private void addToolButton(LinearLayout layout, String text, String description, String tool) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setContentDescription(description);
+        layout.addView(button);
+        toolButtons.add(button);
+        button.setOnClickListener(v -> {
+            if (!scanRunning && !startingScan) begin(tool);
+        });
     }
 
-    private void begin(boolean portsOnly) {
+    private void begin() {
+        begin("discovery");
+    }
+
+    private void begin(String tool) {
+        boolean portsOnly = "ports".equals(tool);
         String targetValue = target.getText().toString().trim();
         try {
             new ScanPlan(
@@ -519,10 +516,10 @@ public final class MainActivity extends Activity {
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
                         .putExtra("adaptive", settings.adaptive)
-                        .putExtra("nmap", !portsOnly && settings.nmap)
+                        .putExtra("nmap", "nmap".equals(tool))
                         .putExtra("portsOnly", portsOnly)
-                        .putExtra("nuclei", !portsOnly && getPreferences(MODE_PRIVATE).getBoolean("nucleiEnabled",false))
-                        .putExtra("nmapArgs", portsOnly ? "" : settings.nmapArgs)
+                        .putExtra("nuclei", "nuclei".equals(tool))
+                        .putExtra("nmapArgs", "nmap".equals(tool) ? settings.nmapArgs : "")
                         .putExtra("nmapVersionIntensity", settings.nmapVersionIntensity);
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
@@ -570,15 +567,17 @@ public final class MainActivity extends Activity {
             resultText = "";
             deviceList.removeAllViews();
             lastDevices.clear();
-            start.setText("Cancel scan");
+            start.setVisibility(android.view.View.VISIBLE);
             start.setEnabled(false);
+            for (Button button : toolButtons) button.setEnabled(false);
             target.setEnabled(false);
             status.setText("Starting scan…");
         } catch (RuntimeException e) {
             startingScan = false;
             scanRunning = false;
-            start.setText("Start scan");
+            start.setVisibility(android.view.View.GONE);
             start.setEnabled(true);
+            for (Button button : toolButtons) button.setEnabled(true);
             target.setEnabled(true);
             status.setText("Unable to start scan: " + e.getMessage());
         }
