@@ -1,0 +1,68 @@
+name: Build Nuclei for Android ARM64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-nuclei:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Droidmap
+        uses: actions/checkout@v4
+      - name: Checkout pinned Nuclei source
+        uses: actions/checkout@v4
+        with:
+          repository: projectdiscovery/nuclei
+          ref: v3.11.1
+          path: upstream-nuclei
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - uses: android-actions/setup-android@v3
+      - name: Install Android NDK
+        run: sdkmanager 'ndk;27.2.12479018'
+      - name: Cross-compile for Android ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export GOOS=android GOARCH=arm64 CGO_ENABLED=1
+          export CC=aarch64-linux-android30-clang
+          export CXX=aarch64-linux-android30-clang++
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cd upstream-nuclei
+          go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$GITHUB_WORKSPACE/dist/libnuclei.so" ./cmd/nuclei
+          file "$GITHUB_WORKSPACE/dist/libnuclei.so"
+          readelf -h "$GITHUB_WORKSPACE/dist/libnuclei.so" | grep -E 'Class:|Machine:|Type:'
+          readelf -l "$GITHUB_WORKSPACE/dist/libnuclei.so" | grep '/system/bin/linker64'
+          bash "$GITHUB_WORKSPACE/native-tools/install-nuclei-android.sh" "$GITHUB_WORKSPACE/dist/libnuclei.so"
+          sha256sum "$GITHUB_WORKSPACE/dist/libnuclei.so" > "$GITHUB_WORKSPACE/dist/libnuclei.so.sha256"
+          tar -czf "$GITHUB_WORKSPACE/dist/nuclei-arm64.tar.gz" -C "$GITHUB_WORKSPACE/dist" libnuclei.so
+      - name: Save compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuclei-android-arm64
+          path: |
+            dist/libnuclei.so
+            dist/libnuclei.so.sha256
+            dist/nuclei-arm64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish release for Droidmap Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=nuclei-android-arm64
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Nuclei Android ARM64 runtime" --notes "Built from ProjectDiscovery Nuclei v3.11.1 for Android API 30 ARM64. Test runtime behavior on-device." --latest=false
+          fi
+          gh release upload "$TAG" dist/libnuclei.so dist/libnuclei.so.sha256 dist/nuclei-arm64.tar.gz --clobber
