@@ -30,6 +30,7 @@ public final class ScanService extends Service {
     private String networkScope;
     private boolean identificationPartial;
     private boolean nmapEnabled;
+    private boolean nucleiEnabled;
     private boolean portsOnly;
     private String nmapArgs="";
     private int nmapVersionIntensity=NmapCommands.DEFAULT_VERSION_INTENSITY;
@@ -71,7 +72,7 @@ public final class ScanService extends Service {
                 plan=new ScanPlan(normalized,intent.getStringExtra("ports"),requested.timeoutMs,requested.mode,requested.adaptive);
             } else plan=requested;
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
-        networkScope=NetworkScope.current(this,plan); identificationPartial=false; portsOnly=intent.getBooleanExtra("portsOnly",false); nmapEnabled=!portsOnly && intent.getBooleanExtra("nmap",true); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
+        networkScope=NetworkScope.current(this,plan); identificationPartial=false; portsOnly=intent.getBooleanExtra("portsOnly",false); nmapEnabled=!portsOnly && intent.getBooleanExtra("nmap",true); nucleiEnabled=!portsOnly && intent.getBooleanExtra("nuclei",false); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
         try {
@@ -137,7 +138,12 @@ public final class ScanService extends Service {
                             ()->preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
                 }
             }
-            List<String> enrichmentNotices=nmapNotices;
+            List<String> enrichmentNotices=new ArrayList<>(nmapNotices);
+            if(nucleiEnabled && !tcp.isCancelled()) {
+                main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nuclei…",results.size(),true);});
+                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,tcp::isCancelled));
+                preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false);
+            }
             main.post(() -> {
                 if(destroyed || scanner!=tcp) return;
                 nsd.stop(); finishing=true;
@@ -163,6 +169,7 @@ public final class ScanService extends Service {
             catch(Exception e) {changes="History unavailable: "+e.getClass().getSimpleName();}
             parsed.put("historyComparison",changes);
             parsed.put("nmapEnabled",nmapEnabled);
+            parsed.put("nucleiEnabled",nucleiEnabled);
             parsed.put("portsOnly",portsOnly);
             parsed.put("nmapCustomArgs",nmapArgs);
             parsed.put("nmapVersionIntensity",nmapVersionIntensity);
