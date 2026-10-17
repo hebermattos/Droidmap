@@ -36,7 +36,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view nuclei-android-arm64 >/dev/null 2>&1; then
+          if [[ -f native-tools/nuclei-arm64.tar.gz ]]; then
+            echo "Using versioned Nuclei Android ARM64 archive from repository"
+            echo "2a432501808e60ab471f1ef3e4eef11904a19c69d5b31344b7f06fdd218369d5  native-tools/nuclei-arm64.tar.gz" | sha256sum --check
+            mkdir -p /tmp/droidmap-nuclei
+            tar -tzf native-tools/nuclei-arm64.tar.gz | grep -qx 'nuclei-arm64'
+            tar -xzf native-tools/nuclei-arm64.tar.gz -C /tmp/droidmap-nuclei --no-same-owner --no-same-permissions nuclei-arm64
+            echo "0c2b5a0e9110ebeb63daead62fe7a41c5e91275ff7befbeb64fe3f4e0ffdae48  /tmp/droidmap-nuclei/nuclei-arm64" | sha256sum --check
+            bash native-tools/install-nuclei-android.sh /tmp/droidmap-nuclei/nuclei-arm64
+          elif gh release view nuclei-android-arm64 >/dev/null 2>&1; then
             mkdir -p /tmp/droidmap-nuclei
             gh release download nuclei-android-arm64 --dir /tmp/droidmap-nuclei --pattern "libnuclei.so*"
             (cd /tmp/droidmap-nuclei && sha256sum --check libnuclei.so.sha256)
