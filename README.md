@@ -258,3 +258,33 @@ Scans exceeding 65535 planned checks use lossless packed storage (two bytes per 
 Large scans export schema 6. The `checks` array contains every open initial check and one representative closed initial check per responding host for display, Nmap and history compatibility. `completedChecks` is the full completed connection count. All initial checks, including closed, silent and error results, are preserved in `packedChecks`; advertised endpoint checks remain separate. Small scans retain schema 5 and their full `checks` array.
 
 For each entry of `packedChecks.hosts`, Base64-decode `data` and inflate the zlib/deflate stream (`encoding: deflate-base64-u16be-v1`). Read unsigned 16-bit big-endian words in the order of the report's sorted `ports` array. Zero means the check was unfinished (for example after cancellation); otherwise `word & 3` maps to OPEN, CLOSED, NO_RESPONSE, ERROR in that order, `(word >> 2) & 3` is attempts and `word >> 4` is finalTimeoutMs. The decoded length is exactly twice the selected port count. Existing storage and Nmap output budgets still apply; exceeding a persistence budget is reported explicitly.
+
+
+## Broader mDNS IPv6 discovery (0.12.3)
+
+Normal analysis now also queries `_services._dns-sd._udp.local.` over IPv4 multicast
+(`224.0.0.251`) and IPv6 link-local multicast (`ff02::fb`) on the captured Wi-Fi
+network. This discovers local service types beyond the existing 19 presets, then
+browses and resolves them through Android NSD. Legacy unicast replies return to an
+ephemeral local port, avoiding contention with Android's mDNS service on UDP 5353.
+No public DNS or cellular fallback is used. Missing enumeration replies leave the
+preset discovery active.
+
+Enumeration has a one-second receive window and a 128-packet limit per address
+family. Packets are limited to 4096 bytes; only matching on-link responses from
+port 5353 and local PTR service types are accepted. At most 64 service types are
+browsed, with six concurrent browsers rotating every 1.2 seconds within the
+existing Fast/Complete discovery window. Pending service types, early cancellation
+and tracking limits mark discovery partial. Cancellation closes enumeration
+sockets and unregisters NSD callbacks.
+
+Android 14+ retains all admitted IPv6 addresses reported for each service, up to
+16 per update and 256 additional addresses. Advertised TCP endpoints are verified
+before Nmap analysis; UDP-only services remain discovery evidence and are never
+converted into open TCP ports. Single-IP scans keep their existing target
+restriction. **Discover IPs and open ports** remains the TCP-only action; use
+**Start scan** for mDNS discovery and Nmap. Devices that do not advertise services
+can still be missed; an IPv6 /64 is never enumerated.
+
+Package IDs and signing configuration are unchanged. Update-compatible APKs still
+require the saved signing key.
