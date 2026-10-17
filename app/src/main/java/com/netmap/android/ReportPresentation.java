@@ -60,6 +60,10 @@ final class ReportPresentation {
                     if(field.equals("serviceName"))services.put(port,value);
                     if(field.equals("banner"))versions.put(port,value);
                 } catch(NumberFormatException ignored) { }
+                if(source.equals("Nuclei") && field.startsWith("finding:")) {
+                    String[] parts=field.split(":",3);
+                    if(parts.length==3) findings.add(new Finding(parts[2],parts[1].equals("host")?"host-level":"port "+parts[1],value));
+                }
                 if(source.equals("Nmap vulnerabilities")) {
                     if(field.equals("scanStatus"))vulnerability=value;
                     else if(field.equals("outputFile"))vulnerabilityLog=value;
