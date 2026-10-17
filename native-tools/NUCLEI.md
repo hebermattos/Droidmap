@@ -24,3 +24,26 @@ Expected destination: `app/src/main/jniLibs/arm64-v8a/libnuclei.so`.
 - Packaging without verifying Android runtime behavior is insufficient.
 - The repository binary must be explicitly uploaded (preferably through Git LFS or a controlled release artifact). The script itself does not download executables.
 - Do not change applicationId or signing keys; debug builds with `-PsideBySideInstall=true` intentionally use a different applicationId.
+
+
+## Preferred: commit the compressed archive
+
+The Android workflow now detects `native-tools/nuclei-arm64.tar.gz`, verifies its
+pinned SHA-256 (`2a432501808e60ab471f1ef3e4eef11904a19c69d5b31344b7f06fdd218369d5`),
+extracts `nuclei-arm64`, verifies the binary checksum and installs it
+under `jniLibs/arm64-v8a/libnuclei.so` during the CI build.
+
+The supplied archive is about 70 MB, below GitHub's 100 MB Git file limit,
+but exceeds the browser's 25 MB upload limit. Add it using Git CLI:
+
+```bash
+git checkout feature/nuclei-archive-in-repo
+cp /path/to/nuclei-arm64.tar.gz native-tools/nuclei-arm64.tar.gz
+git add native-tools/nuclei-arm64.tar.gz
+git commit -m "Add pinned Android ARM64 Nuclei archive"
+git push origin feature/nuclei-archive-in-repo
+```
+
+Do not commit the 171 MiB extracted executable (above GitHub's 100 MB limit).
+If the archive is absent, CI retains the fallback to the existing GitHub release.
+The archive is intentionally **not committed by the workflow-only change**.
