@@ -47,7 +47,6 @@ final class DeviceResultsRenderer {
             if(notices!=null&&notices.length()>0)section(deviceList,"scan-notices","Scan notices ("+notices.length()+")",false,body->{
                 for(int i=0;i<notices.length();i++)value(body,notices.optString(i));
             });
-            value(deviceList,"Use Show details to expand a device. Full report and JSON export are in Options.");
         } catch(JSONException error){value(deviceList,"Summary unavailable. Open Full report in Options.");}
         resultsScroll.post(()->resultsScroll.scrollTo(0,scrollPosition));return lastDevices;
     }
@@ -117,10 +116,10 @@ final class DeviceResultsRenderer {
         TextView content=value(field,text);content.setPadding(0,0,0,0);
     }
     private LinearLayout panel(LinearLayout parent) {
-        LinearLayout panel=new LinearLayout(context);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(14),dp(12),dp(14),dp(12));
+        LinearLayout panel=new LinearLayout(context);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(12),dp(6),dp(12),dp(6));
         android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
         shape.setColor(Color.rgb(20,20,20));shape.setCornerRadius(dp(12));shape.setStroke(dp(1),Color.rgb(55,55,55));panel.setBackground(shape);
-        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(10),0,dp(6));parent.addView(panel,margin);return panel;
+        LinearLayout.LayoutParams margin=new LinearLayout.LayoutParams(-1,-2);margin.setMargins(0,dp(6),0,0);parent.addView(panel,margin);return panel;
     }
     private LinearLayout expandedBody(LinearLayout parent) {
         LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);
@@ -145,21 +144,22 @@ final class DeviceResultsRenderer {
     }
     private void overview(ReportPresentation model) {
         LinearLayout card=panel(deviceList);
-        TextView title=value(card,"Scan overview");title.setTextSize(18);title.setTypeface(null,android.graphics.Typeface.BOLD);
-        String[] lines=model.summary().split("\n");
-        TextView state=value(card,lines[0]);state.setTypeface(null,android.graphics.Typeface.BOLD);
-        for(int i=1;i<lines.length;i++) {
-            final String line=lines[i];
-            // Keep the long execution counts available without dominating the overview.
-            if(line.startsWith("Nmap services:")||line.startsWith("Nmap vulnerabilities:"))continue;
-            value(card,line);
+        TextView state=value(card,model.scanStatus());
+        state.setTypeface(null,android.graphics.Typeface.BOLD);
+        int ports=0,alerts=0,failures=0;
+        for(ReportPresentation.Device device:model.devices) {
+            ports+=device.ports.size();
+            if(device.hasAlerts())alerts++;
+            if(device.hasFailures())failures++;
         }
-        section(card,"overview-analysis","Nmap execution status",false,body->{
-            for(String line:lines)if(line.startsWith("Nmap services:")||line.startsWith("Nmap vulnerabilities:")) {
-                int colon=line.indexOf(':');detail(body,line.substring(0,colon),line.substring(colon+1).trim());
-            }
+        value(card,model.devices.size()+" devices · "+ports+" open TCP endpoints"
+                +(alerts>0?" · "+alerts+" with alerts":"")
+                +(failures>0?" · "+failures+" with failures":""));
+        section(card,"overview-details","Scan details",false,body->{
+            for(String line:model.summary().split("\n"))value(body,line);
         });
     }
+
     private void filters() {
         HorizontalScrollView scroll=new HorizontalScrollView(context);scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout row=new LinearLayout(context);row.setOrientation(LinearLayout.HORIZONTAL);scroll.addView(row);deviceList.addView(scroll);
@@ -176,24 +176,31 @@ final class DeviceResultsRenderer {
     }
     private String ports(SortedSet<Integer> ports) {
         if(ports.isEmpty())return "None observed";
-        StringJoiner result=new StringJoiner(", ");int count=0;
-        for(int port:ports){if(count++==8)break;result.add(String.valueOf(port));}
-        return result+(ports.size()>8?" (+"+(ports.size()-8)+" more)":"");
+        return allPorts(ports);
     }
     private void addDeviceCard(ReportPresentation.Device device) {
         LinearLayout card=panel(deviceList);
-        TextView address=value(card,device.ip);address.setTextSize(18);address.setTypeface(null,android.graphics.Typeface.BOLD);
-        if(!device.name.isEmpty())detail(card,"Name",device.name);
-        detail(card,"Probable type",device.json.optString("probableType","Unknown"));
-        detail(card,"Open TCP ports",ports(device.ports));
-        for(String url:device.webLinks())webLink(card,url);
-        detail(card,"Nmap service analysis",device.serviceStatus.label);
-        detail(card,"Vulnerability analysis",device.vulnerabilitySummary());
-        divider(card);
         Button toggle=action(card);
+        toggle.setTypeface(null,android.graphics.Typeface.BOLD);
+        toggle.setTextSize(16);
+        if(!device.name.isEmpty()) {
+            TextView name=value(card,device.name);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        }
+        TextView summary=value(card,"TCP: "+ports(device.ports));
+        summary.setTextColor(Color.LTGRAY);
+        List<String> attention=new ArrayList<>();
+        if(device.hasAlerts())attention.add("Alerts reported");
+        if(device.hasFailures())attention.add("Nmap failed");
+        if(device.serviceStatus==ReportPresentation.Status.RUNNING
+                ||device.vulnerabilityStatus==ReportPresentation.Status.RUNNING)attention.add("Nmap running");
+        if(!attention.isEmpty())value(card,String.join(" · ",attention));
         LinearLayout details=expandedBody(card);
         boolean expanded=expandedDevices.contains(device.ip);
-        if(expanded)populate(details,device);details.setVisibility(expanded?View.VISIBLE:View.GONE);deviceToggleLabel(toggle,device.ip,expanded);
+        if(expanded)populate(details,device);
+        details.setVisibility(expanded?View.VISIBLE:View.GONE);
+        deviceToggleLabel(toggle,device.ip,expanded);
         toggle.setOnClickListener(v->{
             boolean show=details.getVisibility()!=View.VISIBLE;
             if(show&&details.getChildCount()==0)populate(details,device);
@@ -202,6 +209,7 @@ final class DeviceResultsRenderer {
             deviceToggleLabel(toggle,device.ip,show);
         });
     }
+
     private void webLink(LinearLayout parent,String url) {
         Button link=action(parent);link.setText(url);
         link.setContentDescription("Open web interface: "+url);
@@ -216,7 +224,7 @@ final class DeviceResultsRenderer {
         });
     }
     private void deviceToggleLabel(Button button,String ip,boolean expanded) {
-        button.setText(expanded?"▾ Hide details":"▸ Show details");
+        button.setText((expanded?"▾ ":"▸ ")+ip);
         button.setContentDescription((expanded?"Collapse":"Expand")+" details for "+ip);
     }
     private void sectionLabel(Button button,String title,boolean expanded) {
@@ -225,7 +233,6 @@ final class DeviceResultsRenderer {
         button.setContentDescription(title+". "+(expanded?"Collapse":"Expand")+" section.");
     }
     private void section(LinearLayout parent,String key,String title,boolean initiallyOpen,java.util.function.Consumer<LinearLayout> populate) {
-        divider(parent);
         Button toggle=action(parent);
         LinearLayout body=expandedBody(parent);
         boolean open=sectionStates.getOrDefault(key,initiallyOpen);if(open)populate.accept(body);body.setVisibility(open?View.VISIBLE:View.GONE);sectionLabel(toggle,title,open);
@@ -233,7 +240,12 @@ final class DeviceResultsRenderer {
     }
     private void populate(LinearLayout parent,ReportPresentation.Device device) {
         String prefix=device.ip+":";
+        SortedSet<String> links=device.webLinks();
+        if(!links.isEmpty())section(parent,prefix+"web","Web interfaces ("+links.size()+")",false,body->{
+            for(String url:links)webLink(body,url);
+        });
         section(parent,prefix+"identity","Identification",false,body->{
+            detail(body,"IP address",device.ip);
             String[] fields={"reportedName","dnsHostname","reportedManufacturer","reportedModel","probableType","identityConfidence","suggestedManufacturer","modelConfidence","manufacturerConfidence","typeConfidence","identificationStatus","probeCoverage"};
             for(String field:fields)detail(body,ReportPresentation.label(field),device.json.optString(field));
             JSONArray macs=device.json.optJSONArray("macAddresses");
@@ -249,8 +261,8 @@ final class DeviceResultsRenderer {
             if(reasons!=null)for(int i=0;i<reasons.length();i++)detail(body,"Evidence",reasons.optString(i));
             value(body,"Names and models are reported metadata. Probable type and suggested manufacturer are inferred.");
         });
-        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",true,body->portList(body,device));
-        section(parent,prefix+"findings","Vulnerabilities and alerts",true,body->{
+        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",false,body->portList(body,device));
+        section(parent,prefix+"findings","Vulnerabilities and alerts · "+device.vulnerabilityStatus.label,false,body->{
             detail(body,"Analysis",device.vulnerabilitySummary());
             if(device.findings.isEmpty())value(body,device.vulnerabilityStatus==ReportPresentation.Status.COMPLETED?"No script findings reported. This does not prove absence of vulnerabilities.":"No vulnerability assessment completed for this device.");
             int index=0;
@@ -262,7 +274,7 @@ final class DeviceResultsRenderer {
             JSONArray analysis=device.json.optJSONArray("analysisFindings");
             if(analysis!=null)section(body,prefix+"observations","Protocol observations",false,observations->{for(int i=0;i<analysis.length();i++)value(observations,analysis.optString(i));});
         });
-        section(parent,prefix+"diagnostics","Nmap diagnostics",device.hasFailures(),body->{
+        section(parent,prefix+"diagnostics","Nmap diagnostics",false,body->{
             diagnostic(body,"Service detection",device.serviceStatus,device.serviceMessage,device.serviceOutput);
             diagnostic(body,"Vulnerability detection",device.vulnerabilityStatus,device.vulnerabilityMessage,device.vulnerabilityOutput);
             section(body,prefix+"nmap-metadata","Nmap evidence details",false,metadata->{
