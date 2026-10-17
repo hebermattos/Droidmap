@@ -4,7 +4,6 @@ import android.content.Context;
 import org.json.JSONObject;
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 /** Optional Nuclei runner. Requires a genuine Android ARM64 executable packaged as libnuclei.so. */
@@ -90,10 +89,9 @@ final class NucleiEnricher {
                     checked++;
                     String endpointStatus="incomplete";
                     StringBuilder errors=new StringBuilder();
-                    // Consume output with a strict bound and an overall process deadline.
-                    long end=System.currentTimeMillis()+30000L;
+                    // Read until Nuclei exits or the user cancels; no global execution deadline.
                     BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    while(!cancelled.getAsBoolean()&&System.currentTimeMillis()<end) {
+                    while(!cancelled.getAsBoolean()) {
                         if(!reader.ready()) {
                             if(!process.isAlive())break;
                             Thread.sleep(50);continue;
@@ -117,10 +115,10 @@ final class NucleiEnricher {
                             if(errors.length()<1200)errors.append(line,0,Math.min(line.length(),300)).append(" | ");
                         }
                     }
-                    if(cancelled.getAsBoolean()||process.isAlive()) {
+                    if(cancelled.getAsBoolean()) {
                         failed++;process.destroyForcibly();
-                        notices.add("Nuclei incomplete for "+url+" (cancelled or exceeded 30s).");
-                    } else if(process.exitValue()!=0) {
+                        notices.add("Nuclei cancelled for "+url+".");
+                    } else if(process.waitFor()!=0) {
                         failed++;
                         String detail=errors.length()==0?"no diagnostic output":DeviceEvidence.clean(errors.toString());
                         notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+"): "+detail);
