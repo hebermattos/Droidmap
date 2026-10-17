@@ -30,6 +30,20 @@ jobs:
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Package pinned ARM64 Nmap
         run: bash native-tools/build-nmap-android.sh
+      - name: Fetch optional Nuclei Android runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view nuclei-android-arm64 >/dev/null 2>&1; then
+            mkdir -p /tmp/droidmap-nuclei
+            gh release download nuclei-android-arm64 --dir /tmp/droidmap-nuclei --pattern "libnuclei.so*"
+            (cd /tmp/droidmap-nuclei && sha256sum --check libnuclei.so.sha256)
+            bash native-tools/install-nuclei-android.sh /tmp/droidmap-nuclei/libnuclei.so
+          else
+            echo "Nuclei release not published; building without Nuclei runtime."
+          fi
       - name: Test scanner
         run: bash tests/run.sh
       - name: Test, build and lint Android app
