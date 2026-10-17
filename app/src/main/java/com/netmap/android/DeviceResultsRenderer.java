@@ -30,6 +30,11 @@ final class DeviceResultsRenderer {
         if(report.isEmpty()){value(deviceList,"Discover devices on your local network. Use Options to adjust the scan.");return lastDevices;}
         try {
             ReportPresentation model=new ReportPresentation(new JSONObject(report));
+            if (model.json.optBoolean("portsOnly", false)) {
+                simplePortsTable(model);
+                resultsScroll.post(() -> resultsScroll.scrollTo(0, scrollPosition));
+                return lastDevices;
+            }
             overview(model);
             filters();int shown=0;
             for(ReportPresentation.Device device:model.devices) {
@@ -46,6 +51,57 @@ final class DeviceResultsRenderer {
         } catch(JSONException error){value(deviceList,"Summary unavailable. Open Full report in Options.");}
         resultsScroll.post(()->resultsScroll.scrollTo(0,scrollPosition));return lastDevices;
     }
+    /** The dedicated quick scan intentionally shows only IP addresses and open TCP ports. */
+    private void simplePortsTable(ReportPresentation model) {
+        TextView heading=value(deviceList,"IP addresses and open TCP ports");
+        heading.setTextSize(18);
+        heading.setTypeface(null,android.graphics.Typeface.BOLD);
+
+        LinearLayout table=panel(deviceList);
+        simpleTableRow(table,"IP address","Open TCP ports",true);
+        int openHosts=0;
+        for(ReportPresentation.Device device:model.devices) {
+            lastDevices.add(device.ip);
+            if(device.ports.isEmpty()) continue;
+            simpleTableRow(table,device.ip,allPorts(device.ports),false);
+            openHosts++;
+        }
+        if(openHosts==0) value(table,"No open TCP ports found in the selected scan.");
+        value(deviceList,openHosts+" IPs with open ports");
+    }
+
+    private String allPorts(SortedSet<Integer> ports) {
+        StringJoiner joined=new StringJoiner(", ");
+        for(int port:ports) joined.add(String.valueOf(port));
+        return joined.toString();
+    }
+
+    private void simpleTableRow(LinearLayout table,String ip,String ports,boolean header) {
+        LinearLayout row=new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(dp(8),dp(10),dp(8),dp(10));
+        TextView address=new TextView(context);
+        address.setText(ip);
+        address.setTextSize(14);
+        address.setTextColor(Color.WHITE);
+        address.setTextIsSelectable(true);
+        address.setGravity(android.view.Gravity.START);
+        TextView portList=new TextView(context);
+        portList.setText(ports);
+        portList.setTextSize(14);
+        portList.setTextColor(Color.WHITE);
+        portList.setTextIsSelectable(true);
+        portList.setGravity(android.view.Gravity.START);
+        if(header) {
+            address.setTypeface(null,android.graphics.Typeface.BOLD);
+            portList.setTypeface(null,android.graphics.Typeface.BOLD);
+        }
+        row.addView(address,new LinearLayout.LayoutParams(0,-2,1.15f));
+        row.addView(portList,new LinearLayout.LayoutParams(0,-2,1.6f));
+        table.addView(row,new LinearLayout.LayoutParams(-1,-2));
+        divider(table);
+    }
+
     private int dp(int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
     private TextView value(LinearLayout parent,String text) {
         TextView view=new TextView(context);view.setText(text);view.setTextSize(14);
