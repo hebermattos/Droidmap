@@ -77,6 +77,7 @@ final class TlsProbe implements DeviceProbe {
                 byte[] raw = context.receive(socket, 16384);
                 String reply = new String(raw, StandardCharsets.UTF_8);
                 if (reply.startsWith("HTTP/")) {
+                    context.evidence.add(host, "HTTPS tcp/" + port, "webUrl", "https://" + IpAddresses.authority(host, port) + "/");
                     context.evidence.add(
                             host,
                             "HTTPS tcp/" + port,

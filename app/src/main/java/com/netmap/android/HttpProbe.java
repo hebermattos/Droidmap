@@ -31,6 +31,7 @@ final class HttpProbe implements DeviceProbe {
                                 + "\r\nUser-Agent: Netmap-Lite/0.4\r\nConnection: close\r\n\r\n",
                         16384);
         if (response.startsWith("HTTP/")) {
+            context.evidence.add(host, "HTTP tcp/" + port, "webUrl", "http://" + IpAddresses.authority(host, port) + "/");
             Map<String, String> h = DeviceEvidence.headers(response);
             context.evidence.add(host, "HTTP tcp/" + port, "server", h.get("server"));
             context.evidence.add(
