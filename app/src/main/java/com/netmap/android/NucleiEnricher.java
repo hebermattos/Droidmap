@@ -78,7 +78,7 @@ final class NucleiEnricher {
                 Process process=null;
                 try {
                     ProcessBuilder command=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templates.getAbsolutePath(),
-                            "-jsonl","-silent","-rate-limit","5","-timeout","5","-disable-update-check")
+                            "-jsonl","-silent","-rate-limit","5","-disable-update-check")
                             .directory(runtimeHome)
                             .redirectErrorStream(true);
                     command.environment().put("HOME",runtimeHome.getAbsolutePath());
