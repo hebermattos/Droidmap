@@ -18,20 +18,22 @@ final class NucleiEnricher {
             notices.add("Nuclei unavailable: an Android-compatible ARM64 executable is not bundled.");
             return notices;
         }
-        File template=new File(context.getFilesDir(),"nuclei-templates/droidmap-git-head.yaml");
+        File templates=new File(context.getFilesDir(),"nuclei-templates");
+        String[] templateNames={"droidmap-git-head.yaml","droidmap-env-exposure.yaml","droidmap-security-headers.yaml"};
         try {
-            File parent=template.getParentFile();
-            if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("Cannot create template directory");
-            try(InputStream in=context.getAssets().open("nuclei/droidmap-git-head.yaml");
-                OutputStream out=new FileOutputStream(template,false)) {
-                byte[] bytes=new byte[4096];int n;
-                while((n=in.read(bytes))!=-1)out.write(bytes,0,n);
+            if(!templates.isDirectory()&&!templates.mkdirs())throw new IOException("Cannot create template directory");
+            for(String name:templateNames) {
+                try(InputStream in=context.getAssets().open("nuclei/"+name);
+                    OutputStream out=new FileOutputStream(new File(templates,name),false)) {
+                    byte[] bytes=new byte[4096];int n;
+                    while((n=in.read(bytes))!=-1)out.write(bytes,0,n);
+                }
             }
         } catch(IOException e) {
-            notices.add("Nuclei template unavailable: "+DeviceEvidence.clean(e.getMessage()));
+            notices.add("Nuclei templates unavailable: "+DeviceEvidence.clean(e.getMessage()));
             return notices;
         }
-        int checked=0,found=0;
+        int checked=0,found=0,completed=0,failed=0;
         for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet()) {
             if(cancelled.getAsBoolean())break;
             String host=entry.getKey();
@@ -68,8 +70,8 @@ final class NucleiEnricher {
                 String url=(https?"https":"http")+"://"+address+":"+port+"/";
                 Process process=null;
                 try {
-                    process=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",template.getAbsolutePath(),
-                            "-jsonl","-silent","-rate-limit","5","-timeout","5")
+                    process=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templates.getAbsolutePath(),
+                            "-jsonl","-silent","-rate-limit","5","-timeout","5","-disable-update-check")
                             .redirectErrorStream(true).start();
                     checked++;
                     // Consume output with a strict bound and an overall process deadline.
@@ -88,7 +90,7 @@ final class NucleiEnricher {
                             JSONObject info=result.optJSONObject("info");
                             if(info==null||result.optString("template-id").isEmpty())continue;
                             String severity=info.optString("severity","unknown");
-                            if(!Arrays.asList("medium","high","critical").contains(severity.toLowerCase(Locale.ROOT)))continue;
+                            if(severity.isEmpty())severity="unknown";
                             String title=info.optString("name",result.optString("template-id"));
                             String finding=title+" ["+severity+"]";
                             String description=info.optString("description",result.optString("matched-at",url));
@@ -97,14 +99,19 @@ final class NucleiEnricher {
                             found++;
                         } catch(org.json.JSONException ignored) { /* log lines are not findings */ }
                     }
-                    if(cancelled.getAsBoolean()||process.isAlive())process.destroyForcibly();
-                    else if(process.exitValue()!=0)notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+").");
+                    if(cancelled.getAsBoolean()||process.isAlive()) {
+                        failed++;process.destroyForcibly();
+                        notices.add("Nuclei incomplete for "+url+" (cancelled or exceeded 30s).");
+                    } else if(process.exitValue()!=0) {
+                        failed++;notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+").");
+                    } else completed++;
                 } catch(Exception error) {
+                    failed++;
                     notices.add("Nuclei "+host+": "+DeviceEvidence.clean(error.getMessage()==null?error.toString():error.getMessage()));
                 } finally {if(process!=null)process.destroyForcibly();}
             }
         }
-        notices.add("Nuclei: "+checked+" web endpoints attempted; "+found+" template matches (verification required).");
+        notices.add("Nuclei: "+checked+" web endpoints attempted; "+completed+" completed; "+failed+" failed/incomplete; "+found+" findings; "+templateNames.length+" bundled templates (verification required).");
         if(checked==0)notices.add("Nuclei skipped: no HTTP/HTTPS endpoints confirmed by HTTP probes or Nmap.");
         return notices;
     }
