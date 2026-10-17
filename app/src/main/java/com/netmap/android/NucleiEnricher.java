@@ -74,6 +74,7 @@ final class NucleiEnricher {
                             "-jsonl","-silent","-rate-limit","5","-timeout","5","-disable-update-check")
                             .redirectErrorStream(true).start();
                     checked++;
+                    String endpointStatus="incomplete";
                     // Consume output with a strict bound and an overall process deadline.
                     long end=System.currentTimeMillis()+30000L;
                     BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -104,9 +105,11 @@ final class NucleiEnricher {
                         notices.add("Nuclei incomplete for "+url+" (cancelled or exceeded 30s).");
                     } else if(process.exitValue()!=0) {
                         failed++;notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+").");
-                    } else completed++;
+                    } else {completed++;endpointStatus="completed";}
+                    evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.length+" configured templates");
                 } catch(Exception error) {
                     failed++;
+                    evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • failed");
                     notices.add("Nuclei "+host+": "+DeviceEvidence.clean(error.getMessage()==null?error.toString():error.getMessage()));
                 } finally {if(process!=null)process.destroyForcibly();}
             }
