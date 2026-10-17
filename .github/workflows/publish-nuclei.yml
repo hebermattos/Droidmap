@@ -1,0 +1,57 @@
+name: Publish Nuclei Android Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      binary_url:
+        description: 'Direct HTTPS URL to nuclei-arm64 or nuclei-arm64.tar.gz (not a GitHub webpage)'
+        required: true
+        type: string
+      sha256:
+        description: 'SHA-256 of the extracted nuclei-arm64 ELF'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and validate Android ARM64 binary
+        env:
+          BINARY_URL: ${{ inputs.binary_url }}
+          EXPECTED_SHA256: ${{ inputs.sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BINARY_URL" == https://* ]] || { echo "Only HTTPS URLs are allowed" >&2; exit 1; }
+          [[ "$EXPECTED_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "Invalid SHA-256" >&2; exit 1; }
+          curl --fail --location --show-error --silent --retry 2 --max-time 600 --output /tmp/nuclei-download "$BINARY_URL"
+          mkdir -p /tmp/nuclei-unpack
+          if [[ "$BINARY_URL" == *.tar.gz* || "$BINARY_URL" == *.tgz* ]]; then
+            tar -tzf /tmp/nuclei-download | grep -qx 'nuclei-arm64' || { echo "Expected nuclei-arm64 at archive root" >&2; exit 1; }
+            tar -xzf /tmp/nuclei-download -C /tmp/nuclei-unpack --no-same-owner --no-same-permissions nuclei-arm64
+            SOURCE=/tmp/nuclei-unpack/nuclei-arm64
+          else
+            SOURCE=/tmp/nuclei-download
+          fi
+          echo "$EXPECTED_SHA256  $SOURCE" | sha256sum --check --status
+          bash native-tools/install-nuclei-android.sh "$SOURCE"
+          cp app/src/main/jniLibs/arm64-v8a/libnuclei.so /tmp/libnuclei.so
+          (cd /tmp && sha256sum libnuclei.so > libnuclei.so.sha256)
+          cat /tmp/libnuclei.so.sha256
+      - name: Publish versioned GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="nuclei-android-arm64"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Nuclei Android ARM64 runtime" --notes "Android ARM64 executable for Droidmap. Runtime validation on device is still required." --latest=false
+          fi
+          gh release upload "$TAG" /tmp/libnuclei.so /tmp/libnuclei.so.sha256 --clobber

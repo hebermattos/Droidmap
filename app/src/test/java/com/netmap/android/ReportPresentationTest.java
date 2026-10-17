@@ -78,6 +78,18 @@ public class ReportPresentationTest {
         assertTrue(device.hasAlerts());
         assertEquals(ReportPresentation.Status.NOT_RUN,device.vulnerabilityStatus);
     }
+    @Test public void nucleiFindingsAreIncludedInVulnerabilitySummary()throws Exception {
+        JSONArray evidence=new JSONArray()
+            .put(observation("Nmap","openPort","80/tcp"))
+            .put(observation("Nmap service 80","serviceName","http"))
+            .put(observation("Nuclei","finding:80:Exposed Git HEAD metadata [medium]",
+                    "VULNERABLE — A public .git/HEAD file may expose repository metadata."));
+        ReportPresentation.Device device=new ReportPresentation(report(evidence)).devices.get(0);
+        assertTrue(device.hasAlerts());
+        assertEquals("Exposed Git HEAD metadata [medium]",device.findings.get(0).title);
+        assertEquals("port 80",device.findings.get(0).scope);
+        assertEquals("http",device.services.get(80));
+    }
     @Test public void oldEvidenceWithoutExecutionStatusRemainsUnknown()throws Exception {
         ReportPresentation model=new ReportPresentation(report(new JSONArray().put(observation("Nmap service 80","serviceName","http"))));
         assertEquals(ReportPresentation.Status.UNKNOWN,model.devices.get(0).serviceStatus);

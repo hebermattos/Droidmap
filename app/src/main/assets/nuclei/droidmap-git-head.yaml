@@ -1,0 +1,23 @@
+id: droidmap-git-head-exposure
+
+info:
+  name: Exposed Git HEAD metadata
+  author: droidmap
+  severity: medium
+  description: A public .git/HEAD file may expose repository metadata.
+  tags: exposure,git,misconfiguration
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/HEAD"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "ref: refs/"
