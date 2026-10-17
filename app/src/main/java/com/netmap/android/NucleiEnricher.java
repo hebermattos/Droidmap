@@ -37,19 +37,33 @@ final class NucleiEnricher {
             String host=entry.getKey();
             SortedMap<Integer,String> services=new TreeMap<>();
             Set<Integer> opened=new HashSet<>();
+            SortedMap<Integer,String> webEndpoints=new TreeMap<>();
             for(DeviceEvidence.Observation observation:entry.getValue()) {
                 if(observation.source.equals("Nmap")&&observation.field.equals("openPort")&&observation.value.endsWith("/tcp"))
                     try {opened.add(Integer.parseInt(observation.value.split("/")[0]));}catch(NumberFormatException ignored){}
+                if((observation.source.startsWith("HTTP tcp/")||observation.source.startsWith("HTTPS tcp/")) &&
+                        (observation.field.equals("webUrl")||observation.field.equals("server")||observation.field.equals("httpTitle")))
+                    try {
+                        int slash=observation.source.indexOf('/');
+                        int webPort=Integer.parseInt(observation.source.substring(slash+1));
+                        if(webPort>0&&webPort<=65535)
+                            webEndpoints.put(webPort,observation.source.startsWith("HTTPS")?"https":"http");
+                    }catch(NumberFormatException ignored){}
                 if(observation.source.startsWith("Nmap service ")&&observation.field.equals("serviceName"))
                     try {services.put(Integer.parseInt(observation.source.substring(13)),observation.value);}catch(NumberFormatException ignored){}
             }
             for(Map.Entry<Integer,String> service:services.entrySet()) {
+                String name=service.getValue().toLowerCase(Locale.ROOT);
+                if(!opened.contains(service.getKey()))continue;
+                if(name.equals("https")||name.equals("ssl/http")||name.equals("https-alt"))
+                    webEndpoints.putIfAbsent(service.getKey(),"https");
+                else if(name.equals("http")||name.equals("http-alt")||name.equals("http-proxy"))
+                    webEndpoints.putIfAbsent(service.getKey(),"http");
+            }
+            for(Map.Entry<Integer,String> service:webEndpoints.entrySet()) {
                 if(cancelled.getAsBoolean())break;
                 int port=service.getKey();
-                if(!opened.contains(port))continue;
-                String name=service.getValue().toLowerCase(Locale.ROOT);
-                boolean https=name.equals("https")||name.equals("ssl/http")||name.equals("https-alt");
-                if(!https&&!name.equals("http")&&!name.equals("http-alt")&&!name.equals("http-proxy"))continue;
+                boolean https=service.getValue().equals("https");
                 String address=ScanPlan.isIpv6(host)?"["+ScanPlan.stripZone(host)+"]":host;
                 String url=(https?"https":"http")+"://"+address+":"+port+"/";
                 Process process=null;
@@ -90,7 +104,8 @@ final class NucleiEnricher {
                 } finally {if(process!=null)process.destroyForcibly();}
             }
         }
-        notices.add("Nuclei: "+checked+" web endpoints checked; "+found+" template matches (verification required).");
+        notices.add("Nuclei: "+checked+" web endpoints attempted; "+found+" template matches (verification required).");
+        if(checked==0)notices.add("Nuclei skipped: no HTTP/HTTPS endpoints confirmed by HTTP probes or Nmap.");
         return notices;
     }
 }
