@@ -214,58 +214,90 @@ public final class MainActivity extends Activity {
 
     private void showOptions(android.view.View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
-        boolean idle = !scanRunning;
-        menu.getMenu().add(0, 1, 0, "Scan settings").setEnabled(idle);
-        menu.getMenu().add(0, 2, 1, "Use Wi-Fi network").setEnabled(idle);
-        menu.getMenu().add(0, 7, 2, "Scan all Wi-Fi IPs").setEnabled(idle);
-        menu.getMenu().add(0, 8, 2, "Scan a single IP").setEnabled(idle);
-        menu.getMenu().add(0, 3, 2, "History").setEnabled(idle);
-        menu.getMenu()
-                .add(0, 4, 3, "Reanalyze a device")
-                .setEnabled(idle && !lastDevices.isEmpty());
-        menu.getMenu().add(0, 5, 4, "Full report").setEnabled(!resultText.isEmpty());
-        menu.getMenu().add(0, 6, 5, "Export JSON").setEnabled(idle && !report.isEmpty());
-        menu.setOnMenuItemClickListener(
-                item -> {
-                    switch (item.getItemId()) {
-                        case 1:
-                            showSettings();
-                            break;
-                        case 2:
-                            suggestWifi();
-                            break;
-                        case 3:
-                            showHistory();
-                            break;
-                        case 8:
-                            selectSingleIp();
-                            break;
-                        case 7:
-                            selectAllWifiIps();
-                            break;
-                        case 4:
-                            chooseDevice();
-                            break;
-                        case 5:
-                            showReadableReport();
-                            break;
-                        case 6:
-                            exporter.capture(
-                                    report,
-                                    displayedSnapshot == null ? 0 : displayedSnapshot.runId);
-                            Intent intent =
-                                    new Intent(Intent.ACTION_CREATE_DOCUMENT)
-                                            .setType("application/json")
-                                            .addCategory(Intent.CATEGORY_OPENABLE);
-                            intent.putExtra(Intent.EXTRA_TITLE, "droidmap-scan.json");
-                            startActivityForResult(intent, 10);
-                            break;
-                        default:
-                            return false;
-                    }
-                    return true;
-                });
+        menu.getMenu().add(0, 1, 0, "Scan targets");
+        menu.getMenu().add(0, 2, 1, "Scan settings").setEnabled(!scanRunning);
+        menu.getMenu().add(0, 3, 2, "Nmap settings").setEnabled(!scanRunning);
+        menu.getMenu().add(0, 4, 3, "History & reanalysis");
+        menu.getMenu().add(0, 5, 4, "Reports & export");
+        menu.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case 1: showTargetOptions(); break;
+                case 2: showSettings(); break;
+                case 3: showNmapSettings(); break;
+                case 4: showHistoryOptions(); break;
+                case 5: showReportOptions(); break;
+                default: return false;
+            }
+            return true;
+        });
         menu.show();
+    }
+
+    private void showChoiceDialog(String title, String[] labels, boolean[] enabled,
+                                  java.util.function.IntConsumer action) {
+        String[] display = labels.clone();
+        for (int i = 0; i < display.length; i++) {
+            if (!enabled[i]) display[i] += " (unavailable)";
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setItems(display, (dialog, position) -> {
+                    if (enabled[position]) action.accept(position);
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void showTargetOptions() {
+        boolean idle = !scanRunning;
+        showChoiceDialog("Scan targets",
+                new String[] {"Scan a single IP", "Use Wi-Fi network", "Scan all Wi-Fi IPs"},
+                new boolean[] {idle, idle, idle},
+                position -> {
+                    switch (position) {
+                        case 0: selectSingleIp(); break;
+                        case 1: suggestWifi(); break;
+                        case 2: selectAllWifiIps(); break;
+                    }
+                });
+    }
+
+    private void showHistoryOptions() {
+        showChoiceDialog("History & reanalysis",
+                new String[] {"History", "Reanalyze a device"},
+                new boolean[] {!scanRunning, !scanRunning && !lastDevices.isEmpty()},
+                position -> {
+                    if (position == 0) showHistory();
+                    else chooseDevice();
+                });
+    }
+
+    private void showReportOptions() {
+        showChoiceDialog("Reports & export",
+                new String[] {"Full report", "Export JSON"},
+                new boolean[] {!resultText.isEmpty(), !scanRunning && !report.isEmpty()},
+                position -> {
+                    if (position == 0) showReadableReport();
+                    else exportJson();
+                });
+    }
+
+    private void exportJson() {
+        exporter.capture(report, displayedSnapshot == null ? 0 : displayedSnapshot.runId);
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .setType("application/json")
+                .addCategory(Intent.CATEGORY_OPENABLE);
+        intent.putExtra(Intent.EXTRA_TITLE, "droidmap-scan.json");
+        startActivityForResult(intent, 10);
+    }
+
+    private void showNmapSettings() {
+        if (scanRunning) return;
+        ScanSettingsDialog.showNmap(this, settings, updated -> {
+            settings = updated;
+            settingsStore.save(updated);
+            updateSettingsSummary();
+        });
     }
 
     private void selectSingleIp() {
