@@ -494,7 +494,26 @@ public final class MainActivity extends Activity {
         begin("discovery");
     }
 
+    private boolean hasDiscoveryResults() {
+        try {
+            org.json.JSONObject previous = new org.json.JSONObject(report);
+            return "discovery".equals(previous.optString("tool"))
+                    && !previous.optBoolean("cancelled", true)
+                    && previous.optBoolean("tcpScanComplete", false)
+                    && target.getText().toString().trim().equals(previous.optString("target"))
+                    && previous.optJSONArray("checks") != null;
+        } catch (org.json.JSONException error) { return false; }
+    }
+
     private void begin(String tool) {
+        if (("nmap".equals(tool) || "nuclei".equals(tool)) && !hasDiscoveryResults()) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Discovery required")
+                    .setMessage("Run Discover devices first. Tools analyze verified-open TCP ports from that discovery.")
+                    .setPositiveButton("Run Discovery", (dialog, which) -> begin("discovery"))
+                    .setNegativeButton("Cancel", null).show();
+            return;
+        }
         boolean portsOnly = "ports".equals(tool);
         String targetValue = target.getText().toString().trim();
         try {
@@ -512,6 +531,7 @@ public final class MainActivity extends Activity {
                 new Intent(this, ScanService.class)
                         .setAction(ScanService.START)
                         .putExtra("target", targetValue)
+                        .putExtra("tool", tool)
                         .putExtra("ports", settings.ports)
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
