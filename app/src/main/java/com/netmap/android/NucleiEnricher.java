@@ -33,6 +33,14 @@ final class NucleiEnricher {
             notices.add("Nuclei templates unavailable: "+DeviceEvidence.clean(e.getMessage()));
             return notices;
         }
+        // Nuclei writes configuration and cache files; Android's nativeLibraryDir is read-only.
+        File runtimeHome=new File(context.getFilesDir(),"nuclei-home");
+        File runtimeCache=new File(context.getCacheDir(),"nuclei-cache");
+        if((!runtimeHome.isDirectory()&&!runtimeHome.mkdirs()) ||
+           (!runtimeCache.isDirectory()&&!runtimeCache.mkdirs())) {
+            notices.add("Nuclei unavailable: cannot initialize writable runtime directories.");
+            return notices;
+        }
         int checked=0,found=0,completed=0,failed=0;
         for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet()) {
             if(cancelled.getAsBoolean())break;
@@ -70,9 +78,15 @@ final class NucleiEnricher {
                 String url=(https?"https":"http")+"://"+address+":"+port+"/";
                 Process process=null;
                 try {
-                    process=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templates.getAbsolutePath(),
+                    ProcessBuilder command=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templates.getAbsolutePath(),
                             "-jsonl","-silent","-rate-limit","5","-timeout","5","-disable-update-check")
-                            .redirectErrorStream(true).start();
+                            .directory(runtimeHome)
+                            .redirectErrorStream(true);
+                    command.environment().put("HOME",runtimeHome.getAbsolutePath());
+                    command.environment().put("XDG_CONFIG_HOME",new File(runtimeHome,".config").getAbsolutePath());
+                    command.environment().put("XDG_CACHE_HOME",runtimeCache.getAbsolutePath());
+                    command.environment().put("TMPDIR",context.getCacheDir().getAbsolutePath());
+                    process=command.start();
                     checked++;
                     String endpointStatus="incomplete";
                     StringBuilder errors=new StringBuilder();
