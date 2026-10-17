@@ -36,7 +36,7 @@ jobs:
           [[ -x "$SDKMANAGER" ]] || { echo "sdkmanager not available" >&2; exit 1; }
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install 'ndk;27.2.12479018'
-          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang'
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang"
       - name: Cross-compile for Android ARM64
         shell: bash
         run: |
