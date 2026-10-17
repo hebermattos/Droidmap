@@ -50,7 +50,8 @@ jobs:
             (cd /tmp/droidmap-nuclei && sha256sum --check libnuclei.so.sha256)
             bash native-tools/install-nuclei-android.sh /tmp/droidmap-nuclei/libnuclei.so
           else
-            echo "Nuclei release not published; building without Nuclei runtime."
+            echo "Nuclei release not published; cannot create complete APK." >&2
+            exit 1
           fi
       - name: Test scanner
         run: bash tests/run.sh
@@ -58,6 +59,11 @@ jobs:
         run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug -PsideBySideInstall=true --no-daemon
       - name: Verify packaged Nmap runtime data
         run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify Nuclei packaged in APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libnuclei.so"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
