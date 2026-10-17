@@ -1,0 +1,21 @@
+id: droidmap-security-headers
+info:
+  name: Missing HTTP security headers
+  author: droidmap
+  severity: info
+  description: The HTTP response does not contain selected recommended security headers. This is configuration guidance, not proof of exploitability.
+  tags: misconfig,headers
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: dsl
+        dsl:
+          - "!contains(tolower(all_headers), 'x-content-type-options:')"
+          - "!contains(tolower(all_headers), 'content-security-policy:')"
+        condition: and

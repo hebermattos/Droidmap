@@ -324,6 +324,16 @@ final class DeviceResultsRenderer {
             JSONArray analysis=device.json.optJSONArray("analysisFindings");
             if(analysis!=null)section(body,prefix+"observations","Protocol observations",false,observations->{for(int i=0;i<analysis.length();i++)value(observations,analysis.optString(i));});
         });
+        section(parent,prefix+"nuclei","Nuclei endpoint diagnostics",false,body->{
+            boolean any=false;
+            for(JSONObject item:device.evidence) {
+                if(!item.optString("source").equals("Nuclei")||!item.optString("field").startsWith("endpoint:"))continue;
+                any=true;
+                detail(body,"TCP port "+item.optString("field").substring("endpoint:".length()),item.optString("value"));
+            }
+            if(!any)value(body,"No Nuclei endpoint execution recorded.");
+            value(body,"Configured templates are not a count of successful individual template checks.");
+        });
         section(parent,prefix+"diagnostics","Nmap diagnostics",false,body->{
             diagnostic(body,"Service detection",device.serviceStatus,device.serviceMessage,device.serviceOutput);
             diagnostic(body,"Vulnerability detection",device.vulnerabilityStatus,device.vulnerabilityMessage,device.vulnerabilityOutput);
