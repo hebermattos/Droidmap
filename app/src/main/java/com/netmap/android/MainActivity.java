@@ -218,7 +218,6 @@ public final class MainActivity extends Activity {
         menu.getMenu().add(0, 3, 2, "Nmap settings").setEnabled(!scanRunning);
         menu.getMenu().add(0, 4, 3, "History & reanalysis");
         menu.getMenu().add(0, 5, 4, "Reports & export");
-        menu.getMenu().add(0, 6, 5, "Nuclei vulnerability scan").setEnabled(!scanRunning);
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 1: showTargetOptions(); break;
@@ -226,7 +225,6 @@ public final class MainActivity extends Activity {
                 case 3: showNmapSettings(); break;
                 case 4: showHistoryOptions(); break;
                 case 5: showReportOptions(); break;
-                case 6: showNucleiSettings(); break;
                 default: return false;
             }
             return true;
@@ -290,18 +288,6 @@ public final class MainActivity extends Activity {
                 .addCategory(Intent.CATEGORY_OPENABLE);
         intent.putExtra(Intent.EXTRA_TITLE, "droidmap-scan.json");
         startActivityForResult(intent, 10);
-    }
-
-    private void showNucleiSettings() {
-        boolean enabled=getPreferences(MODE_PRIVATE).getBoolean("nucleiEnabled",false);
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Nuclei vulnerability scan")
-                .setSingleChoiceItems(new String[]{"Disabled","Enabled (requires packaged Android ARM64 Nuclei binary)"},enabled?1:0,
-                        (dialog,choice)->{
-                            getPreferences(MODE_PRIVATE).edit().putBoolean("nucleiEnabled",choice==1).apply();
-                            dialog.dismiss();
-                        })
-                .setNegativeButton("Cancel",null).show();
     }
 
     private void showNmapSettings() {
