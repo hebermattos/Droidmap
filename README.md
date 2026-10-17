@@ -6,7 +6,7 @@
 4. **Scan TCP ports** is a separate lightweight action. It does not serve as the required device Discovery baseline.
 5. **Cancel running scan** cancels the active action. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
 
-Only one action can run at a time. Discovery results are retained separately, so Nmap and Nuclei can both use the same completed discovery without repeating it. An open port does not prove a vulnerability.
+Only one action can run at a time. The screen is cleared whenever a new scan starts. Discovery results are retained internally for Nmap and Nuclei during the current app session, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
 
 ## Code ownership
 
