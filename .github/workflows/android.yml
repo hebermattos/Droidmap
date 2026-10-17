@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: droidmap-${{ github.ref }}
@@ -53,6 +53,22 @@ jobs:
             echo "Nuclei release not published; cannot create complete APK." >&2
             exit 1
           fi
+      - name: Set up fixed test signing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=debug-signing-test
+          KEYSTORE="$RUNNER_TEMP/debug-test.jks"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release download "$TAG" --pattern debug-test.jks --dir "$RUNNER_TEMP"
+          else
+            keytool -genkeypair -keystore "$KEYSTORE" -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Droidmap Test,O=Debug,C=BR" -noprompt
+            gh release create "$TAG" "$KEYSTORE#debug-test.jks" --title "PUBLIC TEST signing key" --notes "INSECURE TEST KEY; never use for production." --latest=false
+          fi
+          test -s "$KEYSTORE"
+          echo "NETMAP_DEBUG_KEYSTORE=$KEYSTORE" >> "$GITHUB_ENV"
       - name: Test scanner
         run: bash tests/run.sh
       - name: Test, build and lint Android app
