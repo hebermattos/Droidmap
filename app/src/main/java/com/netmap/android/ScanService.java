@@ -191,6 +191,8 @@ public final class ScanService extends Service {
                 }
             }
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
+            Set<String> verifiedOpen=new HashSet<>();
+            for(TcpScanner.Result item:open)verifiedOpen.add(item.host+":"+item.port);
             org.json.JSONArray devices=data.optJSONArray("devices");
             if(devices!=null)for(int i=0;i<devices.length();i++){
                 JSONObject device=devices.optJSONObject(i);
@@ -200,8 +202,15 @@ public final class ScanService extends Service {
                 if(observations==null)continue;
                 for(int j=0;j<observations.length();j++){
                     JSONObject observation=observations.optJSONObject(j);
-                    if(observation!=null)evidence.add(host,observation.optString("source"),
-                            observation.optString("field"),observation.optString("value"));
+                    if(observation==null)continue;
+                    String source=observation.optString("source");
+                    if(source.startsWith("HTTP tcp/")||source.startsWith("HTTPS tcp/")) {
+                        try {
+                            int port=Integer.parseInt(source.substring(source.indexOf('/')+1));
+                            if(!verifiedOpen.contains(host+":"+port))continue;
+                        }catch(NumberFormatException error){continue;}
+                    }
+                    evidence.add(host,source,observation.optString("field"),observation.optString("value"));
                 }
             }
             List<String> notices;
