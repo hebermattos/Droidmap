@@ -61,8 +61,11 @@ final class NucleiEnricher {
                     // Consume output with a strict bound and an overall process deadline.
                     long end=System.currentTimeMillis()+30000L;
                     BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    while(!cancelled.getAsBoolean()&&System.currentTimeMillis()<end&&process.isAlive()) {
-                        if(!reader.ready()) {Thread.sleep(50);continue;}
+                    while(!cancelled.getAsBoolean()&&System.currentTimeMillis()<end) {
+                        if(!reader.ready()) {
+                            if(!process.isAlive())break;
+                            Thread.sleep(50);continue;
+                        }
                         String line=reader.readLine();
                         if(line==null)break;
                         if(line.length()>16384)continue;
