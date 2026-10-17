@@ -1,0 +1,23 @@
+id: droidmap-env-exposure
+info:
+  name: Exposed environment configuration
+  author: droidmap
+  severity: high
+  description: Environment configuration files accessible over HTTP may expose application secrets.
+  tags: exposure,config
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        part: body
+        words:
+          - "APP_KEY="
+          - "DB_PASSWORD="
+          - "DATABASE_URL="
+        condition: or
