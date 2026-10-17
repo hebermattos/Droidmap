@@ -24,9 +24,19 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: false
-      - uses: android-actions/setup-android@v3
-      - name: Install Android NDK
-        run: sdkmanager 'ndk;27.2.12479018'
+      - name: Install Android NDK using runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?GitHub Ubuntu runner Android SDK is missing}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -1)"
+          fi
+          [[ -x "$SDKMANAGER" ]] || { echo "sdkmanager not available" >&2; exit 1; }
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'ndk;27.2.12479018'
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang'
       - name: Cross-compile for Android ARM64
         shell: bash
         run: |
