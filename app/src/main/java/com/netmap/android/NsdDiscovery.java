@@ -24,25 +24,57 @@ public final class NsdDiscovery {
     private final List<String> notices=new ArrayList<>();
     private final ScanPlan.Mode mode;
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
-    private final Queue<String> types=new ArrayDeque<>();
+    private final Deque<String> types=new ArrayDeque<>();
+    private final Set<String> knownTypes=new HashSet<>();
+    private final MdnsTypeDiscovery typeDiscovery;
+    private Thread typeWorker;
+    private long discoveryDeadline;
+    private static final int BROWSE_SLICE_MS=1200;
     private volatile boolean running;
     private boolean resolving;
     private volatile boolean incomplete;
     public boolean isPartial() { return incomplete || !notices.isEmpty(); }
-    private final Runnable rotate=()-> { for(NsdManager.DiscoveryListener listener:new ArrayList<>(listeners)) stopOne(listener); };
+    private final Runnable rotate=this::rotateBrowsers;
+    private void rotateBrowsers() {
+        if(!running) return;
+        if(types.isEmpty()) { handler.postDelayed(rotate,BROWSE_SLICE_MS); return; }
+        for(NsdManager.DiscoveryListener listener:new ArrayList<>(listeners)) stopOne(listener);
+        fillBrowsers();
+        handler.postDelayed(rotate,BROWSE_SLICE_MS);
+    }
+    private void fillBrowsers() {
+        while(running && listeners.size()<6 && !types.isEmpty()) discoverNext();
+    }
+    private void addType(String type) {
+        if(!running || knownTypes.contains(type)) return;
+        if(knownTypes.size()>=MdnsServiceTypes.MAX_TYPES) {
+            incomplete=true;
+            if(notices.size()<4) notices.add("mDNS service-type limit reached; evidence is partial.");
+            return;
+        }
+        knownTypes.add(type);
+        types.addFirst(type);
+        fillBrowsers();
+    }
     private final Runnable deadline=this::stop;
     public NsdDiscovery(Context context,DeviceEvidence evidence,ScanPlan.Mode mode,WifiIpv6Scope wifi) {
-        this.wifi=wifi;
+        this.wifi=wifi; typeDiscovery=new MdnsTypeDiscovery(wifi);
         manager=(NsdManager)context.getSystemService(Context.NSD_SERVICE); this.evidence=evidence; this.mode=mode;
     }
     public void start() {
         running=true;
         if(manager==null) { notices.add("mDNS discovery unavailable"); running=false; finished.countDown(); return; }
+        discoveryDeadline=android.os.SystemClock.elapsedRealtime()+mode.discoverySeconds*1000L;
         handler.postDelayed(deadline,mode.discoverySeconds*1000L);
         types.addAll(Arrays.asList("_http._tcp.","_https._tcp.","_googlecast._tcp.","_airplay._tcp.","_raop._tcp.","_ipp._tcp.","_ipps._tcp.","_printer._tcp.","_smb._tcp.","_workstation._tcp.","_androidtvremote2._tcp.","_adb-tls-connect._tcp.","_hap._tcp.","_spotify-connect._tcp.","_daap._tcp.","_mqtt._tcp.","_rfb._tcp.","_scanner._tcp.","_rtsp._tcp."));
-        int batches=(types.size()+5)/6;
-        for(int i=0;i<6;i++) discoverNext();
-        for(int batch=1;batch<batches;batch++) handler.postDelayed(rotate,mode.discoverySeconds*1000L*batch/batches);
+        knownTypes.addAll(types);
+        fillBrowsers();
+        handler.postDelayed(rotate,BROWSE_SLICE_MS);
+        typeWorker=new Thread(()->typeDiscovery.discover(
+                type->handler.post(()->addType(type)),
+                notice->handler.post(()->{if(running && notices.size()<4) notices.add(notice);})),
+                "mdns-service-types");
+        typeWorker.start();
     }
     private void discoverNext() {
         if(!running || types.isEmpty()) return;
@@ -50,14 +82,19 @@ public final class NsdDiscovery {
             NsdManager.DiscoveryListener listener=new NsdManager.DiscoveryListener() {
                 public void onDiscoveryStarted(String type) { handler.post(() -> { if(!running) stopOne(this); }); }
                 public void onServiceFound(NsdServiceInfo info) { handler.post(() -> {
-                    if(!running || seen.size()>=128 || !seen.add(info.getServiceType()+"/"+info.getServiceName()+"/"+(Build.VERSION.SDK_INT>=33?info.getNetwork():""))) return;
+                    if(!running) return;
+                    if(seen.size()>=128) { incomplete=true; return; }
+                    if(!seen.add(info.getServiceType()+"/"+info.getServiceName()+"/"+(Build.VERSION.SDK_INT>=33?info.getNetwork():""))) return;
                     if(Build.VERSION.SDK_INT>=34) trackInfo(info);
                     else {pending.add(info);resolveNext();}
                 }); }
                 public void onServiceLost(NsdServiceInfo info) { }
-                public void onDiscoveryStopped(String type) { handler.post(()-> {listeners.remove(this);discoverNext();}); }
-                public void onStartDiscoveryFailed(String type,int code) { handler.post(() -> { if(running && notices.size()<4) notices.add("mDNS " + type + " unavailable ("+code+")"); listeners.remove(this);discoverNext(); }); }
-                public void onStopDiscoveryFailed(String type,int code) { }
+                public void onDiscoveryStopped(String type) { handler.post(()-> {listeners.remove(this);fillBrowsers();}); }
+                public void onStartDiscoveryFailed(String type,int code) { handler.post(() -> { if(running && notices.size()<4) notices.add("mDNS " + type + " unavailable ("+code+")"); listeners.remove(this);fillBrowsers(); }); }
+                public void onStopDiscoveryFailed(String type,int code) { handler.post(()-> {
+                    incomplete=true;
+                    if(running && notices.size()<4) notices.add("mDNS browser could not stop ("+code+")");
+                }); }
             };
             listeners.add(listener);
             try {
@@ -65,7 +102,7 @@ public final class NsdDiscovery {
                     manager.discoverServices(type,NsdManager.PROTOCOL_DNS_SD,wifi.network,command->handler.post(command),listener);
                 else manager.discoverServices(type,NsdManager.PROTOCOL_DNS_SD,listener);
             }
-            catch(RuntimeException e) { listeners.remove(listener); if(notices.size()<4) notices.add("mDNS " + type + " unavailable"); discoverNext(); }
+            catch(RuntimeException e) { listeners.remove(listener); if(notices.size()<4) notices.add("mDNS " + type + " unavailable"); }
     }
     private void resolveNext() {
         if(!running || resolving || pending.isEmpty()) return;
@@ -135,6 +172,12 @@ public final class NsdDiscovery {
     }
     private void stopOne(NsdManager.DiscoveryListener listener) { try { manager.stopServiceDiscovery(listener); } catch(RuntimeException ignored) { } }
     public void stop() {
+        if(running && (!types.isEmpty() || android.os.SystemClock.elapsedRealtime()<discoveryDeadline)) {
+            incomplete=true;
+            if(notices.size()<4) notices.add("mDNS discovery ended before all service types were browsed; evidence is partial.");
+        }
+        typeDiscovery.stop();
+        if(typeWorker!=null) typeWorker.interrupt();
         if(running && (resolving || !pending.isEmpty())) { incomplete=true; if(notices.size()<4) notices.add("mDNS resolution budget reached; evidence is partial."); }
         running=false; handler.removeCallbacks(deadline); handler.removeCallbacks(rotate); pending.clear();types.clear();
         if(manager!=null) for(NsdManager.DiscoveryListener listener:new ArrayList<>(listeners)) stopOne(listener);
