@@ -75,6 +75,7 @@ final class NucleiEnricher {
                             .redirectErrorStream(true).start();
                     checked++;
                     String endpointStatus="incomplete";
+                    StringBuilder errors=new StringBuilder();
                     // Consume output with a strict bound and an overall process deadline.
                     long end=System.currentTimeMillis()+30000L;
                     BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -98,13 +99,17 @@ final class NucleiEnricher {
                             evidence.add(host,"Nuclei","finding:"+port+":"+DeviceEvidence.clean(finding),
                                     "VULNERABLE — "+DeviceEvidence.clean(description));
                             found++;
-                        } catch(org.json.JSONException ignored) { /* log lines are not findings */ }
+                        } catch(org.json.JSONException ignored) {
+                            if(errors.length()<1200)errors.append(line,0,Math.min(line.length(),300)).append(" | ");
+                        }
                     }
                     if(cancelled.getAsBoolean()||process.isAlive()) {
                         failed++;process.destroyForcibly();
                         notices.add("Nuclei incomplete for "+url+" (cancelled or exceeded 30s).");
                     } else if(process.exitValue()!=0) {
-                        failed++;notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+").");
+                        failed++;
+                        String detail=errors.length()==0?"no diagnostic output":DeviceEvidence.clean(errors.toString());
+                        notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+"): "+detail);
                     } else {completed++;endpointStatus="completed";}
                     evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.length+" configured templates");
                 } catch(Exception error) {
