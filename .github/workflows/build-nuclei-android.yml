@@ -43,7 +43,7 @@ jobs:
           readelf -h "$GITHUB_WORKSPACE/dist/libnuclei.so" | grep -E 'Class:|Machine:|Type:'
           readelf -l "$GITHUB_WORKSPACE/dist/libnuclei.so" | grep '/system/bin/linker64'
           bash "$GITHUB_WORKSPACE/native-tools/install-nuclei-android.sh" "$GITHUB_WORKSPACE/dist/libnuclei.so"
-          sha256sum "$GITHUB_WORKSPACE/dist/libnuclei.so" > "$GITHUB_WORKSPACE/dist/libnuclei.so.sha256"
+          (cd "$GITHUB_WORKSPACE/dist" && sha256sum libnuclei.so > libnuclei.so.sha256)
           tar -czf "$GITHUB_WORKSPACE/dist/nuclei-arm64.tar.gz" -C "$GITHUB_WORKSPACE/dist" libnuclei.so
       - name: Save compiled binary
         uses: actions/upload-artifact@v4
