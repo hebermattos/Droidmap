@@ -90,6 +90,17 @@ public class ReportPresentationTest {
         assertEquals("port 80",device.findings.get(0).scope);
         assertEquals("http",device.services.get(80));
     }
+    @Test public void nucleiInformationalFindingAndEndpointDiagnosticsRemainAvailable()throws Exception {
+        JSONArray evidence=new JSONArray()
+            .put(observation("Nuclei","endpoint:8080","http • completed • 3 configured templates"))
+            .put(observation("Nuclei","finding:8080:Missing HTTP security headers [info]",
+                    "VULNERABLE — Security headers are missing"));
+        ReportPresentation.Device device=new ReportPresentation(report(evidence)).devices.get(0);
+        assertEquals(1,device.findings.size());
+        assertEquals("port 8080",device.findings.get(0).scope);
+        assertTrue(device.evidence.stream().anyMatch(x->
+                x.optString("field").equals("endpoint:8080")));
+    }
     @Test public void oldEvidenceWithoutExecutionStatusRemainsUnknown()throws Exception {
         ReportPresentation model=new ReportPresentation(report(new JSONArray().put(observation("Nmap service 80","serviceName","http"))));
         assertEquals(ReportPresentation.Status.UNKNOWN,model.devices.get(0).serviceStatus);
