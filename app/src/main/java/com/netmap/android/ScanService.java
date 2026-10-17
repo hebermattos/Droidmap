@@ -169,7 +169,7 @@ public final class ScanService extends Service {
     /** Uses the completed Discovery snapshot instead of rescanning the network. */
     private void analyzeDiscovery(ScanPlan plan,String target,long started,TcpScanner controller) {
         try {
-            ScanSnapshot saved=store.load();
+            ScanSnapshot saved=new LatestScanStore(new File(getFilesDir(),"discovery-scan.json")).load();
             if(saved==null || saved.report.isEmpty()) throw new IllegalStateException("Run Discovery first.");
             JSONObject data=new JSONObject(saved.report);
             if(!"discovery".equals(data.optString("tool"))
@@ -222,6 +222,7 @@ public final class ScanService extends Service {
             for(String notice:notices) messages.put(notice);
             data.put("identificationNotices",messages);
             data.put("tool",tool);
+            data.put("discoveryReady",true);
             data.put("nmapEnabled","nmap".equals(tool));
             data.put("nucleiEnabled","nuclei".equals(tool));
             data.put("finishedAtEpochMs",System.currentTimeMillis());
@@ -248,12 +249,17 @@ public final class ScanService extends Service {
             parsed.put("nucleiEnabled",nucleiEnabled);
             parsed.put("portsOnly",portsOnly);
             parsed.put("tool",tool);
+            parsed.put("discoveryReady","discovery".equals(tool) && !cancelled && !partial);
             parsed.put("nmapCustomArgs",nmapArgs);
             parsed.put("nmapVersionIntensity",nmapVersionIntensity);
             String text=new ReportPresentation(parsed).fullText();
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
                 cancelled?"Cancelled — partial results":portsOnly?"IP and port scan completed":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
-            try {store.save(result);} catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
+            try {
+                store.save(result);
+                if("discovery".equals(tool) && !cancelled && !partial)
+                    new LatestScanStore(new File(getFilesDir(),"discovery-scan.json")).save(result);
+            } catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
             ScanSnapshot complete=result; main.post(() -> finish(complete));
         } catch(Exception e) {finishError(e);}
     }
