@@ -11,7 +11,7 @@ final class ReportPresentation {
         Status(String label){this.label=label;}
     }
     enum Filter {
-        ALL("All"), OPEN("Open ports"), ALERTS("Alerts"), FAILURES("Failures");
+        ALL("All"), ALERTS("Vulnerabilities"), FAILURES("Failures");
         final String label;
         Filter(String label){this.label=label;}
     }
@@ -111,7 +111,7 @@ final class ReportPresentation {
         }
         boolean hasAlerts(){for(Finding finding:findings)if(finding.alert)return true;return false;}
         boolean hasFailures(){return serviceStatus==Status.FAILED||vulnerabilityStatus==Status.FAILED;}
-        boolean matches(Filter filter){return filter==Filter.ALL||filter==Filter.OPEN&&!ports.isEmpty()||filter==Filter.ALERTS&&hasAlerts()||filter==Filter.FAILURES&&hasFailures();}
+        boolean matches(Filter filter){return filter==Filter.ALL||filter==Filter.ALERTS&&hasAlerts()||filter==Filter.FAILURES&&hasFailures();}
         String vulnerabilitySummary() {
             if(vulnerabilityStatus!=Status.COMPLETED)return vulnerabilityStatus.label;
             if(findings.stream().anyMatch(f->f.alert))return "Alerts reported";
