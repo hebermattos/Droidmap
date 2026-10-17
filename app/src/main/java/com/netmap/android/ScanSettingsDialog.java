@@ -53,17 +53,6 @@ final class ScanSettingsDialog {
         adaptive.setText("Adaptive scan (prioritize responders)");
         adaptive.setChecked(current.adaptive);
         form.addView(adaptive);
-        CheckBox nmap = new CheckBox(context);
-        nmap.setText("Nmap service detection");
-        nmap.setChecked(current.nmap);
-        form.addView(nmap);
-        EditText nmapArgs = field(context, form, "Nmap global parameters (optional)", current.nmapArgs, android.view.View.generateViewId());
-        nmapArgs.setHint("-n --reason -T3 --host-timeout 20s");
-        nmapArgs.setEnabled(nmap.isChecked());
-        nmap.setOnCheckedChangeListener((button, checked) -> nmapArgs.setEnabled(checked));
-        TextView nmapHelp = new TextView(context);
-        nmapHelp.setText("Custom Nmap arguments. They are passed directly as process arguments; Droidmap does not invoke a shell.");
-        form.addView(nmapHelp);
         TextView help = new TextView(context);
         help.setText(
                 "Complete mode uses more default ports, retries and longer device discovery. Custom"
@@ -124,12 +113,44 @@ final class ScanSettingsDialog {
                                                                     ? ScanPlan.Mode.FAST
                                                                     : ScanPlan.Mode.COMPLETE,
                                                             adaptive.isChecked(),
-                                                            nmap.isChecked(),
-                                                            nmapArgs.getText().toString());
+                                                            current.nmap,
+                                                            current.nmapArgs);
                                             onSave.accept(updated);
                                             dialog.dismiss();
                                         }));
         dialog.show();
+    }
+
+    static void showNmap(
+            android.content.Context context,
+            ScanSettings current,
+            java.util.function.Consumer<ScanSettings> onSave) {
+        LinearLayout form = new LinearLayout(context);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (20 * context.getResources().getDisplayMetrics().density);
+        form.setPadding(pad, 0, pad, 0);
+        CheckBox nmap = new CheckBox(context);
+        nmap.setText("Enable Nmap service detection");
+        nmap.setChecked(current.nmap);
+        form.addView(nmap);
+        EditText args = field(context, form, "Nmap global parameters (optional)",
+                current.nmapArgs, android.view.View.generateViewId());
+        args.setHint("-n --reason -T3 --host-timeout 20s");
+        args.setEnabled(nmap.isChecked());
+        nmap.setOnCheckedChangeListener((button, checked) -> args.setEnabled(checked));
+        TextView help = new TextView(context);
+        help.setText("Custom arguments are passed directly to Nmap without a shell.");
+        form.addView(help);
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(form);
+        new android.app.AlertDialog.Builder(context)
+                .setTitle("Nmap settings")
+                .setView(scroll)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Save", (dialog, which) -> onSave.accept(
+                        new ScanSettings(current.ports, current.timeoutMs, current.mode,
+                                current.adaptive, nmap.isChecked(), args.getText().toString())))
+                .show();
     }
 
     private static EditText field(
