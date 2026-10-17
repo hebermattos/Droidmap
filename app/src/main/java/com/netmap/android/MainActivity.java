@@ -497,7 +497,7 @@ public final class MainActivity extends Activity {
     private boolean hasDiscoveryResults() {
         try {
             org.json.JSONObject previous = new org.json.JSONObject(report);
-            return "discovery".equals(previous.optString("tool"))
+            return previous.optBoolean("discoveryReady", false)
                     && !previous.optBoolean("cancelled", true)
                     && previous.optBoolean("tcpScanComplete", false)
                     && target.getText().toString().trim().equals(previous.optString("target"))
