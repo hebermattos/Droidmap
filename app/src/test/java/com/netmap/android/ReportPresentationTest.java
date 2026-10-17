@@ -58,7 +58,7 @@ public class ReportPresentationTest {
         JSONObject json=report(new JSONArray().put(observation("Nmap","scanStatus","Failed: could not locate nse_main.lua")));
         ReportPresentation.Device device=new ReportPresentation(json).devices.get(0);
         assertTrue(device.matches(ReportPresentation.Filter.FAILURES));assertFalse(device.matches(ReportPresentation.Filter.ALERTS));
-        assertFalse(device.matches(ReportPresentation.Filter.OPEN));assertTrue(device.matches(ReportPresentation.Filter.ALL));
+        assertTrue(device.ports.isEmpty());assertTrue(device.matches(ReportPresentation.Filter.ALL));
         assertEquals(1,json.getJSONArray("devices").length());
         assertEquals("Nmap could not start: a required script file is missing.",ReportPresentation.friendlyError(device.serviceMessage));
     }
