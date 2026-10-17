@@ -507,7 +507,8 @@ public final class MainActivity extends Activity {
                         .putExtra("adaptive", settings.adaptive)
                         .putExtra("nmap", !portsOnly && settings.nmap)
                         .putExtra("portsOnly", portsOnly)
-                        .putExtra("nmapArgs", portsOnly ? "" : settings.nmapArgs);
+                        .putExtra("nmapArgs", portsOnly ? "" : settings.nmapArgs)
+                        .putExtra("nmapVersionIntensity", settings.nmapVersionIntensity);
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                         != android.content.pm.PackageManager.PERMISSION_GRANTED

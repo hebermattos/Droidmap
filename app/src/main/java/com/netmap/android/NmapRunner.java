@@ -9,6 +9,7 @@ final class NmapRunner {
     private final NmapCommands templates;
     private final java.util.function.Consumer<Execution> completed;
     private final List<String> customArgs;
+    private final int versionIntensity;
     static final class Execution {
         final List<String> command;
         final String profile, stdout, stderr, error;
@@ -45,6 +46,11 @@ final class NmapRunner {
     NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled){this(templates,launcher,cancelled,result->{},Collections.emptyList());}
     NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<Execution> completed){this(templates,launcher,cancelled,completed,Collections.emptyList());}
     NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<Execution> completed,List<String> customArgs) {
+        this(templates,launcher,cancelled,completed,customArgs,NmapCommands.DEFAULT_VERSION_INTENSITY);
+    }
+    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,
+            java.util.function.Consumer<Execution> completed,List<String> customArgs,int versionIntensity) {
+        this.versionIntensity=NmapCommands.bounded(versionIntensity,0,9,"Nmap version intensity");
         this.templates=Objects.requireNonNull(templates);this.launcher=launcher;this.cancelled=cancelled;this.completed=completed;this.customArgs=Collections.unmodifiableList(new ArrayList<>(customArgs));
     }
     private void awaitExit(Process process,int seconds,String timeoutMessage)throws Exception {
@@ -65,6 +71,7 @@ final class NmapRunner {
     }
     private String run(NmapCommands.Profile profile,String binary,String dataDir,String host,Collection<Integer> ports,int timeoutMs)throws Exception{
         Map<String,String> values=templates.bindings(binary,dataDir,host,ports,timeoutMs);
+        values.put("versionIntensity",Integer.toString(versionIntensity));
         File xmlOutput=File.createTempFile("nmap-", ".xml",new File(dataDir));
         values.put("xmlOutput",xmlOutput.getAbsolutePath());
         final List<String> command;

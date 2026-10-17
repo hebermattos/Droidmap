@@ -9,16 +9,23 @@ final class ScanSettings {
     final boolean adaptive;
     final boolean nmap;
     final String nmapArgs;
+    final int nmapVersionIntensity;
 
     ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive) { this(ports,timeoutMs,mode,adaptive,true,""); }
 
     ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap) { this(ports,timeoutMs,mode,adaptive,nmap,""); }
 
     ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap, String nmapArgs) {
+        this(ports, timeoutMs, mode, adaptive, nmap, nmapArgs, NmapCommands.DEFAULT_VERSION_INTENSITY);
+    }
+
+    ScanSettings(String ports, int timeoutMs, ScanPlan.Mode mode, boolean adaptive, boolean nmap,
+            String nmapArgs, int nmapVersionIntensity) {
         ScanPlan.parsePorts(ports);
         if (timeoutMs < 100 || timeoutMs > 3000) {
             throw new IllegalArgumentException("Timeout must be 100–3000 ms.");
         }
+        this.nmapVersionIntensity = NmapCommands.bounded(nmapVersionIntensity, 0, 9, "Nmap version intensity");
         this.ports = ports;
         this.timeoutMs = timeoutMs;
         this.mode = java.util.Objects.requireNonNull(mode);
@@ -29,7 +36,7 @@ final class ScanSettings {
 
     ScanSettings completeDefaults() {
         return new ScanSettings(
-                ScanPlan.COMPLETE_PORTS, timeoutMs, ScanPlan.Mode.COMPLETE, adaptive, nmap, nmapArgs);
+                ScanPlan.COMPLETE_PORTS, timeoutMs, ScanPlan.Mode.COMPLETE, adaptive, nmap, nmapArgs, nmapVersionIntensity);
     }
 
     String summary() {

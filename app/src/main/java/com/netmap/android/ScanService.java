@@ -32,6 +32,7 @@ public final class ScanService extends Service {
     private boolean nmapEnabled;
     private boolean portsOnly;
     private String nmapArgs="";
+    private int nmapVersionIntensity=NmapCommands.DEFAULT_VERSION_INTENSITY;
     private long lastNotification;
     private int acceptedPreview;
     private final AtomicInteger previewVersion=new AtomicInteger();
@@ -57,6 +58,8 @@ public final class ScanService extends Service {
         final ScanPlan plan;
         final WifiIpv6Scope wifi;
         try {
+            nmapVersionIntensity=NmapCommands.bounded(intent.getIntExtra("nmapVersionIntensity",
+                    NmapCommands.DEFAULT_VERSION_INTENSITY),0,9,"Nmap version intensity");
             if(target==null) throw new IllegalArgumentException("Missing scan target");
             ScanPlan requested=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
@@ -130,7 +133,7 @@ public final class ScanService extends Service {
                     observedChecks.addAll(identity.endpointChecks());
                     lastPreview.set(0);
                     main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nmap…",results.size(),true);});
-                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,nmapArgs,tcp::isCancelled,
+                    nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,nmapArgs,nmapVersionIntensity,tcp::isCancelled,
                             ()->preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
                 }
             }
@@ -162,6 +165,7 @@ public final class ScanService extends Service {
             parsed.put("nmapEnabled",nmapEnabled);
             parsed.put("portsOnly",portsOnly);
             parsed.put("nmapCustomArgs",nmapArgs);
+            parsed.put("nmapVersionIntensity",nmapVersionIntensity);
             String text=new ReportPresentation(parsed).fullText();
             ScanSnapshot result=new ScanSnapshot(started,false,false,results.size(),plan.hosts.size()*plan.ports.size(),target,
                 cancelled?"Cancelled — partial results":portsOnly?"IP and port scan completed":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
