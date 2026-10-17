@@ -186,6 +186,7 @@ final class DeviceResultsRenderer {
         if(!device.name.isEmpty())detail(card,"Name",device.name);
         detail(card,"Probable type",device.json.optString("probableType","Unknown"));
         detail(card,"Open TCP ports",ports(device.ports));
+        for(String url:device.webLinks())webLink(card,url);
         detail(card,"Nmap service analysis",device.serviceStatus.label);
         detail(card,"Vulnerability analysis",device.vulnerabilitySummary());
         divider(card);
@@ -199,6 +200,19 @@ final class DeviceResultsRenderer {
             details.setVisibility(show?View.VISIBLE:View.GONE);
             if(show)expandedDevices.add(device.ip);else expandedDevices.remove(device.ip);
             deviceToggleLabel(toggle,device.ip,show);
+        });
+    }
+    private void webLink(LinearLayout parent,String url) {
+        Button link=action(parent);link.setText(url);
+        link.setContentDescription("Open web interface: "+url);
+        link.setPaintFlags(link.getPaintFlags()|android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+        link.setOnClickListener(view->{
+            android.content.Intent intent=new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(url));
+            if(!(context instanceof android.app.Activity))intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {context.startActivity(intent);}
+            catch(android.content.ActivityNotFoundException unavailable) {
+                Toast.makeText(context,"No browser available to open this link.",Toast.LENGTH_SHORT).show();
+            }
         });
     }
     private void deviceToggleLabel(Button button,String ip,boolean expanded) {

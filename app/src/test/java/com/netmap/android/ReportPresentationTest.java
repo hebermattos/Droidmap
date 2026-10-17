@@ -82,4 +82,37 @@ public class ReportPresentationTest {
         ReportPresentation model=new ReportPresentation(report(new JSONArray().put(observation("Nmap service 80","serviceName","http"))));
         assertEquals(ReportPresentation.Status.UNKNOWN,model.devices.get(0).serviceStatus);
     }
+    @Test public void webLinksRequireIdentifiedHttpAndOpenPorts()throws Exception {
+        JSONArray evidence=new JSONArray()
+            .put(observation("Nmap","openPort","8081/tcp"))
+            .put(observation("Nmap service 8081","serviceName","http"))
+            .put(observation("HTTP tcp/8081","webUrl","http://untrusted.example/"))
+            .put(observation("HTTP tcp/1234","httpTitle","Closed endpoint"))
+            .put(observation("HTTP tcp/8080","probeStatus","No valid HTTP reply"))
+            .put(observation("Nmap","openPort","8080/tcp"))
+            .put(observation("Nmap","openPort","22/tcp"))
+            .put(observation("Nmap service 22","serviceName","ssh"));
+        ReportPresentation model=new ReportPresentation(report(evidence));
+        assertEquals(java.util.Set.of("http://192.168.0.1:8081/"),model.devices.get(0).webLinks());
+        assertTrue(model.fullText().contains("Web interface: http://192.168.0.1:8081/"));
+    }
+    @Test public void webLinksSupportHttpsAndIpv6WithScope()throws Exception {
+        JSONArray evidence=new JSONArray().put(observation("Nmap","openPort","443/tcp"))
+            .put(observation("Nmap service 443","serviceName","https"))
+            .put(observation("Nmap","openPort","8443/tcp"))
+            .put(observation("HTTPS tcp/8443","server","nginx"));
+        JSONObject json=report(evidence);
+        json.getJSONArray("devices").getJSONObject(0).put("ip","fe80::1%wlan0");
+        assertEquals(java.util.Set.of("https://[fe80::1%25wlan0]/","https://[fe80::1%25wlan0]:8443/"),
+            new ReportPresentation(json).devices.get(0).webLinks());
+        json.getJSONArray("devices").getJSONObject(0).put("ip","fd00::1");
+        assertTrue(new ReportPresentation(json).devices.get(0).webLinks().contains("https://[fd00::1]/"));
+        json.getJSONArray("devices").getJSONObject(0).put("ip","evil.example/path");
+        assertTrue(new ReportPresentation(json).devices.get(0).webLinks().isEmpty());
+    }
+    @Test public void successfulHttpReplyCreatesLinkWithoutNmap()throws Exception {
+        JSONObject json=report(new JSONArray().put(observation("HTTP tcp/80","webUrl","ignored")));
+        json.put("checks",new JSONArray().put(new JSONObject().put("ip","192.168.0.1").put("port",80).put("state","OPEN")));
+        assertEquals(java.util.Set.of("http://192.168.0.1/"),new ReportPresentation(json).devices.get(0).webLinks());
+    }
 }

@@ -24,6 +24,7 @@ A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP
 - The all-IP option keeps the actual subnet prefix (/24–/32) and rejects larger networks with an explicit message instead of silently truncating them. **Use Wi-Fi network** remains a shortcut to a bounded range (larger subnets use the local /24). IPv6 discovery remains enabled for observed local addresses; IPv6 subnets are not enumerated.
 - Edit ports as comma-separated values or ranges, and set a 100–3000 ms connection timeout.
 - View responding devices and open ports grouped by IP.
+- Detected HTTP/HTTPS services show clickable web interface links directly on the device card and URLs in the full report. Links use the observed IP and open port, including nonstandard ports and bracketed IPv6 addresses. Only HTTP replies or Nmap HTTP service identification produce links; an open port number alone does not. Tap a link to open the phone browser.
 - Collect mDNS service names/TXT model hints, SSDP/UPnP names/manufacturer/model, HTTP titles/server headers, passive SSH/FTP/Telnet banners and NetBIOS node-status names.
 - Show MAC addresses from NetBIOS, IPv4/IPv6 neighbor observations and Nmap XML when available, preserving each source. Expand a device card to see **MAC addresses**, also included in the full report and JSON. Locally administered addresses are labeled as possibly randomized; no factory identity or vendor is inferred from them.
 - Track completed connections, cancel scans and export full or partial results as JSON.

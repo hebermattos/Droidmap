@@ -79,6 +79,36 @@ final class ReportPresentation {
             vulnerabilityStatus=vulnerability.isEmpty()&&(!vulnerabilityLog.isEmpty()||hasVulnerabilityEvidence)?Status.UNKNOWN:status(vulnerability);
             serviceOutput=serviceLog;vulnerabilityOutput=vulnerabilityLog;
         }
+        /** Links require an open endpoint plus HTTP evidence, never a port-number guess. */
+        SortedSet<String> webLinks() {
+            SortedSet<String> links=new TreeSet<>();
+            String host=ip;
+            try { IpAddresses.literal(host); } catch(Exception invalid) { return links; }
+            String zone=IpAddresses.zoneSuffix(host);
+            if(!zone.isEmpty()&&!zone.substring(1).matches("[A-Za-z0-9_.-]+"))return links;
+            if(ScanPlan.isIpv6(host))host="["+ScanPlan.stripZone(host)+(zone.isEmpty()?"":"%25"+zone.substring(1))+"]";
+            for(Map.Entry<Integer,String> entry:services.entrySet()) {
+                String service=entry.getValue().toLowerCase(Locale.ROOT);
+                if(service.equals("http")||service.equals("http-proxy")||service.equals("http-alt"))
+                    addWebLink(links,host,entry.getKey(),"http");
+                if(service.equals("https")||service.equals("ssl/http")||service.equals("https-alt"))
+                    addWebLink(links,host,entry.getKey(),"https");
+            }
+            for(JSONObject item:evidence) {
+                String source=item.optString("source"),field=item.optString("field");
+                if(!(field.equals("server")||field.equals("httpTitle")||field.equals("webUrl")))continue;
+                String scheme=source.startsWith("HTTP tcp/")?"http":source.startsWith("HTTPS tcp/")?"https":"";
+                if(scheme.isEmpty())continue;
+                try {addWebLink(links,host,Integer.parseInt(source.substring(source.indexOf('/')+1)),scheme);}
+                catch(NumberFormatException invalid) { /* Ignore malformed stored evidence. */ }
+            }
+            return links;
+        }
+        private void addWebLink(Set<String> links,String host,int port,String scheme) {
+            if(!ports.contains(port))return;
+            boolean standard=scheme.equals("http")?port==80:port==443;
+            links.add(scheme+"://"+host+(standard?"":":"+port)+"/");
+        }
         boolean hasAlerts(){for(Finding finding:findings)if(finding.alert)return true;return false;}
         boolean hasFailures(){return serviceStatus==Status.FAILED||vulnerabilityStatus==Status.FAILED;}
         boolean matches(Filter filter){return filter==Filter.ALL||filter==Filter.OPEN&&!ports.isEmpty()||filter==Filter.ALERTS&&hasAlerts()||filter==Filter.FAILURES&&hasFailures();}
@@ -165,6 +195,7 @@ final class ReportPresentation {
             for(String key:Arrays.asList("reportedManufacturer","reportedModel","dnsHostname"))if(!device.json.optString(key).isEmpty())text.append(label(key)).append(": ").append(device.json.optString(key)).append("\n");
             JSONArray macs=device.json.optJSONArray("macAddresses");
             if(macs!=null)for(int i=0;i<macs.length();i++){JSONObject mac=macs.optJSONObject(i);if(mac!=null)text.append("MAC: ").append(mac.optString("address")).append(" · ").append(mac.optString("source")).append(" · ").append(mac.optString("kind")).append("\n");}
+            for(String url:device.webLinks())text.append("Web interface: ").append(url).append("\n");
             text.append("\nPorts and services\n");
             if(device.ports.isEmpty())text.append("No open TCP ports observed.\n");
             for(int port:device.ports)text.append(port).append("/TCP · ").append(device.services.getOrDefault(port,"Not identified")).append(" · ").append(device.versions.getOrDefault(port,"Version not identified")).append("\n");

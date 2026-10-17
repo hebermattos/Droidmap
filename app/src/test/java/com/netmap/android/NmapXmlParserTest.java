@@ -36,4 +36,9 @@ public class NmapXmlParserTest {
         NmapXmlParser.parseVulnerabilities(xml,evidence,List.of(443));
         assertTrue(evidence.observations(ip).stream().anyMatch(x->x.source.equals("Nmap vulnerabilities") && x.field.contains("443") && x.value.contains("VULNERABLE")));
     }
+    @Test public void sslTunnelOnHttpServiceIsHttps()throws Exception {
+        DeviceEvidence evidence=new DeviceEvidence(Collections.singleton("192.168.1.10"));
+        NmapXmlParser.parse("<nmaprun><host><address addr='192.168.1.10' addrtype='ipv4'/><ports><port protocol='tcp' portid='9443'><state state='open'/><service name='http' tunnel='ssl'/></port></ports></host></nmaprun>",evidence);
+        assertTrue(evidence.observations("192.168.1.10").stream().anyMatch(x->x.source.equals("Nmap service 9443")&&x.field.equals("serviceName")&&x.value.equals("https")));
+    }
 }
