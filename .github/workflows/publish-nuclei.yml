@@ -42,7 +42,8 @@ jobs:
           echo "$EXPECTED_SHA256  $SOURCE" | sha256sum --check --status
           bash native-tools/install-nuclei-android.sh "$SOURCE"
           cp app/src/main/jniLibs/arm64-v8a/libnuclei.so /tmp/libnuclei.so
-          sha256sum /tmp/libnuclei.so
+          (cd /tmp && sha256sum libnuclei.so > libnuclei.so.sha256)
+          cat /tmp/libnuclei.so.sha256
       - name: Publish versioned GitHub release asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,4 +54,4 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "Nuclei Android ARM64 runtime" --notes "Android ARM64 executable for Droidmap. Runtime validation on device is still required." --latest=false
           fi
-          gh release upload "$TAG" /tmp/libnuclei.so --clobber
+          gh release upload "$TAG" /tmp/libnuclei.so /tmp/libnuclei.so.sha256 --clobber
