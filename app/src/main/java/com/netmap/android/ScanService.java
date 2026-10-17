@@ -258,7 +258,7 @@ public final class ScanService extends Service {
             parsed.put("nucleiEnabled",nucleiEnabled);
             parsed.put("portsOnly",portsOnly);
             parsed.put("tool",tool);
-            parsed.put("discoveryReady","discovery".equals(tool) && !cancelled && !partial);
+            parsed.put("discoveryReady","discovery".equals(tool) && !cancelled && parsed.optBoolean("tcpScanComplete",false) && !networkChanged);
             parsed.put("nmapCustomArgs",nmapArgs);
             parsed.put("nmapVersionIntensity",nmapVersionIntensity);
             String text=new ReportPresentation(parsed).fullText();
@@ -266,7 +266,7 @@ public final class ScanService extends Service {
                 cancelled?"Cancelled — partial results":portsOnly?"IP and port scan completed":partial?"TCP scan completed — identification partial":"Scan completed",parsed.toString(2),text);
             try {
                 store.save(result);
-                if("discovery".equals(tool) && !cancelled && !partial)
+                if("discovery".equals(tool) && parsed.optBoolean("discoveryReady",false))
                     new LatestScanStore(new File(getFilesDir(),"discovery-scan.json")).save(result);
             } catch(Exception e) {result=new ScanSnapshot(started,false,false,result.done,result.total,target,result.message+" • Could not save latest report",result.report,result.text);}
             ScanSnapshot complete=result; main.post(() -> finish(complete));
