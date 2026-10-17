@@ -38,7 +38,7 @@ public final class NmapCommandTests {
         check(vuln.get(vuln.indexOf("--script")+1).equals("(vuln and safe) and not brute and not dos and not intrusive and not exploit"), "Keep NSE expression as one argv token");
         check(vuln.get(vuln.indexOf("--datadir")+1).equals("data"), "Vulnerability scan explicitly selects installed NSE data");
         check(vuln.contains("443"), "Bind confirmed open ports");
-        check(vuln.contains("-sV") && vuln.contains("--version-light"), "Detect actual services before vulnerability script rules, including nonstandard ports");
+        check(vuln.contains("-sV") && vuln.get(vuln.indexOf("--version-intensity")+1).equals("2"), "Detect actual services before vulnerability script rules, including nonstandard ports");
         check(template.services.processTimeoutSeconds==0 && template.vulnerabilities.processTimeoutSeconds==0, "Both packaged profiles have no process deadline");
         for(List<String> argsList:List.of(command,vuln))
             check(!argsList.contains("--host-timeout") && !argsList.contains("--script-timeout") && !argsList.contains("--max-rtt-timeout"), "No imposed Nmap host, script or RTT timeout");

@@ -220,7 +220,7 @@ Both packaged Nmap profiles run without an app-imposed execution deadline. Host,
 
 ### Vulnerability checks by target port and service
 
-The vulnerability profile runs `-sT -sV --version-light -Pn` on Nmap-confirmed open TCP ports only, followed by the configured safe-category vulnerability NSE expression. Nmap uses each script's port/service rules to decide applicability; scripts are not forced on unrelated services. Service detection runs in this second process as well, so an HTTP service on a nonstandard port can be recognized before NSE evaluates its rules. Detection and script execution use Nmap’s native timing behavior and the packaged script database; not every port or service has a matching check.
+The vulnerability profile runs `-sT -sV --version-intensity <0–9> -Pn` on Nmap-confirmed open TCP ports only, followed by the configured safe-category vulnerability NSE expression. Nmap uses each script's port/service rules to decide applicability; scripts are not forced on unrelated services. Service detection runs in this second process as well, so an HTTP service on a nonstandard port can be recognized before NSE evaluates its rules. Detection and script execution use Nmap’s native timing behavior and the packaged script database; not every port or service has a matching check.
 
 Expanded **Nmap vulnerabilities** details show target ports, selection behavior, per-port service metadata and script output. Host-script results (such as applicable SMB checks) are retained as **host-level** rather than attributed to an unverified port. Parsing accepts per-port results only for the selected TCP ports still reported open; closed, UDP, unselected and off-target results are ignored. Host-level output is retained only when the response includes an eligible open target TCP port. A command finishing without findings does not establish that scripts ran for every service or that a device is free of vulnerabilities. Existing exclusions for brute force, DoS, intrusive and exploit categories remain in the JSON.
 
@@ -288,3 +288,7 @@ can still be missed; an IPv6 /64 is never enumerated.
 
 Package IDs and signing configuration are unchanged. Update-compatible APKs still
 require the saved signing key.
+
+## Nmap service/version intensity (0.12.5)
+
+Open **Options → Nmap settings** and choose **Service/version detection intensity** from 0 to 9. The saved value applies to service detection in both the service and vulnerability profiles through `--version-intensity`. The app default remains **2**, equivalent to the previous `--version-light`; **7** is Nmap's native default and **9** tries all probes. Higher values can improve identification and take longer. This setting controls probe intensity, not the number of scanned ports or NSE script categories. Disabling Nmap preserves the selected intensity. Custom global parameters remain available without additional validation; use the intensity selector for this option.

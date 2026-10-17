@@ -5,6 +5,7 @@ import java.util.regex.*;
 
 /** Immutable command templates. Dynamic values are substituted into argv, never a shell. */
 final class NmapCommands {
+    static final int DEFAULT_VERSION_INTENSITY = 2;
     static final class Profile {
         final List<String> argv;
         final int processTimeoutSeconds;
@@ -19,7 +20,7 @@ final class NmapCommands {
     final int maximumOutputBytes, outputReadTimeoutSeconds;
     final int minimumTimeoutMs, maximumTimeoutMs;
     private static final Pattern VARIABLE = Pattern.compile("\\{([A-Za-z]+)\\}");
-    private static final Set<String> VARIABLES = new HashSet<>(Arrays.asList("binary", "dataDir", "libraryDir", "host", "interface", "ports", "openPorts", "timeoutMs", "xmlOutput"));
+    private static final Set<String> VARIABLES = new HashSet<>(Arrays.asList("binary", "dataDir", "libraryDir", "host", "interface", "ports", "openPorts", "timeoutMs", "xmlOutput", "versionIntensity"));
 
     NmapCommands(Profile services, Profile vulnerabilities, List<String> ipv6Args,
             List<String> interfaceArgs, Map<String, String> environment,
@@ -79,6 +80,7 @@ final class NmapCommands {
             if (port == null || port < 1 || port > 65535) throw new IllegalArgumentException("Invalid Nmap port");
         }
         Map<String, String> values = new HashMap<>();
+        values.put("versionIntensity", Integer.toString(DEFAULT_VERSION_INTENSITY));
         values.put("binary", binary); values.put("dataDir", dataDir);
         values.put("libraryDir", new java.io.File(binary).getAbsoluteFile().getParent());
         values.put("host", ScanPlan.stripZone(host));

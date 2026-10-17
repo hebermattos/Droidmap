@@ -31,6 +31,12 @@
     "xmlOutput": {
       "description": "Unique temporary XML file allocated by the runner inside dataDir; removed after processing."
     },
+    "versionIntensity": {
+      "description": "Service/version detection intensity selected in Nmap settings, applied to both profiles.",
+      "default": 2,
+      "minimum": 0,
+      "maximum": 9
+    },
     "timeoutMs": {
       "description": "Configured timeout clamped to 100\u20133000 ms before substitution.",
       "default": 200,
@@ -66,7 +72,7 @@
   },
   "profiles": {
     "serviceDetection": {
-      "description": "TCP connect scanning with lightweight service/version detection and the union of safe and default NSE scripts.",
+      "description": "TCP connect scanning with configurable service/version detection and the union of safe and default NSE scripts.",
       "argv": [
         "--datadir",
         "{dataDir}",
@@ -74,7 +80,8 @@
         "-sT",
         "-sV",
         "-Pn",
-        "--version-light",
+        "--version-intensity",
+        "{versionIntensity}",
         "--script",
         "safe,default",
         "--max-retries",
@@ -105,7 +112,8 @@
         "-n",
         "-sT",
         "-sV",
-        "--version-light",
+        "--version-intensity",
+        "{versionIntensity}",
         "-Pn",
         "--script",
         "(vuln and safe) and not brute and not dos and not intrusive and not exploit",

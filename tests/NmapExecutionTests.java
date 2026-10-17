@@ -28,6 +28,20 @@ public final class NmapExecutionTests {
     public static void main(String[] args)throws Exception {
         dataDir=Files.createTempDirectory("nmap-xml-test").toString();
         AtomicReference<NmapRunner.Execution> capture=new AtomicReference<>();
+        for(int intensity=0;intensity<=9;intensity++) {
+            final int selected=intensity;
+            NmapRunner configured=new NmapRunner(TestNmapTemplates.load(),command->{
+                check(Collections.frequency(command,"--version-intensity")==1,"Exactly one template intensity argument");
+                check(command.get(command.indexOf("--version-intensity")+1).equals(Integer.toString(selected)),"Selected intensity reaches process argv");
+                check(!command.contains("--version-light"),"Legacy light flag cannot override selected intensity");
+                Files.writeString(Path.of(command.get(command.indexOf("-oX")+1)),"<nmaprun/>");
+                return new ProcessBuilder("/bin/sh","-c","printf result").start();
+            },()->false,capture::set,List.of("--reason"),selected);
+            for(String host:List.of("192.168.1.10","fe80::10%wlan0")) {
+                configured.scan("nmap",dataDir,host,List.of(80),200);
+                configured.vulnerabilityScan("nmap",dataDir,host,List.of(80),200);
+            }
+        }
         NmapRunner success=runner("printf 'PORT   STATE SERVICE\\n80/tcp open  http\\n'; printf 'warning: test\\n' >&2",1024,2,capture);
         String xml=success.scan("nmap",dataDir,"192.168.1.10",List.of(80),200);
         check(xml.equals("<nmaprun></nmaprun>"),"XML file remains separate from text and stderr");

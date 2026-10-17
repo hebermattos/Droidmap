@@ -28,7 +28,8 @@ final class ScanSettingsStore {
                         : ScanPlan.Mode.FAST,
                 preferences.getBoolean("adaptive", true),
                 preferences.getBoolean("nmap", true),
-                preferences.getString("nmapArgs", ""));
+                preferences.getString("nmapArgs", ""),
+                preferences.getInt("nmapVersionIntensity", NmapCommands.DEFAULT_VERSION_INTENSITY));
     }
 
     void save(ScanSettings settings) {
@@ -40,6 +41,7 @@ final class ScanSettingsStore {
                 .putBoolean("adaptive", settings.adaptive)
                 .putBoolean("nmap", settings.nmap)
                 .putString("nmapArgs", settings.nmapArgs)
+                .putInt("nmapVersionIntensity", settings.nmapVersionIntensity)
                 .apply();
     }
 }

@@ -125,6 +125,27 @@ public class RefactoringTest {
     }
 
     @Test
+    public void versionIntensityDefaultsPersistsAndSurvivesModeChanges() {
+        Map<String, Object> values = new HashMap<>();
+        ScanSettingsStore store = new ScanSettingsStore(preferences(values));
+        assertEquals(2, store.load().nmapVersionIntensity);
+        for (int intensity : new int[] {0, 7, 9}) {
+            store.save(new ScanSettings("80", 200, ScanPlan.Mode.FAST, true, false, "--reason", intensity));
+            ScanSettings restored = store.load();
+            assertEquals(intensity, restored.nmapVersionIntensity);
+            assertEquals(intensity, restored.completeDefaults().nmapVersionIntensity);
+            assertFalse(restored.nmap);
+            assertEquals("--reason", restored.nmapArgs);
+        }
+        for (int invalid : new int[] {-1, 10}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ScanSettings("80", 200, ScanPlan.Mode.FAST, true, true, "", invalid));
+            assertThrows(IllegalArgumentException.class,
+                    () -> new NmapRunner(null, null, () -> false, result -> {}, List.of(), invalid));
+        }
+    }
+
+    @Test
     public void firstSettingsLoadPreservesACustomTimeout() {
         Map<String, Object> values = new HashMap<>();
         values.put("timeout", 350);

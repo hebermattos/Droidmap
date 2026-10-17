@@ -8,7 +8,7 @@ import java.util.*;
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,String customArgs,java.util.function.BooleanSupplier cancelled,Runnable progress) {
+    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,String customArgs,int versionIntensity,java.util.function.BooleanSupplier cancelled,Runnable progress) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
         if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
@@ -41,7 +41,7 @@ final class NmapEnricher {
                     evidence.add(host,source,"outputStatus",storageError.getMessage());
                     notices.add("Nmap "+host+" output unavailable: "+storageError.getMessage());
                 }
-            },parsedCustomArgs);
+            },parsedCustomArgs,versionIntensity);
             try {
                 LinkedHashSet<Integer> selected=target.getValue();
                 evidence.nmapStatus(host,"Nmap","Running service detection");progress.run();

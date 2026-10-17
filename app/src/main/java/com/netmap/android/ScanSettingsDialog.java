@@ -114,7 +114,8 @@ final class ScanSettingsDialog {
                                                                     : ScanPlan.Mode.COMPLETE,
                                                             adaptive.isChecked(),
                                                             current.nmap,
-                                                            current.nmapArgs);
+                                                            current.nmapArgs,
+                                                            current.nmapVersionIntensity);
                                             onSave.accept(updated);
                                             dialog.dismiss();
                                         }));
@@ -133,11 +134,30 @@ final class ScanSettingsDialog {
         nmap.setText("Enable Nmap service detection");
         nmap.setChecked(current.nmap);
         form.addView(nmap);
+        TextView intensityLabel = new TextView(context);
+        intensityLabel.setText("Service/version detection intensity");
+        form.addView(intensityLabel);
+        Spinner intensity = new Spinner(context);
+        intensity.setId(android.view.View.generateViewId());
+        intensityLabel.setLabelFor(intensity.getId());
+        intensity.setAdapter(new ArrayAdapter<>(context,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[] {"0 — Minimal", "1", "2 — Light (default)", "3", "4", "5", "6",
+                        "7 — Nmap default", "8", "9 — All probes"}));
+        intensity.setSelection(current.nmapVersionIntensity);
+        intensity.setEnabled(nmap.isChecked());
+        form.addView(intensity);
+        TextView intensityHelp = new TextView(context);
+        intensityHelp.setText("Higher values try more probes and can take longer. Applies to both Nmap profiles.");
+        form.addView(intensityHelp);
         EditText args = field(context, form, "Nmap global parameters (optional)",
                 current.nmapArgs, android.view.View.generateViewId());
         args.setHint("-n --reason -T3 --host-timeout 20s");
         args.setEnabled(nmap.isChecked());
-        nmap.setOnCheckedChangeListener((button, checked) -> args.setEnabled(checked));
+        nmap.setOnCheckedChangeListener((button, checked) -> {
+            args.setEnabled(checked);
+            intensity.setEnabled(checked);
+        });
         TextView help = new TextView(context);
         help.setText("Custom arguments are passed directly to Nmap without a shell.");
         form.addView(help);
@@ -149,7 +169,8 @@ final class ScanSettingsDialog {
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Save", (dialog, which) -> onSave.accept(
                         new ScanSettings(current.ports, current.timeoutMs, current.mode,
-                                current.adaptive, nmap.isChecked(), args.getText().toString())))
+                                current.adaptive, nmap.isChecked(), args.getText().toString(),
+                                intensity.getSelectedItemPosition())))
                 .show();
     }
 
