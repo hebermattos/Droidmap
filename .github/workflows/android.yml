@@ -64,9 +64,15 @@ jobs:
         run: |
           set -euo pipefail
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libnuclei.so"
+      - name: Name APK clearly for download
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Droidmap-debug.apk
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: droidmap-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Droidmap-APK-download-ZIP
+          path: dist/Droidmap-debug.apk
           if-no-files-found: error
