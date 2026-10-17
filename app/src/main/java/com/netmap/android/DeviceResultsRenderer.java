@@ -36,6 +36,7 @@ final class DeviceResultsRenderer {
                 return lastDevices;
             }
             overview(model);
+            vulnerabilityOverview(model);
             filters();int shown=0;
             for(ReportPresentation.Device device:model.devices) {
                 lastDevices.add(device.ip); // Reanalysis retains the entire inventory, independent of the filter.
@@ -157,6 +158,55 @@ final class DeviceResultsRenderer {
                 +(failures>0?" · "+failures+" with failures":""));
         section(card,"overview-details","Scan details",false,body->{
             for(String line:model.summary().split("\n"))value(body,line);
+        });
+    }
+
+    /** Network-wide NSE findings; only reported alerts are shown as vulnerabilities. */
+    private void vulnerabilityOverview(ReportPresentation model) {
+        int count=0;
+        for(ReportPresentation.Device device:model.devices)
+            for(ReportPresentation.Finding finding:device.findings)
+                if(finding.alert)count++;
+        final int alerts=count;
+        section(deviceList,"vulnerability-overview","Vulnerability summary ("+alerts+")",true,body->{
+            if(alerts==0) {
+                value(body,"No vulnerability alerts reported. This does not prove the network is secure.");
+                return;
+            }
+            for(ReportPresentation.Device device:model.devices) {
+                for(ReportPresentation.Finding finding:device.findings) {
+                    if(!finding.alert)continue;
+                    String port="Not specified";
+                    String service="Not identified";
+                    java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("^port (\\d+)").matcher(finding.scope);
+                    if(matcher.find()) {
+                        port=matcher.group(1)+"/TCP";
+                        try {
+                            int number=Integer.parseInt(matcher.group(1));
+                            service=device.services.getOrDefault(number,"Not identified");
+                            if(service.equals("Not identified"))
+                                for(JSONObject item:device.evidence)
+                                    if(item.optString("source").equals("Nmap vulnerabilities")
+                                            && item.optString("field").equals("port "+number+" • service"))
+                                        service=item.optString("value","Not identified");
+                        } catch(NumberFormatException ignored) { }
+                    }
+                    LinearLayout item=panel(body);
+                    TextView title=value(item,device.ip+" · "+port+" · "+service);
+                    title.setTypeface(null,android.graphics.Typeface.BOLD);
+                    detail(item,"Finding",finding.title);
+                    String description=finding.evidence.trim().replaceAll("\\s+"," ");
+                    if(description.length()>220)description=description.substring(0,220)+"…";
+                    detail(item,"Description",description.isEmpty()?finding.assessment:description);
+                    section(item,"vuln:"+device.ip+":"+finding.scope+":"+finding.title,
+                            "Evidence and guidance",false,more->{
+                        detail(more,"Assessment",finding.assessment);
+                        detail(more,"Full Nmap evidence",finding.evidence);
+                        detail(more,"Suggested action",finding.action);
+                    });
+                }
+            }
+            value(body,"Nmap findings require verification; alerts are not confirmed exploits.");
         });
     }
 
