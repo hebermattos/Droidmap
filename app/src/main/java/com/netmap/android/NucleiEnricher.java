@@ -10,7 +10,8 @@ import java.util.function.BooleanSupplier;
 final class NucleiEnricher {
     private NucleiEnricher() {}
 
-    static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, BooleanSupplier cancelled) {
+    static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, BooleanSupplier cancelled,
+            java.util.function.Consumer<String> progress) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnuclei.so");
         if(!binary.isFile()) {
@@ -90,6 +91,7 @@ final class NucleiEnricher {
                     command.environment().put("TMPDIR",context.getCacheDir().getAbsolutePath());
                     process=command.start();
                     checked++;
+                    progress.accept("Nuclei: checking endpoint "+checked+" • "+url);
                     String endpointStatus="incomplete";
                     StringBuilder errors=new StringBuilder();
                     // Read until Nuclei exits or the user cancels; no global execution deadline.
@@ -127,6 +129,7 @@ final class NucleiEnricher {
                         notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+"): "+detail);
                     } else {completed++;endpointStatus="completed";}
                     evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.length+" configured templates");
+                    progress.accept("Nuclei: "+completed+" completed, "+failed+" failed, "+found+" findings");
                 } catch(Exception error) {
                     failed++;
                     evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • failed");

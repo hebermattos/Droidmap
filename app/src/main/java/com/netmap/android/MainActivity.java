@@ -123,7 +123,6 @@ public final class MainActivity extends Activity {
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         layout.addView(status);
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
-        addToolButton(layout, "Scan TCP ports", "Check IP addresses and TCP ports only", "ports");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
         ScrollView scroll = new ScrollView(this);
@@ -185,8 +184,11 @@ public final class MainActivity extends Activity {
         start.setEnabled(!scanRunning || snapshot.cancellable);
         target.setEnabled(!scanRunning);
         progress.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
-        progress.setMax(snapshot.total);
-        progress.setProgress(snapshot.done);
+        progress.setIndeterminate(scanRunning && (snapshot.total <= 0 || snapshot.done >= snapshot.total));
+        if (!progress.isIndeterminate()) {
+            progress.setMax(Math.max(1, snapshot.total));
+            progress.setProgress(snapshot.done);
+        }
         status.setText(snapshot.message);
         if (scanRunning) target.setText(snapshot.target);
         if (!report.equals(snapshot.report)) {
@@ -515,7 +517,7 @@ public final class MainActivity extends Activity {
                     .setNegativeButton("Cancel", null).show();
             return;
         }
-        boolean portsOnly = "ports".equals(tool);
+        boolean portsOnly = false;
         String targetValue = target.getText().toString().trim();
         try {
             new ScanPlan(
@@ -538,7 +540,7 @@ public final class MainActivity extends Activity {
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
                         .putExtra("adaptive", settings.adaptive)
                         .putExtra("nmap", "nmap".equals(tool))
-                        .putExtra("portsOnly", portsOnly)
+                        .putExtra("portsOnly", false)
                         .putExtra("nuclei", "nuclei".equals(tool))
                         .putExtra("nmapArgs", "nmap".equals(tool) ? settings.nmapArgs : "")
                         .putExtra("nmapVersionIntensity", settings.nmapVersionIntensity);

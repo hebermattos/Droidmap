@@ -1,10 +1,13 @@
+## Scan progress indicators
+
+The main screen shows the current scan stage and a progress bar, without a scrolling or timestamped log. Discovery displays TCP check progress and subsequent identification status. Nmap and Nuclei show their current analysis stages; the progress bar is indeterminate when a reliable total is unavailable. Detailed results remain separate from the scan status.
+
 ## Independent scan actions
 
 1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
 2. After a completed TCP discovery, choose **Run Nmap** or **Run Nuclei**. These buttons consume the saved discovery results for that target and Wi-Fi network. They do **not** repeat the TCP discovery sweep.
 3. **Run Nmap** analyzes only verified-open TCP ports, including relevant service and vulnerability scripts. **Run Nuclei** analyzes only confirmed-open HTTP/HTTPS endpoints.
-4. **Scan TCP ports** is a separate lightweight action. It does not serve as the required device Discovery baseline.
-5. **Cancel running scan** cancels the active action. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
+4. **Cancel running scan** cancels the active action. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
 
 Only one action can run at a time. The screen is cleared whenever a new scan starts. Discovery results are retained internally for Nmap and Nuclei during the current app session, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
 
@@ -288,7 +291,7 @@ Android 14+ retains all admitted IPv6 addresses reported for each service, up to
 16 per update and 256 additional addresses. Advertised TCP endpoints are verified
 before Nmap analysis; UDP-only services remain discovery evidence and are never
 converted into open TCP ports. Single-IP scans keep their existing target
-restriction. **Discover IPs and open ports** remains the TCP-only action; use
+restriction. **Discover devices** is the required discovery action; use
 **Start scan** for mDNS discovery and Nmap. Devices that do not advertise services
 can still be missed; an IPv6 /64 is never enumerated.
 

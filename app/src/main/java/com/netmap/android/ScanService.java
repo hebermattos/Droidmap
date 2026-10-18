@@ -148,7 +148,9 @@ public final class ScanService extends Service {
             List<String> enrichmentNotices=new ArrayList<>(nmapNotices);
             if(nucleiEnabled && !tcp.isCancelled()) {
                 main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nuclei…",results.size(),true);});
-                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,NmapTargets.collect(evidenceChecks,evidence),tcp::isCancelled));
+                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,NmapTargets.collect(evidenceChecks,evidence),tcp::isCancelled,
+                        message->main.post(()->{if(!destroyed && scanner==tcp && !tcp.isCancelled())
+                            publish(message,results.size(),true);})));
                 preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false);
             }
             main.post(() -> {
@@ -217,11 +219,18 @@ public final class ScanService extends Service {
             List<String> notices;
             if("nmap".equals(tool)) {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nmap on open ports…",0,true);});
+                AtomicInteger steps=new AtomicInteger();
                 notices=NmapEnricher.enrich(this,plan,open,evidence,nmapArgs,nmapVersionIntensity,
-                        controller::isCancelled,()->{});
+                        controller::isCancelled,()->{
+                            int count=steps.incrementAndGet();
+                            main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
+                                publish("Nmap analysis step "+count+" • "+verifiedPorts.size()+" hosts",0,true);});
+                        });
             } else {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nuclei on open web ports…",0,true);});
-                notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,controller::isCancelled);
+                notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,controller::isCancelled,
+                        message->main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
+                            publish(message,0,true);}));
             }
             org.json.JSONArray updated=new org.json.JSONArray();
             for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet())
