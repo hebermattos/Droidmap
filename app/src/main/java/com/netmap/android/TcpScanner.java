@@ -35,14 +35,20 @@ public final class TcpScanner {
     }
     public interface Listener { void onResult(Result result, int completed, int total); }
     private final AtomicBoolean cancelled = new AtomicBoolean();
+    private volatile ExecutorService runningWorkers;
     private final Set<Socket> active = ConcurrentHashMap.newKeySet();
     public void cancel() {
         cancelled.set(true);
+        ExecutorService workers = runningWorkers;
+        if (workers != null) workers.shutdownNow();
         for (Socket socket : active) try { socket.close(); } catch (IOException ignored) { }
     }
     public boolean isCancelled() { return cancelled.get(); }
     public List<Result> scan(ScanPlan plan, Listener listener) throws InterruptedException {
+        if (cancelled.get()) return Collections.emptyList();
         ExecutorService workers = Executors.newFixedThreadPool(32);
+        runningWorkers = workers;
+        if (cancelled.get()) workers.shutdownNow();
         List<Result> results = plan.hosts.size() * plan.ports.size() > 65535
                 ? new PackedScanResults(plan) : Collections.synchronizedList(new ArrayList<>());
         AtomicInteger complete = new AtomicInteger();
@@ -106,6 +112,7 @@ public final class TcpScanner {
             throw e;
         } finally {
             workers.shutdownNow();
+            runningWorkers = null;
             for (Socket socket : active) try { socket.close(); } catch (IOException ignored) { }
         }
         if (results instanceof PackedScanResults) return results;

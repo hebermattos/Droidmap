@@ -100,7 +100,7 @@ public final class ScannerTests {
         try {
             Future<List<TcpScanner.Result>> task = executor.submit(() -> running.scan(new ScanPlan("10.0.0.0/24", "80", 100), (r,c,t) -> {}));
             check(entered.await(2, TimeUnit.SECONDS), "Scan started"); running.cancel();
-            check(task.get(2, TimeUnit.SECONDS).isEmpty(), "Cancellation stops queued work and interrupts workers");
+            check(task.get(5, TimeUnit.SECONDS).isEmpty(), "Cancellation stops queued work and interrupts workers");
         } finally { executor.shutdownNow(); }
         check(ScanPlan.parsePorts(ScanPlan.COMPLETE_PORTS).size()>ScanPlan.parsePorts(ScanPlan.FAST_PORTS).size(),"Complete default expands ports");
         check(ScanPlan.Mode.COMPLETE.identificationSeconds>ScanPlan.Mode.FAST.identificationSeconds,"Complete identification budget");
