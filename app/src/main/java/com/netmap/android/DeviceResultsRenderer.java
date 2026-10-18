@@ -81,12 +81,14 @@ final class DeviceResultsRenderer {
                 nmap.setContentDescription("Run Nmap on "+device.ip+" TCP port "+port);
                 nmap.setOnClickListener(v->runNmapPort.accept(device.ip,port));
                 tools.addView(nmap,new LinearLayout.LayoutParams(0,-2,1));
-                Button nuclei=new Button(context);
-                nuclei.setText("Nuclei");
-                nuclei.setAllCaps(false);
-                nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
-                nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
-                tools.addView(nuclei,new LinearLayout.LayoutParams(0,-2,1));
+                if (hasWebEvidence(device, port)) {
+                    Button nuclei=new Button(context);
+                    nuclei.setText("Nuclei");
+                    nuclei.setAllCaps(false);
+                    nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
+                    nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
+                    tools.addView(nuclei,new LinearLayout.LayoutParams(0,-2,1));
+                }
                 entry.addView(tools);
                 table.addView(entry,new LinearLayout.LayoutParams(-1,-2));
                 divider(table);
@@ -95,6 +97,20 @@ final class DeviceResultsRenderer {
         }
         if(endpoints==0)value(table,"No open TCP ports found in the selected scan.");
         value(deviceList,hosts+" IPs • "+endpoints+" open TCP ports");
+    }
+
+    /** Nuclei currently bundles HTTP templates, so TCP openness alone is insufficient. */
+    private boolean hasWebEvidence(ReportPresentation.Device device, int port) {
+        String http="HTTP tcp/"+port;
+        String https="HTTPS tcp/"+port;
+        for (JSONObject item:device.evidence) {
+            String source=item.optString("source");
+            String field=item.optString("field");
+            if ((source.equals(http)||source.equals(https))
+                    && (field.equals("webUrl")||field.equals("server")||field.equals("httpTitle")))
+                return true;
+        }
+        return false;
     }
 
     private String allPorts(SortedSet<Integer> ports) {
