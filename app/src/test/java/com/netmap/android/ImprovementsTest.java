@@ -70,8 +70,23 @@ public class ImprovementsTest {
         AtomicInteger active=new AtomicInteger(),maximum=new AtomicInteger(),count=new AtomicInteger();
         TcpScanner scanner=new TcpScanner((host,port,timeout)-> {int n=active.incrementAndGet();maximum.accumulateAndGet(n,Math::max);try{Thread.sleep(2);}catch(InterruptedException e){Thread.currentThread().interrupt();}finally{active.decrementAndGet();}count.incrementAndGet();return host.endsWith("1")?TcpScanner.State.OPEN:TcpScanner.State.NO_RESPONSE;});
         ScanPlan plan=new ScanPlan("192.168.1.0/27","80,81,82",100,ScanPlan.Mode.FAST,true);List<TcpScanner.Result> results=scanner.scan(plan,(r,c,t)->{});
-        assertEquals(plan.hosts.size()*plan.ports.size(),results.size());assertEquals(results.size(),count.get());assertTrue(maximum.get()<=32);
-        Set<String> pairs=new HashSet<>();for(TcpScanner.Result result:results) {assertTrue(result.timeoutMs>=100);pairs.add(result.host+":"+result.port);}assertEquals(results.size(),pairs.size());
+        assertEquals(plan.hosts.size()*plan.ports.size(),results.size());
+        long skipped=results.stream().filter(r->r.state==TcpScanner.State.SKIPPED).count();
+        assertTrue("Fast preflight should skip remaining ports for unresponsive hosts",skipped>0);
+        assertEquals("Only attempted checks call the connector",results.size()-skipped,count.get());
+        assertTrue(maximum.get()<=32);
+        Set<String> pairs=new HashSet<>();
+        for(TcpScanner.Result result:results) {
+            if(result.state==TcpScanner.State.SKIPPED) {
+                assertEquals(0,result.attempts);
+                assertEquals(0,result.timeoutMs);
+            } else {
+                assertTrue(result.timeoutMs>=100);
+                assertTrue(result.attempts>0);
+            }
+            pairs.add(result.host+":"+result.port);
+        }
+        assertEquals(results.size(),pairs.size());
     }
     private JSONObject report(String target,String ip,int port,boolean cancelled) throws Exception {
         JSONObject r=new JSONObject();r.put("target",target);r.put("finishedAtEpochMs",123456);r.put("cancelled",cancelled);r.put("networkScope","test-network");r.put("identificationComplete",true);
