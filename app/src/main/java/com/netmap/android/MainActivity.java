@@ -33,13 +33,15 @@ public final class MainActivity extends Activity {
     private ScanSnapshot launchPrevious;
     private Intent pendingScan;
     private ScanSnapshot displayedSnapshot;
+    private ScanSnapshot ignoredPreviousSnapshot;
     private final android.os.Handler uiHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable refreshScan =
             new Runnable() {
                 public void run() {
                     ScanSnapshot snapshot = ScanService.snapshot();
-                    if (snapshot != null && snapshot != displayedSnapshot) applySnapshot(snapshot);
+                    if (snapshot != null && snapshot != displayedSnapshot
+                            && snapshot != ignoredPreviousSnapshot) applySnapshot(snapshot);
                     uiHandler.postDelayed(this, 500);
                 }
             };
@@ -139,27 +141,26 @@ public final class MainActivity extends Activity {
             if (expanded != null) expandedDevices.addAll(expanded);
         }
         lastDevices = resultsRenderer.render(report);
-        background.execute(
-                () -> {
-                    try {
-                        ScanSnapshot saved =
-                                new LatestScanStore(
-                                                new java.io.File(getFilesDir(), "latest-scan.json"))
-                                        .load();
-                        runOnUiThread(
-                                () -> {
-                                    if (destroyed) return;
-                                    ScanSnapshot live = ScanService.snapshot();
-                                    applySnapshot(live == null ? saved : live);
-                                });
-                    } catch (Exception e) {
-                        runOnUiThread(
-                                () -> {
-                                    if (!destroyed && ScanService.snapshot() == null)
-                                        status.setText("Saved result unavailable");
-                                });
-                    }
-                });
+        // Opening the app starts with a clean result screen and no saved scan baseline.
+        // An active foreground scan is preserved across Activity recreation.
+        ScanSnapshot live = ScanService.snapshot();
+        if (live != null && live.running) {
+            applySnapshot(live);
+        } else {
+            ignoredPreviousSnapshot = live;
+            clearPreviousScanFiles();
+            status.setText("Ready — run Discovery to start");
+        }
+    }
+
+    private void clearPreviousScanFiles() {
+        for (String name : new String[] {
+                "latest-scan.json", "discovery-scan.json", "scan-history.json"
+        }) {
+            java.io.File file = new java.io.File(getFilesDir(), name);
+            if (file.exists() && !file.delete())
+                android.util.Log.w("Droidmap", "Unable to clear old scan data: " + name);
+        }
     }
 
     @Override
@@ -494,7 +495,26 @@ public final class MainActivity extends Activity {
         begin("discovery");
     }
 
+    private boolean hasDiscoveryResults() {
+        try {
+            org.json.JSONObject previous = new org.json.JSONObject(report);
+            return previous.optBoolean("discoveryReady", false)
+                    && !previous.optBoolean("cancelled", true)
+                    && previous.optBoolean("tcpScanComplete", false)
+                    && target.getText().toString().trim().equals(previous.optString("target"))
+                    && previous.optJSONArray("checks") != null;
+        } catch (org.json.JSONException error) { return false; }
+    }
+
     private void begin(String tool) {
+        if (("nmap".equals(tool) || "nuclei".equals(tool)) && !hasDiscoveryResults()) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Discovery required")
+                    .setMessage("Run Discover devices first. Tools analyze verified-open TCP ports from that discovery.")
+                    .setPositiveButton("Run Discovery", (dialog, which) -> begin("discovery"))
+                    .setNegativeButton("Cancel", null).show();
+            return;
+        }
         boolean portsOnly = "ports".equals(tool);
         String targetValue = target.getText().toString().trim();
         try {
@@ -512,6 +532,7 @@ public final class MainActivity extends Activity {
                 new Intent(this, ScanService.class)
                         .setAction(ScanService.START)
                         .putExtra("target", targetValue)
+                        .putExtra("tool", tool)
                         .putExtra("ports", settings.ports)
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
@@ -558,6 +579,7 @@ public final class MainActivity extends Activity {
         target.clearFocus();
         try {
             launchPrevious = ScanService.snapshot();
+            ignoredPreviousSnapshot = null;
             displayedSnapshot = launchPrevious;
             startingScan = true;
             startForegroundService(request);

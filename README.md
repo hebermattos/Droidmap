@@ -1,17 +1,12 @@
 ## Independent scan actions
 
-The main screen provides four dedicated actions for the selected IP or private Wi-Fi network:
+1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
+2. After a completed TCP discovery, choose **Run Nmap** or **Run Nuclei**. These buttons consume the saved discovery results for that target and Wi-Fi network. They do **not** repeat the TCP discovery sweep.
+3. **Run Nmap** analyzes only verified-open TCP ports, including relevant service and vulnerability scripts. **Run Nuclei** analyzes only confirmed-open HTTP/HTTPS endpoints.
+4. **Scan TCP ports** is a separate lightweight action. It does not serve as the required device Discovery baseline.
+5. **Cancel running scan** cancels the active action. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
 
-- **Discover devices**: TCP discovery and device/service identification, without Nmap or Nuclei.
-- **Scan TCP ports**: TCP port discovery only, without identification or external tools.
-- **Run Nmap**: TCP discovery and identification followed by Nmap service/script analysis. Uses the configured Nmap arguments and version intensity.
-- **Run Nuclei**: TCP discovery and identification followed by Nuclei HTTP/HTTPS template checks. Requires the packaged ARM64 Nuclei executable; no Nmap stage runs automatically.
-
-Only one action runs at a time. **Cancel running scan** appears during execution. Nmap and Nuclei require preceding port/service discovery to determine appropriate targets; this discovery is part of their individual action, not an automatic full-tool pipeline. Results stay in the regular device report. The former Nuclei enable/disable menu option is removed because running Nuclei is now an explicit action.
-
-# Droidmap
-
-A standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scans and evidence-based device identification. It runs on the phone without a Linux backend or root, with optional packaged ARM64 Nmap enrichment. This app was extracted from [Netmap](https://github.com/hebermattos/Netmap), and remains independent of its .NET vulnerability pipeline. Version 0.12.0 uses a 200 ms default connection timeout, overlaps SSDP discovery with TCP scanning, and supports user-started background scans and a compact interface with expandable device cards and an Options menu for scan settings, Wi-Fi target selection, history, reanalysis and exports.
+Only one action can run at a time. The screen is cleared whenever a new scan starts. Discovery results are retained internally for Nmap and Nuclei during the current app session, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
 
 ## Code ownership
 

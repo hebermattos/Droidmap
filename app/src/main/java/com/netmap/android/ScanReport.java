@@ -85,7 +85,7 @@ final class ScanReport {
         report.put("tcpScanComplete",tcpComplete);
         return partial;
     }
-    private static JSONObject device(String ip,List<DeviceEvidence.Observation> info) throws Exception {
+    static JSONObject device(String ip,List<DeviceEvidence.Observation> info) throws Exception {
             DeviceProfile profile=new DeviceProfile(info);
             JSONObject device=new JSONObject(); device.put("ip",ip);
             device.put("identificationStatus",DeviceEvidence.first(info,"identificationStatus"));
