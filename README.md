@@ -1,6 +1,6 @@
 ## Independent scan actions
 
-1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis.
+1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
 2. After a completed TCP discovery, choose **Run Nmap** or **Run Nuclei**. These buttons consume the saved discovery results for that target and Wi-Fi network. They do **not** repeat the TCP discovery sweep.
 3. **Run Nmap** analyzes only verified-open TCP ports, including relevant service and vulnerability scripts. **Run Nuclei** analyzes only confirmed-open HTTP/HTTPS endpoints.
 4. **Scan TCP ports** is a separate lightweight action. It does not serve as the required device Discovery baseline.
