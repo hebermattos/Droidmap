@@ -16,7 +16,7 @@ Only one action can run at a time. The screen is cleared whenever a new scan sta
 - `MainActivity` coordinates lifecycle, user actions and service snapshots. `ScanSettings`, `ScanSettingsStore` and `ScanSettingsDialog` own validated options, preference migration and editing.
 - `DeviceResultsRenderer`, `ScanHistoryDialog` and `ReportExporter` own device cards, history presentation and export state/I/O. `ExportRequest` pins exports to the selected scan across Activity recreation.
 - `DeviceIdentifier` schedules discovery/identification and verifies advertised endpoints. `SsdpDiscovery` and the HTTP, TLS, SMB, RTSP, IPP, NetBIOS, UPnP and banner probes own protocol operations. `ProbeContext` shares deadline, read bounds and active socket ownership with cancellation.
-- `DeviceProfile` makes typed decisions using `DeviceConfidence`; `IdentificationStatus` expresses completion. JSON and text reports retain their existing labels and schema version 5.
+- `DeviceProfile` makes typed decisions using `DeviceConfidence`; `IdentificationStatus` expresses completion. JSON and text reports retain their existing labels and schema versions 5–7, depending on result encoding.
 
 ## Features
 
@@ -29,7 +29,7 @@ Only one action can run at a time. The screen is cleared whenever a new scan sta
 - A black-and-white radar/network launcher icon, with adaptive masks on Android 8+ and themed monochrome icons on Android 13+.
 
 - Scan a single private IPv4 address or a /24–/32 network.
-- Select **Options → Scan all Wi-Fi IPs** to scan every usable IPv4 address on the connected private Wi-Fi subnet. The selected target and address count appear before you tap the desired tool button. Network and broadcast addresses are excluded for /24–/30; /31 and /32 retain all addresses. Every selected IP/port is checked, including silent hosts.
+- Select **Options → Scan all Wi-Fi IPs** to scan every usable IPv4 address on the connected private Wi-Fi subnet. The selected target and address count appear before you tap the desired tool button. Network and broadcast addresses are excluded for /24–/30; /31 and /32 retain all addresses. Fast mode first tests up to three selected TCP ports per IP, then checks remaining ports only on responding IPs. Unresponsive IPs can still host services and are explicitly marked skipped in the report. Complete mode checks every selected IP/port, including silent hosts.
 - The all-IP option keeps the actual subnet prefix (/24–/32) and rejects larger networks with an explicit message instead of silently truncating them. **Use Wi-Fi network** remains a shortcut to a bounded range (larger subnets use the local /24). IPv6 discovery remains enabled for observed local addresses; IPv6 subnets are not enumerated.
 - Edit ports as comma-separated values or ranges, and set a 100–3000 ms connection timeout.
 - View responding devices and open ports grouped by IP.
