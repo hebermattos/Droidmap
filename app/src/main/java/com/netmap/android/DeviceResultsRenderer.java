@@ -15,14 +15,19 @@ final class DeviceResultsRenderer {
     private final Set<String> expandedDevices;
     private final Map<String,Boolean> sectionStates=new HashMap<>();
     private final java.util.function.Consumer<String> openNmapOutput;
+    private final java.util.function.BiConsumer<String, Integer> runNmapPort;
+    private final java.util.function.BiConsumer<String, Integer> runNucleiPort;
     private ReportPresentation.Filter filter=ReportPresentation.Filter.ALL;
     private String lastReport="";
     private List<String> lastDevices=new ArrayList<>();
 
     DeviceResultsRenderer(Context context,LinearLayout deviceList,ScrollView resultsScroll,
-            Set<String> expandedDevices,java.util.function.Consumer<String> openNmapOutput) {
+            Set<String> expandedDevices,java.util.function.Consumer<String> openNmapOutput,
+            java.util.function.BiConsumer<String, Integer> runNmapPort,
+            java.util.function.BiConsumer<String, Integer> runNucleiPort) {
         this.context=context;this.deviceList=deviceList;this.resultsScroll=resultsScroll;
         this.expandedDevices=expandedDevices;this.openNmapOutput=openNmapOutput;
+        this.runNmapPort=runNmapPort;this.runNucleiPort=runNucleiPort;
     }
     List<String> render(String report) {
         int scrollPosition=resultsScroll.getScrollY();lastReport=report;
@@ -57,50 +62,45 @@ final class DeviceResultsRenderer {
         TextView heading=value(deviceList,"IP addresses and open TCP ports");
         heading.setTextSize(18);
         heading.setTypeface(null,android.graphics.Typeface.BOLD);
-
         LinearLayout table=panel(deviceList);
-        simpleTableRow(table,"IP address","Open TCP ports",true);
-        int openHosts=0;
+        int hosts=0, endpoints=0;
         for(ReportPresentation.Device device:model.devices) {
             lastDevices.add(device.ip);
             if(device.ports.isEmpty()) continue;
-            simpleTableRow(table,device.ip,allPorts(device.ports),false);
-            openHosts++;
+            hosts++;
+            for(int port:device.ports) {
+                LinearLayout entry=new LinearLayout(context);
+                entry.setOrientation(LinearLayout.VERTICAL);
+                entry.setPadding(dp(8),dp(5),dp(8),dp(5));
+                value(entry,device.ip+"  •  TCP "+port);
+                LinearLayout tools=new LinearLayout(context);
+                tools.setOrientation(LinearLayout.HORIZONTAL);
+                Button nmap=new Button(context);
+                nmap.setText("Nmap");
+                nmap.setAllCaps(false);
+                nmap.setContentDescription("Run Nmap on "+device.ip+" TCP port "+port);
+                nmap.setOnClickListener(v->runNmapPort.accept(device.ip,port));
+                tools.addView(nmap,new LinearLayout.LayoutParams(0,-2,1));
+                Button nuclei=new Button(context);
+                nuclei.setText("Nuclei");
+                nuclei.setAllCaps(false);
+                nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
+                nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
+                tools.addView(nuclei,new LinearLayout.LayoutParams(0,-2,1));
+                entry.addView(tools);
+                table.addView(entry,new LinearLayout.LayoutParams(-1,-2));
+                divider(table);
+                endpoints++;
+            }
         }
-        if(openHosts==0) value(table,"No open TCP ports found in the selected scan.");
-        value(deviceList,openHosts+" IPs with open ports");
+        if(endpoints==0)value(table,"No open TCP ports found in the selected scan.");
+        value(deviceList,hosts+" IPs • "+endpoints+" open TCP ports");
     }
 
     private String allPorts(SortedSet<Integer> ports) {
         StringJoiner joined=new StringJoiner(", ");
         for(int port:ports) joined.add(String.valueOf(port));
         return joined.toString();
-    }
-
-    private void simpleTableRow(LinearLayout table,String ip,String ports,boolean header) {
-        LinearLayout row=new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(8),dp(10),dp(8),dp(10));
-        TextView address=new TextView(context);
-        address.setText(ip);
-        address.setTextSize(14);
-        address.setTextColor(Color.WHITE);
-        address.setTextIsSelectable(true);
-        address.setGravity(android.view.Gravity.START);
-        TextView portList=new TextView(context);
-        portList.setText(ports);
-        portList.setTextSize(14);
-        portList.setTextColor(Color.WHITE);
-        portList.setTextIsSelectable(true);
-        portList.setGravity(android.view.Gravity.START);
-        if(header) {
-            address.setTypeface(null,android.graphics.Typeface.BOLD);
-            portList.setTypeface(null,android.graphics.Typeface.BOLD);
-        }
-        row.addView(address,new LinearLayout.LayoutParams(0,-2,1.15f));
-        row.addView(portList,new LinearLayout.LayoutParams(0,-2,1.6f));
-        table.addView(row,new LinearLayout.LayoutParams(-1,-2));
-        divider(table);
     }
 
     private int dp(int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}

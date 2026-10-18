@@ -132,7 +132,9 @@ public final class MainActivity extends Activity {
         scroll.addView(deviceList);
         layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(layout);
-        resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput);
+        resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput,
+                (ip, port) -> runSelectedPort("nmap", ip, port),
+                (ip, port) -> runSelectedPort("nuclei", ip, port));
         if (state != null) {
             pendingScan = state.getParcelable("pendingScan");
             exporter.restore(state);
@@ -508,7 +510,43 @@ public final class MainActivity extends Activity {
         } catch (org.json.JSONException error) { return false; }
     }
 
+    private void runSelectedPort(String tool, String ip, int port) {
+        if (scanRunning || startingScan) {
+            Toast.makeText(this,"A scan is already running.",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!hasDiscoveryResults()) {
+            new android.app.AlertDialog.Builder(this).setTitle("Discovery required")
+                    .setMessage("Run Discovery before analyzing a selected port.")
+                    .setPositiveButton("OK",null).show();
+            return;
+        }
+        try {
+            org.json.JSONObject data=new org.json.JSONObject(report);
+            boolean found=false;
+            for(String field:new String[]{"checks","advertisedEndpointChecks"}) {
+                org.json.JSONArray rows=data.optJSONArray(field);
+                if(rows==null)continue;
+                for(int i=0;i<rows.length();i++) {
+                    org.json.JSONObject row=rows.optJSONObject(i);
+                    if(row!=null && ip.equals(row.optString("ip"))
+                            && port==row.optInt("port")
+                            && "OPEN".equals(row.optString("state")))found=true;
+                }
+            }
+            if(!found)throw new IllegalArgumentException("Selected port is not verified open.");
+        } catch(Exception error) {
+            Toast.makeText(this,"Run Discovery again: "+error.getMessage(),Toast.LENGTH_LONG).show();
+            return;
+        }
+        begin(tool,ip,port);
+    }
+
     private void begin(String tool) {
+        begin(tool,null,0);
+    }
+
+    private void begin(String tool, String selectedIp, int selectedPort) {
         if (("nmap".equals(tool) || "nuclei".equals(tool)) && !hasDiscoveryResults()) {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("Discovery required")
@@ -535,6 +573,8 @@ public final class MainActivity extends Activity {
                         .setAction(ScanService.START)
                         .putExtra("target", targetValue)
                         .putExtra("tool", tool)
+                        .putExtra("selectedIp", selectedIp)
+                        .putExtra("selectedPort", selectedPort)
                         .putExtra("ports", settings.ports)
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
