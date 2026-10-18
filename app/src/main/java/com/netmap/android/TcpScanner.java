@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -107,6 +109,10 @@ public final class TcpScanner {
                 try { future.get(); }
                 catch (java.util.concurrent.ExecutionException e) { throw new IllegalStateException("Probe failed", e.getCause()); }
             }
+        } catch (RejectedExecutionException | CancellationException e) {
+            // Cancellation may terminate the pool while scan() is still submitting work.
+            // A rejected submission is expected only when this scan was cancelled.
+            if (!cancelled.get()) throw e;
         } catch (InterruptedException e) {
             cancel();
             throw e;
