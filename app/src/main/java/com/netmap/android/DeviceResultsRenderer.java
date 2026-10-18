@@ -30,7 +30,8 @@ final class DeviceResultsRenderer {
         if(report.isEmpty()){value(deviceList,"Discover devices on your local network. Use Options to adjust the scan.");return lastDevices;}
         try {
             ReportPresentation model=new ReportPresentation(new JSONObject(report));
-            if (model.json.optBoolean("portsOnly", false)) {
+            if (model.json.optBoolean("portsOnly", false)
+                    || "discovery".equals(model.json.optString("tool"))) {
                 simplePortsTable(model);
                 resultsScroll.post(() -> resultsScroll.scrollTo(0, scrollPosition));
                 return lastDevices;
