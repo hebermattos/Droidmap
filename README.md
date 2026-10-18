@@ -1,6 +1,6 @@
-## Scan progress log
+## Scan progress indicators
 
-The main screen shows a compact, timestamped rolling log (up to seven latest messages) for Discovery, Nmap, and Nuclei. Discovery reports TCP checks and identification stages, Nmap reports analysis stages, and Nuclei reports each web endpoint with completion, failure and finding counts. Starting a new scan clears the log. The Discovery results still display only the simple IP/port table; the log is separate from the results.
+The main screen shows the current scan stage and a progress bar, without a scrolling or timestamped log. Discovery displays TCP check progress and subsequent identification status. Nmap and Nuclei show their current analysis stages; the progress bar is indeterminate when a reliable total is unavailable. Detailed results remain separate from the scan status.
 
 ## Independent scan actions
 
