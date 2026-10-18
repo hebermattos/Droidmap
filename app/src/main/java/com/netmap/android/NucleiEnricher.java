@@ -121,7 +121,7 @@ final class NucleiEnricher {
                         }
                     }
                     if(cancelled.getAsBoolean()) {
-                        failed++;process.destroyForcibly();
+                        failed++;endpointStatus="cancelled";process.destroyForcibly();
                         notices.add("Nuclei cancelled for "+url+".");
                     } else if(process.waitFor()!=0) {
                         failed++;

@@ -40,7 +40,7 @@ public class ReportPresentationTest {
         assertEquals(2,model.devices.get(0).ports.size());
         assertEquals("http",model.devices.get(0).services.get(80));
         assertTrue(model.fullText().contains("80/TCP · http · nginx 1.26"));
-        assertTrue(model.fullText().contains("443/TCP · Not identified · Version not identified"));
+        assertTrue(model.fullText().contains("443/TCP · Service not identified"));
         assertTrue(model.summary().contains("Open TCP endpoints: 2"));
     }
     @Test public void negativeAndInconclusiveScriptResultsAreNotConfirmedVulnerabilities() {
@@ -88,6 +88,8 @@ public class ReportPresentationTest {
         assertTrue(device.hasAlerts());
         assertEquals("Exposed Git HEAD metadata [medium]",device.findings.get(0).title);
         assertEquals("port 80",device.findings.get(0).scope);
+        assertEquals("Nuclei",device.findings.get(0).source);
+        assertTrue(device.vulnerabilitySummary().startsWith("Alerts reported"));
         assertEquals("http",device.services.get(80));
     }
     @Test public void nucleiInformationalFindingAndEndpointDiagnosticsRemainAvailable()throws Exception {
@@ -138,4 +140,56 @@ public class ReportPresentationTest {
         json.put("checks",new JSONArray().put(new JSONObject().put("ip","192.168.0.1").put("port",80).put("state","OPEN")));
         assertEquals(java.util.Set.of("http://192.168.0.1/"),new ReportPresentation(json).devices.get(0).webLinks());
     }
+    @Test public void nucleiExecutionStatusIsIndependentAndFailuresAreFilterable()throws Exception {
+        JSONArray evidence=new JSONArray()
+                .put(observation("Nuclei","endpoint:80","http • completed • 3 configured templates"))
+                .put(observation("Nuclei","endpoint:443","https • incomplete • 3 configured templates"));
+        ReportPresentation model=new ReportPresentation(report(evidence));
+        ReportPresentation.Device device=model.devices.get(0);
+        assertEquals(ReportPresentation.Status.FAILED,device.nucleiStatus);
+        assertEquals(ReportPresentation.Status.NOT_RUN,device.vulnerabilityStatus);
+        assertTrue(device.matches(ReportPresentation.Filter.FAILURES));
+        assertTrue(model.summary().contains("Devices with tool failures: 1"));
+        assertTrue(model.scanDetails().contains("Nuclei: 1 failed"));
+        device=new ReportPresentation(report(new JSONArray().put(observation("Nuclei","endpoint:80","http • cancelled • 3 configured templates")))).devices.get(0);
+        assertEquals(ReportPresentation.Status.CANCELLED,device.nucleiStatus);
+        assertFalse(device.hasFailures());
+    }
+    @Test public void successfulNucleiWithoutMatchesIsAnAssessmentAndLegacyFindingsAreUnknown()throws Exception {
+        ReportPresentation model=new ReportPresentation(report(new JSONArray().put(
+                observation("Nuclei","endpoint:80","http • completed • 3 configured templates"))));
+        assertEquals(ReportPresentation.Status.COMPLETED,model.devices.get(0).nucleiStatus);
+        assertTrue(model.devices.get(0).vulnerabilitySummary().startsWith("No vulnerability alerts reported"));
+        assertFalse(model.fullText().contains("No vulnerability assessment completed"));
+        model=new ReportPresentation(report(new JSONArray().put(observation("Nuclei","finding:80:Test","VULNERABLE — evidence"))));
+        assertEquals(ReportPresentation.Status.UNKNOWN,model.devices.get(0).nucleiStatus);
+        assertEquals(ReportPresentation.Status.NOT_RUN,model.devices.get(0).vulnerabilityStatus);
+    }
+    @Test public void fullReportKeepsNucleiEvidenceOnceAndUsesCorrectTool()throws Exception {
+        ReportPresentation model=new ReportPresentation(report(new JSONArray()
+                .put(observation("Nuclei","endpoint:80","http • completed • 3 configured templates"))
+                .put(observation("Nuclei","finding:80:Test","VULNERABLE — unique-evidence"))));
+        String text=model.fullText();
+        assertTrue(text.contains("Nuclei · Test · port 80"));
+        assertEquals(1,text.split("unique-evidence",-1).length-1);
+        assertTrue(text.contains("endpoint:80: http • completed"));
+    }
+    @Test public void compactDetailsOmitRepeatedTotalsAndPortRowsOmitMissingVersions()throws Exception {
+        ReportPresentation model=new ReportPresentation(report(new JSONArray()
+                .put(observation("Nmap","openPort","80/tcp"))
+                .put(observation("Nmap service 80","serviceName","http"))));
+        assertFalse(model.scanDetails().contains("Devices:"));
+        assertFalse(model.scanDetails().contains("Open TCP endpoints:"));
+        assertTrue(model.scanDetails().startsWith("Target:"));
+        assertEquals("80/TCP · http",model.devices.get(0).portLine(80));
+    }
+    @Test public void additionalMetadataExcludesDedicatedToolAndIdentityEvidence()throws Exception {
+        assertFalse(ReportPresentation.Device.additionalEvidence(observation("Nuclei","finding:80:Test","value")));
+        assertFalse(ReportPresentation.Device.additionalEvidence(observation("Nuclei","endpoint:80","value")));
+        assertFalse(ReportPresentation.Device.additionalEvidence(observation("Nmap service 80","banner","value")));
+        assertFalse(ReportPresentation.Device.additionalEvidence(observation("UPnP","manufacturer","value")));
+        assertTrue(ReportPresentation.Device.identityEvidence(observation("UPnP","manufacturer","value")));
+        assertTrue(ReportPresentation.Device.additionalEvidence(observation("HTTP tcp/80","server","value")));
+    }
+
 }
