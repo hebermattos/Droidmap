@@ -33,6 +33,8 @@ public final class ScanService extends Service {
     private boolean nucleiEnabled;
     private boolean portsOnly;
     private String tool="discovery";
+    private String selectedIp;
+    private int selectedPort;
     private String nmapArgs="";
     private int nmapVersionIntensity=NmapCommands.DEFAULT_VERSION_INTENSITY;
     private long lastNotification;
@@ -74,6 +76,8 @@ public final class ScanService extends Service {
             } else plan=requested;
         } catch(RuntimeException e) { failStartup(target,e); return START_NOT_STICKY; }
         tool=intent.getStringExtra("tool"); if(tool==null)tool="discovery";
+        selectedIp=intent.getStringExtra("selectedIp");
+        selectedPort=intent.getIntExtra("selectedPort",0);
         networkScope=NetworkScope.current(this,plan); identificationPartial=false; portsOnly=intent.getBooleanExtra("portsOnly",false); nmapEnabled=!portsOnly && intent.getBooleanExtra("nmap",true); nucleiEnabled=!portsOnly && intent.getBooleanExtra("nuclei",false); nmapArgs=intent.getStringExtra("nmapArgs"); if(nmapArgs==null)nmapArgs="";
         runId=System.currentTimeMillis(); finishing=false; acceptedPreview=0; previewVersion.set(0); lastPreview.set(0);
         latest=new ScanSnapshot(runId,true,true,0,plan.hosts.size()*plan.ports.size(),target,"Starting scan…","","");
@@ -188,10 +192,13 @@ public final class ScanService extends Service {
                     JSONObject check=items.optJSONObject(i);
                     if(check==null || !"OPEN".equals(check.optString("state")))continue;
                     String host=check.optString("ip"); int port=check.optInt("port");
-                    if(plan.hosts.contains(host)&&port>0&&port<=65535)
+                    if(plan.hosts.contains(host)&&port>0&&port<=65535
+                            && (selectedIp==null || selectedIp.equals(host) && selectedPort==port))
                         open.add(new TcpScanner.Result(host,port,TcpScanner.State.OPEN));
                 }
             }
+            if(selectedIp!=null && open.isEmpty())
+                throw new IllegalStateException("The selected IP and TCP port were not verified open in Discovery.");
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
             Set<String> verifiedOpen=new HashSet<>();
             for(TcpScanner.Result item:open)verifiedOpen.add(item.host+":"+item.port);
@@ -199,7 +206,8 @@ public final class ScanService extends Service {
             org.json.JSONArray devices=data.optJSONArray("devices");
             if(devices!=null)for(int i=0;i<devices.length();i++){
                 JSONObject device=devices.optJSONObject(i);
-                if(device==null||!plan.hosts.contains(device.optString("ip")))continue;
+                if(device==null||!plan.hosts.contains(device.optString("ip"))
+                        || selectedIp!=null && !selectedIp.equals(device.optString("ip")))continue;
                 String host=device.optString("ip");
                 org.json.JSONArray observations=device.optJSONArray("evidence");
                 if(observations==null)continue;
