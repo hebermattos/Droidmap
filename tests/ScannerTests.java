@@ -71,6 +71,24 @@ public final class ScannerTests {
         check(peak.get() <= 32, "Concurrency bounded");
         check(results.get(0).host.equals("10.0.0.1") && results.get(0).port == 80, "Result ordering");
         check(results.stream().filter(r -> r.state == TcpScanner.State.NO_RESPONSE).count() == 62, "Silence retained independently of refusal");
+        AtomicInteger fastCalls=new AtomicInteger();
+        ScanPlan fastPlan=new ScanPlan("10.0.0.0/31","22,80,443,8080",100,ScanPlan.Mode.FAST);
+        List<TcpScanner.Result> fastResults=new TcpScanner((host,port,timeout)->{
+            fastCalls.incrementAndGet();
+            return host.endsWith(".1") && port==443 ? TcpScanner.State.OPEN : TcpScanner.State.NO_RESPONSE;
+        }).scan(fastPlan,(r,c,t)->{});
+        check(fastResults.size()==8 && fastCalls.get()==7,"Fast preflight skips an unresponsive host's remaining ports");
+        check(fastResults.stream().filter(r->r.state==TcpScanner.State.SKIPPED).count()==1,
+                "Untested ports are explicitly marked skipped");
+        check(fastResults.stream().filter(r->r.state==TcpScanner.State.SKIPPED)
+                .allMatch(r->r.attempts==0),"Skipped ports have no connection attempt");
+        AtomicInteger completeCalls=new AtomicInteger();
+        List<TcpScanner.Result> completeResults=new TcpScanner((host,port,timeout)->{
+            completeCalls.incrementAndGet(); return TcpScanner.State.NO_RESPONSE;
+        }).scan(new ScanPlan("10.0.0.0/31","22,80,443,8080",100,ScanPlan.Mode.COMPLETE),(r,c,t)->{});
+        check(completeResults.size()==8 && completeCalls.get()==16
+                && completeResults.stream().noneMatch(r->r.state==TcpScanner.State.SKIPPED),
+                "Complete checks every port on silent hosts, including retries");
         TcpScanner cancelled = new TcpScanner(); cancelled.cancel();
         check(cancelled.scan(new ScanPlan("10.0.0.1", "80", 100), (r,c,t) -> {}).isEmpty(), "Pre-cancellation opens no sockets");
         CountDownLatch entered = new CountDownLatch(1);
