@@ -72,7 +72,7 @@ jobs:
       - name: Test scanner
         run: bash tests/run.sh
       - name: Test, build and lint Android app
-        run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug -PsideBySideInstall=true --no-daemon
+        run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug -PsideBySideInstall=false --no-daemon
       - name: Verify packaged Nmap runtime data
         run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk
       - name: Verify Nuclei packaged in APK
@@ -80,15 +80,23 @@ jobs:
         run: |
           set -euo pipefail
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libnuclei.so"
+      - name: Verify update-compatible package and signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          aapt dump badging "$APK" | grep -q "^package: name='com.netmap.android' "
+          apksigner verify --verbose --print-certs "$APK"
+          echo "Verified package ID com.netmap.android and APK signature"
       - name: Name APK clearly for download
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/Droidmap-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Droidmap-update.apk
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Droidmap-APK-download-ZIP
-          path: dist/Droidmap-debug.apk
+          name: Droidmap-update-APK
+          path: dist/Droidmap-update.apk
           if-no-files-found: error
