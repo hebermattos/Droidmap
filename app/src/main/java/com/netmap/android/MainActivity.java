@@ -217,24 +217,22 @@ public final class MainActivity extends Activity {
     }
 
     private void showOptions(android.view.View anchor) {
-        PopupMenu menu = new PopupMenu(this, anchor);
-        menu.getMenu().add(0, 1, 0, "Scan targets");
-        menu.getMenu().add(0, 2, 1, "Scan settings").setEnabled(!scanRunning);
-        menu.getMenu().add(0, 3, 2, "Nmap settings").setEnabled(!scanRunning);
-        menu.getMenu().add(0, 4, 3, "History & reanalysis");
-        menu.getMenu().add(0, 5, 4, "Reports & export");
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1: showTargetOptions(); break;
-                case 2: showSettings(); break;
-                case 3: showNmapSettings(); break;
-                case 4: showHistoryOptions(); break;
-                case 5: showReportOptions(); break;
-                default: return false;
-            }
-            return true;
-        });
-        menu.show();
+        OptionsPage.show(this, settings, scanRunning, !lastDevices.isEmpty(),
+                !resultText.isEmpty(), !scanRunning && !report.isEmpty(),
+                updated -> {
+                    settings = updated;
+                    settingsStore.save(updated);
+                    updateSettingsSummary();
+                },
+                new OptionsPage.Actions() {
+                    @Override public void useWifi(boolean allAddresses) {
+                        selectWifiNetwork(allAddresses);
+                    }
+                    @Override public void openHistory() { showHistory(); }
+                    @Override public void reanalyzeDevice() { chooseDevice(); }
+                    @Override public void openReport() { showReadableReport(); }
+                    @Override public void exportJson() { MainActivity.this.exportJson(); }
+                });
     }
 
     private void showChoiceDialog(String title, String[] labels, boolean[] enabled,
