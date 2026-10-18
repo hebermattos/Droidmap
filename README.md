@@ -43,7 +43,7 @@ Only one action can run at a time. The screen is cleared whenever a new scan sta
 
 ## Build and install
 
-Requirements: JDK 17, Android SDK platform 35 and build tools 35.0.0. The Gradle wrapper uses 8.11.1; Android Gradle Plugin is pinned to 8.9.2.
+Requirements: JDK 17, Android SDK platform 35 and build tools 35.0.0. The Gradle wrapper uses 9.7.1; Android Gradle Plugin is pinned to 8.9.2.
 
 Open this directory in Android Studio, allow Gradle sync, and run the app on an Android 8.0+ device. Alternatively, set `ANDROID_HOME` to your SDK path (or create `local.properties` with `sdk.dir=...`) and run:
 
