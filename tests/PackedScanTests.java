@@ -37,6 +37,15 @@ public final class PackedScanTests {
         try (DataInputStream in = new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(partial.encodedHost(0)))))) {
             check(in.readUnsignedShort()==0 && in.readUnsignedShort()==0, "Unfinished checks are never marked closed");
         }
+        PackedScanResults skipped=new PackedScanResults(new ScanPlan("10.0.0.0/31","80,443",200));
+        skipped.add(new TcpScanner.Result("10.0.0.1",80,TcpScanner.State.SKIPPED,0,0));
+        check(skipped.get(0).state==TcpScanner.State.SKIPPED && skipped.get(0).attempts==0,
+                "Skipped ports remain distinguishable from timeout and incomplete checks");
+        try(DataInputStream in=new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(
+                Base64.getDecoder().decode(skipped.encodedHost(0)))))) {
+            check(in.readUnsignedShort()==0xffff && in.readUnsignedShort()==0,
+                    "Skipped and unfinished packed states have different encodings");
+        }
         System.out.println("PASS: packed scan results (16,645,890 connections, exact export, retries, partial results, 96 MiB heap)");
     }
 }

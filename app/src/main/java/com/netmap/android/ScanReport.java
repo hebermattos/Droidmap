@@ -6,12 +6,13 @@ import java.util.*;
 /** Complete scan report; independent of the activity lifecycle. */
 final class ScanReport {
     static String describe(List<TcpScanner.Result> results, ScanPlan plan, boolean cancelled, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,int initialCompleted,int extraCount) {
-        Map<String, List<Integer>> hosts = new LinkedHashMap<>(); int errors = 0, silent = 0, open = 0;
+        Map<String, List<Integer>> hosts = new LinkedHashMap<>(); int errors = 0, silent = 0, open = 0, skipped = 0;
         for (TcpScanner.Result result : results) {
             if (result.state == TcpScanner.State.OPEN || result.state == TcpScanner.State.CLOSED) hosts.computeIfAbsent(result.host, k -> new ArrayList<>());
             if (result.state == TcpScanner.State.OPEN) { hosts.get(result.host).add(result.port); open++; }
             if (result.state == TcpScanner.State.ERROR) errors++;
             if (result.state == TcpScanner.State.NO_RESPONSE) silent++;
+            if (result.state == TcpScanner.State.SKIPPED) skipped++;
         }
         for(String ip:identified.keySet()) hosts.computeIfAbsent(ip,k->new ArrayList<>());
         StringBuilder text = new StringBuilder();
@@ -43,16 +44,18 @@ final class ScanReport {
         if (hosts.isEmpty()) text.append("No responding devices detected.\n\n");
         for(String notice:notices) text.append("Notice: ").append(notice).append("\n");
         return text.append("Summary\nReported targets (not proof of reachability): ").append(hosts.size()).append(" / ").append(plan.hosts.size())
-            .append("\nOpen ports: ").append(open).append("\nNo response: ").append(silent).append("\nConnection errors: ").append(errors)
+            .append("\nOpen ports: ").append(open).append("\nSkipped TCP checks: ").append(skipped).append("\nNo response: ").append(silent).append("\nConnection errors: ").append(errors)
             .append("\nMode: ").append(plan.mode).append("\nAdvertised endpoint checks: ").append(extraCount).append("\nSelected-port checks: ").append(initialCompleted).append(" / ").append(plan.hosts.size() * plan.ports.size())
             .append(cancelled ? "\nPartial scan.\n" : "\n")
-            .append("\nNo response can mean filtering, timeout or an offline device. Names and models are self-reported; probable types are inferred from advertised services. An open port does not establish a vulnerability.").toString();
+            .append("\nFast preflight can miss silent hosts with services on other ports. Complete mode checks every selected port. No response can mean filtering, timeout or an offline device. Names and models are self-reported; probable types are inferred from advertised services. An open port does not establish a vulnerability.").toString();
     }
     static String json(List<TcpScanner.Result> results, ScanPlan plan, String target, boolean cancelled, long started, Map<String,List<DeviceEvidence.Observation>> identified,List<String> notices,List<TcpScanner.Result> endpointChecks) throws Exception {
-        JSONObject report = new JSONObject(); report.put("schemaVersion", results instanceof PackedScanResults ? 6 : 5); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
+        JSONObject report = new JSONObject(); report.put("schemaVersion", results instanceof PackedScanResults ? 7 : 5); report.put("adaptive",plan.adaptive); report.put("mode",plan.mode.name()); report.put("timeoutRetries",plan.mode.retries); report.put("target", target);
         report.put("startedAtEpochMs", started); report.put("finishedAtEpochMs", System.currentTimeMillis());
         report.put("cancelled", cancelled); report.put("timeoutMs", plan.timeoutMs); report.put("ports", new JSONArray(plan.ports));
         report.put("plannedChecks", plan.hosts.size() * plan.ports.size()); report.put("completedChecks", results.size());
+        int skippedChecks=0; for(TcpScanner.Result item:results) if(item.state==TcpScanner.State.SKIPPED) skippedChecks++;
+        report.put("skippedChecks",skippedChecks); report.put("testedChecks",results.size()-skippedChecks);
         JSONArray checks = new JSONArray();
         List<TcpScanner.Result> detailChecks = results instanceof PackedScanResults
                 ? ((PackedScanResults)results).evidenceChecks() : results;
@@ -63,7 +66,7 @@ final class ScanReport {
                     .put("ip", plan.hosts.get(i)).put("data", packed.encodedHost(i)));
             report.put("packedChecks", new JSONObject().put("encoding", "deflate-base64-u16be-v1")
                     .put("hosts", hosts));
-            report.put("checksCoverage", "Every OPEN check and one CLOSED check per responding host; all initial checks are preserved in packedChecks.");
+            report.put("checksCoverage", "Every OPEN check and one CLOSED check per responding host; all checks and explicit skip markers are preserved in packedChecks.");
         }
         for (TcpScanner.Result result : detailChecks) { JSONObject check = new JSONObject(); check.put("ip", result.host); check.put("port", result.port); check.put("protocol", "tcp"); check.put("state", result.state.name()); check.put("attempts",result.attempts); check.put("finalTimeoutMs",result.timeoutMs); checks.put(check); }
         JSONArray extraChecks=new JSONArray();
