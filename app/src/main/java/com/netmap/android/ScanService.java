@@ -291,10 +291,11 @@ public final class ScanService extends Service {
             String json=ScanReport.preview(target,new ArrayList<>(checks),extra,evidence.snapshot());
             if ("discovery".equals(tool) || "ports".equals(tool))
                 json=new JSONObject(json).put("tool",tool).put("portsOnly","ports".equals(tool)).toString();
+            final String previewJson=json;
             main.post(() -> {
                 if(destroyed || scanner!=tcp || finishing || version<=acceptedPreview) return;
                 acceptedPreview=version; ScanSnapshot state=latest;
-                latest=new ScanSnapshot(runId,true,state.cancellable,state.done,state.total,state.target,state.message,json,"");
+                latest=new ScanSnapshot(runId,true,state.cancellable,state.done,state.total,state.target,state.message,previewJson,"");
             });
         } catch(Exception ignored) { /* The final full report still validates and reports serialization errors. */ }
     }
