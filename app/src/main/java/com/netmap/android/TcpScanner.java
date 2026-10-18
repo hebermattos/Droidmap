@@ -45,6 +45,7 @@ public final class TcpScanner {
     }
     public boolean isCancelled() { return cancelled.get(); }
     public List<Result> scan(ScanPlan plan, Listener listener) throws InterruptedException {
+        if (cancelled.get()) return Collections.emptyList();
         ExecutorService workers = Executors.newFixedThreadPool(32);
         runningWorkers = workers;
         if (cancelled.get()) workers.shutdownNow();
