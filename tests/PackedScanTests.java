@@ -42,7 +42,7 @@ public final class PackedScanTests {
         check(skipped.get(0).state==TcpScanner.State.SKIPPED && skipped.get(0).attempts==0,
                 "Skipped ports remain distinguishable from timeout and incomplete checks");
         try(DataInputStream in=new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(
-                Base64.getDecoder().decode(skipped.encodedHost(0)))))) {
+                Base64.getDecoder().decode(skipped.encodedHost(1)))))) {
             check(in.readUnsignedShort()==0xffff && in.readUnsignedShort()==0,
                     "Skipped and unfinished packed states have different encodings");
         }
