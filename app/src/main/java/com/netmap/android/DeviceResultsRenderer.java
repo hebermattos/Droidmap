@@ -72,7 +72,18 @@ final class DeviceResultsRenderer {
                 LinearLayout entry=new LinearLayout(context);
                 entry.setOrientation(LinearLayout.VERTICAL);
                 entry.setPadding(dp(8),dp(5),dp(8),dp(5));
-                value(entry,device.ip+"  •  TCP "+port);
+                if (port == device.ports.first()) {
+                    TextView identity=value(entry,deviceIdentity(device));
+                    identity.setTypeface(null,android.graphics.Typeface.BOLD);
+                    identity.setTextSize(15);
+                    String metadata=deviceMetadata(device);
+                    if(!metadata.isEmpty()) {
+                        TextView description=value(entry,metadata);
+                        description.setTextColor(Color.LTGRAY);
+                        description.setTextSize(12);
+                    }
+                }
+                value(entry,"TCP "+port);
                 LinearLayout tools=new LinearLayout(context);
                 tools.setOrientation(LinearLayout.HORIZONTAL);
                 Button nmap=new Button(context);
@@ -97,6 +108,36 @@ final class DeviceResultsRenderer {
         }
         if(endpoints==0)value(table,"No open TCP ports found in the selected scan.");
         value(deviceList,hosts+" IPs • "+endpoints+" open TCP ports");
+    }
+
+    /** Use actual Discovery identification fields, never infer identity from a TCP port. */
+    private String deviceIdentity(ReportPresentation.Device device) {
+        String name=firstKnown(device.json,"reportedName","dnsHostname");
+        return name.isEmpty()?device.ip:device.ip+"  •  "+name;
+    }
+
+    private String deviceMetadata(ReportPresentation.Device device) {
+        LinkedHashSet<String> details=new LinkedHashSet<>();
+        String manufacturer=firstKnown(device.json,"reportedManufacturer","suggestedManufacturer");
+        String model=firstKnown(device.json,"reportedModel");
+        String type=firstKnown(device.json,"probableType");
+        if(!manufacturer.isEmpty()) {
+            if(device.json.optString("reportedManufacturer").isEmpty())
+                details.add("Possible manufacturer: "+manufacturer);
+            else details.add(manufacturer);
+        }
+        if(!model.isEmpty())details.add(model);
+        if(!type.isEmpty())details.add("Possible type: "+type);
+        return String.join(" • ",details);
+    }
+
+    private String firstKnown(JSONObject data, String... keys) {
+        for(String key:keys) {
+            String value=data.optString(key).trim();
+            if(!value.isEmpty() && !value.equalsIgnoreCase("unknown")
+                    && !value.equalsIgnoreCase("null"))return value;
+        }
+        return "";
     }
 
     /** Nuclei currently bundles HTTP templates, so TCP openness alone is insufficient. */
