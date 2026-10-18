@@ -66,13 +66,31 @@ final class DeviceResultsRenderer {
         int hosts=0, endpoints=0;
         for(ReportPresentation.Device device:model.devices) {
             lastDevices.add(device.ip);
-            if(device.ports.isEmpty()) continue;
             hosts++;
+            LinearLayout deviceHeader=new LinearLayout(context);
+            deviceHeader.setOrientation(LinearLayout.VERTICAL);
+            deviceHeader.setPadding(dp(8),dp(10),dp(8),dp(5));
+            TextView name=value(deviceHeader,deviceIdentity(device));
+            name.setTextSize(16);
+            name.setTypeface(null,android.graphics.Typeface.BOLD);
+            String metadata=deviceMetadata(device);
+            if(!metadata.isEmpty()) {
+                TextView description=value(deviceHeader,metadata);
+                description.setTextColor(Color.LTGRAY);
+                description.setTextSize(12);
+            }
+            table.addView(deviceHeader,new LinearLayout.LayoutParams(-1,-2));
+            if(device.ports.isEmpty()) {
+                TextView empty=value(table,"No open TCP ports identified");
+                empty.setTextColor(Color.LTGRAY);
+                divider(table);
+                continue;
+            }
             for(int port:device.ports) {
                 LinearLayout entry=new LinearLayout(context);
                 entry.setOrientation(LinearLayout.VERTICAL);
-                entry.setPadding(dp(8),dp(5),dp(8),dp(5));
-                value(entry,device.ip+"  •  TCP "+port);
+                entry.setPadding(dp(16),dp(4),dp(8),dp(4));
+                value(entry,"TCP "+port);
                 LinearLayout tools=new LinearLayout(context);
                 tools.setOrientation(LinearLayout.HORIZONTAL);
                 Button nmap=new Button(context);
@@ -95,8 +113,37 @@ final class DeviceResultsRenderer {
                 endpoints++;
             }
         }
-        if(endpoints==0)value(table,"No open TCP ports found in the selected scan.");
-        value(deviceList,hosts+" IPs • "+endpoints+" open TCP ports");
+        if(hosts==0)value(table,"No identified devices found in the selected scan.");
+        value(deviceList,hosts+" devices • "+endpoints+" open TCP ports");
+    }
+
+    /** Reported names remain distinct from inferred manufacturer and device type. */
+    private String deviceIdentity(ReportPresentation.Device device) {
+        String name=firstKnown(device.json,"reportedName","dnsHostname");
+        return name.isEmpty()?device.ip:device.ip+"  •  "+name;
+    }
+
+    private String deviceMetadata(ReportPresentation.Device device) {
+        LinkedHashSet<String> details=new LinkedHashSet<>();
+        String manufacturer=firstKnown(device.json,"reportedManufacturer","suggestedManufacturer");
+        String model=firstKnown(device.json,"reportedModel");
+        String type=firstKnown(device.json,"probableType");
+        if(!manufacturer.isEmpty()) {
+            details.add(device.json.optString("reportedManufacturer").isEmpty()
+                    ?"Possible manufacturer: "+manufacturer:manufacturer);
+        }
+        if(!model.isEmpty())details.add(model);
+        if(!type.isEmpty())details.add("Possible type: "+type);
+        return String.join(" • ",details);
+    }
+
+    private String firstKnown(JSONObject data,String... keys) {
+        for(String key:keys) {
+            String value=data.optString(key).trim();
+            if(!value.isEmpty()&&!value.equalsIgnoreCase("unknown")
+                    &&!value.equalsIgnoreCase("null"))return value;
+        }
+        return "";
     }
 
     /** Nuclei currently bundles HTTP templates, so TCP openness alone is insufficient. */
