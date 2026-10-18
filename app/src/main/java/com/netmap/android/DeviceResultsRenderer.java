@@ -43,7 +43,7 @@ final class DeviceResultsRenderer {
                 lastDevices.add(device.ip); // Reanalysis retains the entire inventory, independent of the filter.
                 if(device.matches(filter)){addDeviceCard(device);shown++;}
             }
-            value(deviceList,"Showing "+shown+" of "+model.devices.size()+" devices");
+            if(shown<model.devices.size())value(deviceList,"Showing "+shown+" of "+model.devices.size()+" devices");
             if(shown==0)value(deviceList,model.devices.isEmpty()?"No devices observed. Review the scan notices.":"No devices match this filter.");
             JSONArray notices=model.json.optJSONArray("identificationNotices");
             if(notices!=null&&notices.length()>0)section(deviceList,"scan-notices","Scan notices ("+notices.length()+")",false,body->{
@@ -158,56 +158,45 @@ final class DeviceResultsRenderer {
                 +(alerts>0?" · "+alerts+" with alerts":"")
                 +(failures>0?" · "+failures+" with failures":""));
         section(card,"overview-details","Scan details",false,body->{
-            for(String line:model.summary().split("\n"))value(body,line);
+            for(String line:model.scanDetails().split("\n"))value(body,line);
         });
     }
 
-    /** Network-wide NSE findings; only reported alerts are shown as vulnerabilities. */
+    /** Compact cross-tool alert index; complete evidence lives in each device card. */
     private void vulnerabilityOverview(ReportPresentation model) {
         int count=0;
         for(ReportPresentation.Device device:model.devices)
             for(ReportPresentation.Finding finding:device.findings)
                 if(finding.alert)count++;
-        final int alerts=count;
-        section(deviceList,"vulnerability-overview","Vulnerability summary ("+alerts+")",true,body->{
-            if(alerts==0) {
-                value(body,"No vulnerability alerts reported. This does not prove the network is secure.");
-                return;
-            }
+        if(count==0) {
+            boolean assessed=model.devices.stream().anyMatch(device->
+                    device.vulnerabilityStatus==ReportPresentation.Status.COMPLETED
+                            ||device.nucleiStatus==ReportPresentation.Status.COMPLETED);
+            value(deviceList,assessed?"No vulnerability alerts reported; assessment coverage is limited."
+                    :"No completed vulnerability assessment recorded.");
+            return;
+        }
+        section(deviceList,"vulnerability-overview","Alerts ("+count+")",true,body->{
             for(ReportPresentation.Device device:model.devices) {
-                for(ReportPresentation.Finding finding:device.findings) {
+                for(int index=0;index<device.findings.size();index++) {
+                    ReportPresentation.Finding finding=device.findings.get(index);
                     if(!finding.alert)continue;
-                    String port="Not specified";
-                    String service="Not identified";
-                    java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("^port (\\d+)").matcher(finding.scope);
-                    if(matcher.find()) {
-                        port=matcher.group(1)+"/TCP";
-                        try {
-                            int number=Integer.parseInt(matcher.group(1));
-                            service=device.services.getOrDefault(number,"Not identified");
-                            if(service.equals("Not identified"))
-                                for(JSONObject item:device.evidence)
-                                    if(item.optString("source").equals("Nmap vulnerabilities")
-                                            && item.optString("field").equals("port "+number+" • service"))
-                                        service=item.optString("value","Not identified");
-                        } catch(NumberFormatException ignored) { }
-                    }
-                    LinearLayout item=panel(body);
-                    TextView title=value(item,device.ip+" · "+port+" · "+service);
-                    title.setTypeface(null,android.graphics.Typeface.BOLD);
-                    detail(item,"Finding",finding.title);
-                    String description=finding.evidence.trim().replaceAll("\\s+"," ");
-                    if(description.length()>220)description=description.substring(0,220)+"…";
-                    detail(item,"Description",description.isEmpty()?finding.assessment:description);
-                    section(item,"vuln:"+device.ip+":"+finding.scope+":"+finding.title,
-                            "Evidence and guidance",false,more->{
-                        detail(more,"Assessment",finding.assessment);
-                        detail(more,"Full Nmap evidence",finding.evidence);
-                        detail(more,"Suggested action",finding.action);
+                    final int selected=index;
+                    Button link=action(body);
+                    link.setText(device.ip+" · "+finding.scope+"\n"+finding.source+" · "+finding.title);
+                    link.setContentDescription("Open alert for "+device.ip+": "+finding.title);
+                    link.setOnClickListener(v->{
+                        expandedDevices.add(device.ip);
+                        sectionStates.put(device.ip+":findings",true);
+                        sectionStates.put(device.ip+":finding:"+selected,true);
+                        filter=ReportPresentation.Filter.ALL;
+                        render(lastReport);
+                        View card=deviceList.findViewWithTag(device.ip);
+                        if(card!=null)resultsScroll.post(()->resultsScroll.smoothScrollTo(0,card.getTop()));
                     });
                 }
             }
-            value(body,"Nmap findings require verification; alerts are not confirmed exploits.");
+            value(body,"Reported alerts require verification.");
         });
     }
 
@@ -231,6 +220,7 @@ final class DeviceResultsRenderer {
     }
     private void addDeviceCard(ReportPresentation.Device device) {
         LinearLayout card=panel(deviceList);
+        card.setTag(device.ip);
         Button toggle=action(card);
         toggle.setTypeface(null,android.graphics.Typeface.BOLD);
         toggle.setTextSize(16);
@@ -243,9 +233,10 @@ final class DeviceResultsRenderer {
         summary.setTextColor(Color.LTGRAY);
         List<String> attention=new ArrayList<>();
         if(device.hasAlerts())attention.add("Alerts reported");
-        if(device.hasFailures())attention.add("Nmap failed");
+        if(device.hasFailures())attention.add("Tool failed");
         if(device.serviceStatus==ReportPresentation.Status.RUNNING
                 ||device.vulnerabilityStatus==ReportPresentation.Status.RUNNING)attention.add("Nmap running");
+        if(device.nucleiStatus==ReportPresentation.Status.RUNNING)attention.add("Nuclei running");
         if(!attention.isEmpty())value(card,String.join(" · ",attention));
         LinearLayout details=expandedBody(card);
         boolean expanded=expandedDevices.contains(device.ip);
@@ -296,73 +287,99 @@ final class DeviceResultsRenderer {
             for(String url:links)webLink(body,url);
         });
         section(parent,prefix+"identity","Identification",false,body->{
-            detail(body,"IP address",device.ip);
-            String[] fields={"reportedName","dnsHostname","reportedManufacturer","reportedModel","probableType","identityConfidence","suggestedManufacturer","modelConfidence","manufacturerConfidence","typeConfidence","identificationStatus","probeCoverage"};
-            for(String field:fields)detail(body,ReportPresentation.label(field),device.json.optString(field));
+            String[] fields={"reportedName","dnsHostname","reportedManufacturer","reportedModel","probableType"};
+            Set<String> displayed=new HashSet<>();
+            for(String field:fields) {
+                String text=device.json.optString(field);
+                if(!text.isEmpty()&&displayed.add(text))detail(body,ReportPresentation.label(field),text);
+            }
             JSONArray macs=device.json.optJSONArray("macAddresses");
-            if(macs!=null&&macs.length()>0)for(int i=0;i<macs.length();i++){JSONObject mac=macs.optJSONObject(i);if(mac!=null)detail(body,"MAC",mac.optString("address")+" · "+mac.optString("source")+" · "+mac.optString("kind"));}
-            else {
+            Set<String> addresses=new LinkedHashSet<>();
+            if(macs!=null)for(int i=0;i<macs.length();i++) {
+                JSONObject mac=macs.optJSONObject(i);
+                if(mac!=null&&!mac.optString("address").isEmpty())addresses.add(mac.optString("address"));
+            }
+            if(addresses.isEmpty()) {
                 List<DeviceEvidence.Observation> legacy=new ArrayList<>();
                 for(JSONObject item:device.evidence)legacy.add(new DeviceEvidence.Observation(item.optString("source"),item.optString("field"),item.optString("value")));
-                List<DeviceEvidence.Observation> observed=MacAddresses.observations(legacy);
-                if(observed.isEmpty())detail(body,"MAC","Unavailable — not observed or access restricted");
-                else for(DeviceEvidence.Observation mac:observed)detail(body,"MAC",mac.value+" · "+mac.source+" · "+MacAddresses.kind(mac.value));
+                for(DeviceEvidence.Observation mac:MacAddresses.observations(legacy))addresses.add(mac.value);
             }
-            JSONArray reasons=device.json.optJSONArray("identificationReasons");
-            if(reasons!=null)for(int i=0;i<reasons.length();i++)detail(body,"Evidence",reasons.optString(i));
-            value(body,"Names and models are reported metadata. Probable type and suggested manufacturer are inferred.");
-        });
-        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",false,body->portList(body,device));
-        section(parent,prefix+"findings","Vulnerabilities and alerts · "+device.vulnerabilityStatus.label,false,body->{
-            detail(body,"Analysis",device.vulnerabilitySummary());
-            if(device.findings.isEmpty())value(body,device.vulnerabilityStatus==ReportPresentation.Status.COMPLETED?"No script findings reported. This does not prove absence of vulnerabilities.":"No vulnerability assessment completed for this device.");
-            int index=0;
-            for(ReportPresentation.Finding finding:device.findings) {
-                section(body,prefix+"finding:"+(index++),finding.title+" · "+finding.scope+"\n"+finding.assessment,false,evidence->{
-                    detail(evidence,"Affected scope",finding.scope);detail(evidence,"Evidence",finding.evidence);detail(evidence,"Suggested action",finding.action);
-                });
-            }
-            JSONArray analysis=device.json.optJSONArray("analysisFindings");
-            if(analysis!=null)section(body,prefix+"observations","Protocol observations",false,observations->{for(int i=0;i<analysis.length();i++)value(observations,analysis.optString(i));});
-        });
-        section(parent,prefix+"nuclei","Nuclei endpoint diagnostics",false,body->{
-            boolean any=false;
-            for(JSONObject item:device.evidence) {
-                if(!item.optString("source").equals("Nuclei")||!item.optString("field").startsWith("endpoint:"))continue;
-                any=true;
-                detail(body,"TCP port "+item.optString("field").substring("endpoint:".length()),item.optString("value"));
-            }
-            if(!any)value(body,"No Nuclei endpoint execution recorded.");
-            value(body,"Configured templates are not a count of successful individual template checks.");
-        });
-        section(parent,prefix+"diagnostics","Nmap diagnostics",false,body->{
-            diagnostic(body,"Service detection",device.serviceStatus,device.serviceMessage,device.serviceOutput);
-            diagnostic(body,"Vulnerability detection",device.vulnerabilityStatus,device.vulnerabilityMessage,device.vulnerabilityOutput);
-            section(body,prefix+"nmap-metadata","Nmap evidence details",false,metadata->{
-                for(JSONObject item:device.evidence) {
-                    String field=item.optString("field"),source=item.optString("source");
-                    if(!source.startsWith("Nmap")||field.equals("outputFile")||field.equals("scanStatus"))continue;
-                    detail(metadata,source+" · "+ReportPresentation.label(field),item.optString("value"));
+            for(String address:addresses)detail(body,"MAC",address+" · "+MacAddresses.kind(address));
+            section(body,prefix+"identity-details","Confidence and sources",false,more->{
+                String[] technical={"identityConfidence","suggestedManufacturer","modelConfidence","manufacturerConfidence","typeConfidence","identificationStatus","probeCoverage"};
+                for(String field:technical)detail(more,ReportPresentation.label(field),device.json.optString(field));
+                if(macs!=null)for(int i=0;i<macs.length();i++) {
+                    JSONObject mac=macs.optJSONObject(i);
+                    if(mac!=null)detail(more,"MAC source",mac.optString("address")+" · "+mac.optString("source"));
                 }
+                JSONArray reasons=device.json.optJSONArray("identificationReasons");
+                if(reasons!=null)for(int i=0;i<reasons.length();i++)detail(more,"Evidence",reasons.optString(i));
+                for(JSONObject item:device.evidence)if(ReportPresentation.Device.identityEvidence(item))
+                    detail(more,item.optString("source")+" · "+ReportPresentation.label(item.optString("field")),item.optString("value"));
+                value(more,"Names and models are reported metadata. Type and suggested manufacturer are inferred.");
             });
         });
-        section(parent,prefix+"metadata","Additional evidence and network metadata",false,body->{
+        section(parent,prefix+"ports","Ports and services ("+device.ports.size()+")",false,body->portList(body,device));
+        if(!device.findings.isEmpty()||device.vulnerabilityStatus!=ReportPresentation.Status.NOT_RUN
+                ||device.nucleiStatus!=ReportPresentation.Status.NOT_RUN)
+            section(parent,prefix+"findings","Findings ("+device.findings.size()+")",false,body->{
+                if(device.findings.isEmpty())value(body,device.vulnerabilitySummary());
+                int index=0;
+                for(ReportPresentation.Finding finding:device.findings) {
+                    section(body,prefix+"finding:"+(index++),finding.source+" · "+finding.title+" · "+finding.scope,false,evidence->{
+                        detail(evidence,"Assessment",finding.assessment);
+                        detail(evidence,"Evidence",finding.evidence);
+                        detail(evidence,"Suggested action",finding.action);
+                    });
+                }
+            });
+        JSONArray analysis=device.json.optJSONArray("analysisFindings");
+        List<String> observations=new ArrayList<>();
+        if(analysis!=null)for(int i=0;i<analysis.length();i++) {
+            String text=analysis.optString(i);
+            if(!text.startsWith("Review:")&&!observations.contains(text))observations.add(text);
+        }
+        if(!observations.isEmpty())section(parent,prefix+"observations","Protocol observations",false,body->{
+            for(String text:observations)value(body,text);
+        });
+        if(device.nucleiStatus!=ReportPresentation.Status.NOT_RUN)
+            section(parent,prefix+"nuclei","Nuclei · "+device.nucleiStatus.label,false,body->{
+                for(JSONObject item:device.evidence) {
+                    if(!item.optString("source").equals("Nuclei")||!item.optString("field").startsWith("endpoint:"))continue;
+                    detail(body,"TCP port "+item.optString("field").substring("endpoint:".length()),item.optString("value"));
+                }
+                value(body,"Configured templates do not indicate how many individual checks succeeded.");
+            });
+        if(device.serviceStatus!=ReportPresentation.Status.NOT_RUN||device.vulnerabilityStatus!=ReportPresentation.Status.NOT_RUN)
+            section(parent,prefix+"diagnostics","Nmap diagnostics",false,body->{
+                if(device.serviceStatus!=ReportPresentation.Status.NOT_RUN)
+                    diagnostic(body,"Service detection",device.serviceStatus,device.serviceMessage,device.serviceOutput);
+                if(device.vulnerabilityStatus!=ReportPresentation.Status.NOT_RUN)
+                    diagnostic(body,"Vulnerability detection",device.vulnerabilityStatus,device.vulnerabilityMessage,device.vulnerabilityOutput);
+                // Older reports may lack log files; retain their raw Nmap evidence as a fallback.
+                boolean legacy=device.serviceStatus!=ReportPresentation.Status.NOT_RUN&&device.serviceOutput.isEmpty()
+                        ||device.vulnerabilityStatus!=ReportPresentation.Status.NOT_RUN&&device.vulnerabilityOutput.isEmpty();
+                if(legacy)section(body,prefix+"nmap-metadata","Stored Nmap evidence",false,metadata->{
+                    for(JSONObject item:device.evidence) {
+                        String field=item.optString("field"),source=item.optString("source");
+                        if(!source.startsWith("Nmap")||field.equals("outputFile")||field.equals("scanStatus"))continue;
+                        detail(metadata,source+" · "+ReportPresentation.label(field),item.optString("value"));
+                    }
+                });
+            });
+        boolean additional=device.evidence.stream().anyMatch(ReportPresentation.Device::additionalEvidence);
+        if(additional)section(parent,prefix+"metadata","Additional evidence and network metadata",false,body->{
             for(JSONObject item:device.evidence) {
-                String field=item.optString("field");if(field.equals("outputFile")||item.optString("source").startsWith("Nmap"))continue;
+                String field=item.optString("field");if(!ReportPresentation.Device.additionalEvidence(item))continue;
                 detail(body,item.optString("source")+" · "+ReportPresentation.label(field),item.optString("value"));
             }
         });
     }
     private void portList(LinearLayout body,ReportPresentation.Device device) {
         if(device.ports.isEmpty()){value(body,"No open TCP ports observed.");return;}
-        for(int port:device.ports) {
-            TextView title=value(body,port+"/TCP · "+device.services.getOrDefault(port,"Service not identified"));
-            title.setTypeface(null,android.graphics.Typeface.BOLD);
-            detail(body,"Version / product",device.versions.getOrDefault(port,"Not identified"));
-            divider(body);
-        }
-        value(body,"Only successful TCP connections or Nmap-confirmed open ports appear here.");
+        for(int port:device.ports)value(body,device.portLine(port));
     }
+
     private void diagnostic(LinearLayout body,String profile,ReportPresentation.Status status,String message,String reference) {
         detail(body,profile,status.label);
         if(status==ReportPresentation.Status.FAILED)value(body,ReportPresentation.friendlyError(message));

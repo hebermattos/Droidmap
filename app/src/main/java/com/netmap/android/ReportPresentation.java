@@ -16,10 +16,13 @@ final class ReportPresentation {
         Filter(String label){this.label=label;}
     }
     static final class Finding {
-        final String title, scope, evidence, assessment, action;
+        final String title, scope, evidence, assessment, action, source;
         final boolean alert;
         Finding(String title,String scope,String evidence) {
-            this.title=title;this.scope=scope;this.evidence=evidence;
+            this("Nmap",title,scope,evidence);
+        }
+        Finding(String source,String title,String scope,String evidence) {
+            this.source=source;this.title=title;this.scope=scope;this.evidence=evidence;
             String upper=evidence.toUpperCase(Locale.ROOT);
             boolean negative=upper.contains("NOT VULNERABLE")||upper.contains("NOT_VULNERABLE");
             boolean reported=!negative&&java.util.regex.Pattern.compile("(?:^|\\bSTATE:\\s*)VULNERABLE\\b").matcher(upper).find();
@@ -36,7 +39,7 @@ final class ReportPresentation {
         final Map<Integer,String> services=new HashMap<>(), versions=new HashMap<>();
         final List<JSONObject> evidence=new ArrayList<>();
         final List<Finding> findings=new ArrayList<>();
-        final Status serviceStatus,vulnerabilityStatus;
+        final Status serviceStatus,vulnerabilityStatus,nucleiStatus;
         final String serviceMessage,vulnerabilityMessage,serviceOutput,vulnerabilityOutput;
         Device(JSONObject json,Map<String,Set<Integer>> open) {
             this.json=json;ip=json.optString("ip");
@@ -45,7 +48,8 @@ final class ReportPresentation {
             ports.addAll(open.getOrDefault(ip,Collections.emptySet()));
             JSONArray items=json.optJSONArray("evidence");
             String service="",vulnerability="",serviceLog="",vulnerabilityLog="";
-            boolean hasServiceEvidence=false,hasVulnerabilityEvidence=false;
+            boolean hasServiceEvidence=false,hasVulnerabilityEvidence=false,hasNucleiFindings=false;
+            List<Status> nucleiEndpoints=new ArrayList<>();
             if(items!=null)for(int i=0;i<items.length();i++) {
                 JSONObject item=items.optJSONObject(i);if(item==null)continue;evidence.add(item);
                 String source=item.optString("source"),field=item.optString("field"),value=item.optString("value");
@@ -62,7 +66,12 @@ final class ReportPresentation {
                 } catch(NumberFormatException ignored) { }
                 if(source.equals("Nuclei") && field.startsWith("finding:")) {
                     String[] parts=field.split(":",3);
-                    if(parts.length==3) findings.add(new Finding(parts[2],parts[1].equals("host")?"host-level":"port "+parts[1],value));
+                    if(parts.length==3) {findings.add(new Finding("Nuclei",parts[2],parts[1].equals("host")?"host-level":"port "+parts[1],value));hasNucleiFindings=true;}
+                }
+                if(source.equals("Nuclei") && field.startsWith("endpoint:")) {
+                    String[] parts=value.split(" • ");
+                    String endpoint=parts.length>1?parts[1].trim():"";
+                    nucleiEndpoints.add(endpoint.equals("incomplete")?Status.FAILED:status(endpoint));
                 }
                 if(source.equals("Nmap vulnerabilities")) {
                     if(field.equals("scanStatus"))vulnerability=value;
@@ -76,12 +85,31 @@ final class ReportPresentation {
             JSONArray analysis=json.optJSONArray("analysisFindings");
             if(analysis!=null)for(int i=0;i<analysis.length();i++) {
                 String finding=analysis.optString(i);
-                if(finding.startsWith("Review:"))findings.add(new Finding("Protocol warning","Device",finding));
+                if(finding.startsWith("Review:"))findings.add(new Finding("Protocol", "Protocol warning","Device",finding));
             }
             serviceMessage=service;vulnerabilityMessage=vulnerability;
             serviceStatus=service.isEmpty()&&(!serviceLog.isEmpty()||hasServiceEvidence)?Status.UNKNOWN:status(service);
             vulnerabilityStatus=vulnerability.isEmpty()&&(!vulnerabilityLog.isEmpty()||hasVulnerabilityEvidence)?Status.UNKNOWN:status(vulnerability);
             serviceOutput=serviceLog;vulnerabilityOutput=vulnerabilityLog;
+            nucleiStatus=nucleiEndpoints.contains(Status.FAILED)?Status.FAILED
+                    :nucleiEndpoints.contains(Status.CANCELLED)?Status.CANCELLED
+                    :nucleiEndpoints.contains(Status.RUNNING)?Status.RUNNING
+                    :nucleiEndpoints.contains(Status.UNKNOWN)||nucleiEndpoints.contains(Status.NOT_RUN)?Status.UNKNOWN
+                    :!nucleiEndpoints.isEmpty()?Status.COMPLETED:hasNucleiFindings?Status.UNKNOWN:Status.NOT_RUN;
+        }
+        private static final Set<String> IDENTITY_FIELDS=new HashSet<>(Arrays.asList(
+                "friendlyName","netbiosName","dnsHostname","manufacturer","modelName","modelHint",
+                "reportedMac","identificationStatus","probeCoverage"));
+        static boolean identityEvidence(JSONObject item) {return IDENTITY_FIELDS.contains(item.optString("field"));}
+        static boolean additionalEvidence(JSONObject item) {
+            String source=item.optString("source");
+            return !source.startsWith("Nmap")&&!source.equals("Nuclei")
+                    &&!item.optString("field").equals("outputFile")&&!identityEvidence(item);
+        }
+        String portLine(int port) {
+            String version=versions.getOrDefault(port,"");
+            return port+"/TCP · "+services.getOrDefault(port,"Service not identified")
+                    +(version.isEmpty()?"":" · "+version);
         }
         /** Links require an open endpoint plus HTTP evidence, never a port-number guess. */
         SortedSet<String> webLinks() {
@@ -114,11 +142,11 @@ final class ReportPresentation {
             links.add(scheme+"://"+host+(standard?"":":"+port)+"/");
         }
         boolean hasAlerts(){for(Finding finding:findings)if(finding.alert)return true;return false;}
-        boolean hasFailures(){return serviceStatus==Status.FAILED||vulnerabilityStatus==Status.FAILED;}
+        boolean hasFailures(){return serviceStatus==Status.FAILED||vulnerabilityStatus==Status.FAILED||nucleiStatus==Status.FAILED;}
         boolean matches(Filter filter){return filter==Filter.ALL||filter==Filter.ALERTS&&hasAlerts()||filter==Filter.FAILURES&&hasFailures();}
         String vulnerabilitySummary() {
-            if(vulnerabilityStatus!=Status.COMPLETED)return vulnerabilityStatus.label;
-            if(findings.stream().anyMatch(f->f.alert))return "Alerts reported";
+            if(findings.stream().anyMatch(f->f.alert))return "Alerts reported — verification required";
+            if(vulnerabilityStatus!=Status.COMPLETED&&nucleiStatus!=Status.COMPLETED)return vulnerabilityStatus==Status.NOT_RUN?nucleiStatus.label:vulnerabilityStatus.label;
             return "No vulnerability alerts reported; coverage is limited";
         }
     }
@@ -170,14 +198,26 @@ final class ReportPresentation {
         if(json.optBoolean("networkChanged")||json.optString("identificationStatus").equals("partial")||json.has("identificationComplete")&&!json.optBoolean("identificationComplete")||json.has("tcpScanComplete")&&!json.optBoolean("tcpScanComplete"))return "Completed with partial results";
         return "Completed";
     }
+    String scanDetails() {
+        return "Target: "+json.optString("target")
+                +"\nNmap services: "+profileCounts(false)+"\nNmap vulnerabilities: "+profileCounts(true)
+                +"\nNuclei: "+nucleiCounts();
+    }
+    private String nucleiCounts() {
+        Map<Status,Integer> counts=new EnumMap<>(Status.class);
+        for(Device device:devices)if(device.nucleiStatus!=Status.NOT_RUN)counts.merge(device.nucleiStatus,1,Integer::sum);
+        StringJoiner text=new StringJoiner(" · ");
+        for(Status status:Status.values())if(counts.containsKey(status))text.add(counts.get(status)+" "+status.label.toLowerCase(Locale.ROOT));
+        return text.length()==0?"No executions recorded":text.toString();
+    }
     String summary() {
         int ports=0,alerts=0,failures=0;
         for(Device device:devices) {
             ports+=device.ports.size();if(device.hasAlerts())alerts++;if(device.hasFailures())failures++;
         }
         return scanStatus()+"\nTarget: "+json.optString("target")+"\nDevices: "+devices.size()+"\nOpen TCP endpoints: "+ports
-            +"\nDevices with alerts: "+alerts+"\nDevices with Nmap failures: "+failures
-            +"\nNmap services: "+profileCounts(false)+"\nNmap vulnerabilities: "+profileCounts(true)
+            +"\nDevices with alerts: "+alerts+"\nDevices with tool failures: "+failures
+            +"\nNmap services: "+profileCounts(false)+"\nNmap vulnerabilities: "+profileCounts(true)+"\nNuclei: "+nucleiCounts()
             +(json.optBoolean("nmapEnabled",true)?"":"\nNmap was disabled for this scan.");
     }
     private String profileCounts(boolean vulnerabilities) {
@@ -195,6 +235,7 @@ final class ReportPresentation {
                 .append("Probable type: ").append(device.json.optString("probableType","Unknown")).append("\n")
                 .append("Identity confidence: ").append(device.json.optString("identityConfidence","Unknown")).append("\n")
                 .append("Nmap services: ").append(device.serviceStatus.label).append("\n")
+                .append("Nuclei: ").append(device.nucleiStatus.label).append("\n")
                 .append("Vulnerabilities: ").append(device.vulnerabilitySummary()).append("\n");
             for(String key:Arrays.asList("reportedManufacturer","reportedModel","dnsHostname"))if(!device.json.optString(key).isEmpty())text.append(label(key)).append(": ").append(device.json.optString(key)).append("\n");
             JSONArray macs=device.json.optJSONArray("macAddresses");
@@ -202,16 +243,21 @@ final class ReportPresentation {
             for(String url:device.webLinks())text.append("Web interface: ").append(url).append("\n");
             text.append("\nPorts and services\n");
             if(device.ports.isEmpty())text.append("No open TCP ports observed.\n");
-            for(int port:device.ports)text.append(port).append("/TCP · ").append(device.services.getOrDefault(port,"Not identified")).append(" · ").append(device.versions.getOrDefault(port,"Version not identified")).append("\n");
+            for(int port:device.ports)text.append(device.portLine(port)).append("\n");
             text.append("\nFindings\n");
-            if(device.findings.isEmpty())text.append(device.vulnerabilityStatus==Status.COMPLETED?"No script findings reported; this does not prove absence of vulnerabilities.\n":"No vulnerability assessment completed for this device.\n");
-            for(Finding finding:device.findings)text.append(finding.title).append(" · ").append(finding.scope).append("\n").append(finding.assessment).append("\nEvidence: ").append(finding.evidence).append("\nSuggested action: ").append(finding.action).append("\n\n");
+            if(device.findings.isEmpty())text.append((device.vulnerabilityStatus==Status.COMPLETED||device.nucleiStatus==Status.COMPLETED)?"No script findings reported; this does not prove absence of vulnerabilities.\n":"No vulnerability assessment completed for this device.\n");
+            for(Finding finding:device.findings)text.append(finding.source).append(" · ").append(finding.title).append(" · ").append(finding.scope).append("\n").append(finding.assessment).append("\nEvidence: ").append(finding.evidence).append("\nSuggested action: ").append(finding.action).append("\n\n");
             if(device.serviceStatus==Status.FAILED)text.append("Service analysis: ").append(friendlyError(device.serviceMessage)).append("\n");
             if(device.vulnerabilityStatus==Status.FAILED)text.append("Vulnerability analysis: ").append(friendlyError(device.vulnerabilityMessage)).append("\n");
+            if(device.nucleiStatus!=Status.NOT_RUN) {
+                text.append("\nNuclei endpoint diagnostics\n");
+                for(JSONObject item:device.evidence)if(item.optString("source").equals("Nuclei")&&item.optString("field").startsWith("endpoint:"))
+                    text.append(item.optString("field")).append(": ").append(item.optString("value")).append("\n");
+            }
             text.append("\nAdditional evidence\n");
             for(JSONObject item:device.evidence) {
                 String source=item.optString("source"),field=item.optString("field");
-                if(source.startsWith("Nmap")||field.equals("outputFile"))continue;
+                if(source.startsWith("Nmap")||source.equals("Nuclei")||field.equals("outputFile"))continue;
                 text.append(source).append(" · ").append(label(field)).append(": ").append(item.optString("value")).append("\n");
             }
         }
