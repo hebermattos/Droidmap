@@ -85,8 +85,15 @@ jobs:
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
-          aapt dump badging "$APK" | grep -q "^package: name='com.netmap.android' "
-          apksigner verify --verbose --print-certs "$APK"
+          SDK_BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          test -x "$SDK_BUILD_TOOLS/aapt"
+          test -x "$SDK_BUILD_TOOLS/apksigner"
+          PACKAGE_NAME="$("$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          test "$PACKAGE_NAME" = "com.netmap.android" || {
+            echo "Unexpected APK package: $PACKAGE_NAME" >&2
+            exit 1
+          }
+          "$SDK_BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
           echo "Verified package ID com.netmap.android and APK signature"
       - name: Name APK clearly for download
         shell: bash
