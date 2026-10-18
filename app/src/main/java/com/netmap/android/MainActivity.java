@@ -218,7 +218,7 @@ public final class MainActivity extends Activity {
         while (progressLines.size() > 7) progressLines.removeFirst();
         StringBuilder text = new StringBuilder();
         for (String line : progressLines) {
-            if (text.length() > 0) text.append("\\n");
+            if (text.length() > 0) text.append("\n");
             text.append(line);
         }
         progressLog.setText(text.toString());
