@@ -20,6 +20,8 @@ public final class MainActivity extends Activity {
     private Button start;
     private Button clearAll;
     private final List<Button> toolButtons = new ArrayList<>();
+    private final Map<String, Button> toolRunButtons = new LinkedHashMap<>();
+    private boolean cancellingScan;
     private final Map<String, LinearLayout> toolResults = new LinkedHashMap<>();
     private final Map<String, String> toolReports = new HashMap<>();
     private final Map<String, TextView> toolStatuses = new HashMap<>();
@@ -104,7 +106,7 @@ public final class MainActivity extends Activity {
         updateSettingsSummary();
         start = new Button(this);
         start.setText("Cancel running scan");
-        layout.addView(start);
+        // Cancel is placed inside the active tool section while running.
         start.setVisibility(android.view.View.GONE);
         start.setOnClickListener(
                 v -> {
@@ -121,12 +123,12 @@ public final class MainActivity extends Activity {
                 });
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setVisibility(android.view.View.GONE);
-        layout.addView(progress);
+        // Progress is placed inside the active tool section while running.
         status = new TextView(this);
         status.setText("Ready");
         status.setPadding(0, pad / 2, 0, pad / 2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        layout.addView(status);
+        // Keep the status object for internal feedback, without a duplicate top label.
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
@@ -238,13 +240,50 @@ public final class MainActivity extends Activity {
         super.onStop();
     }
 
+    private void updateToolRunButtons(boolean cancellable) {
+        for (Map.Entry<String, Button> entry : toolRunButtons.entrySet()) {
+            String tool = entry.getKey();
+            Button button = entry.getValue();
+            boolean active = (scanRunning || startingScan) && tool.equals(activeTool);
+            String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "Nuclei";
+            button.setText(active ? (cancellingScan ? "Stopping " + name + "…" : "Stop " + name)
+                    : "discovery".equals(tool) ? "Discover devices" : "Run " + name);
+            button.setEnabled(active ? cancellable && !cancellingScan : !scanRunning && !startingScan);
+            button.setContentDescription(active ? "Stop running " + name : "Run " + name);
+        }
+    }
+
+    private void stopActiveTool() {
+        if (!scanRunning || cancellingScan) return;
+        ScanSnapshot snapshot = ScanService.snapshot();
+        if (snapshot == null || !snapshot.running || !snapshot.cancellable) return;
+        cancellingScan = true;
+        startService(new Intent(this, ScanService.class)
+                .setAction(ScanService.CANCEL).putExtra("runId", snapshot.runId));
+        TextView local = toolStatuses.get(activeTool);
+        if (local != null) local.setText("Cancelling " + activeTool + "…");
+        updateToolRunButtons(false);
+    }
+
+    private void moveRunControls(String tool) {
+        TextView localStatus = toolStatuses.get(tool);
+        if (localStatus == null) return;
+        android.view.ViewGroup section = (android.view.ViewGroup) localStatus.getParent();
+        android.view.ViewParent parent = progress.getParent();
+        if (parent instanceof android.view.ViewGroup)
+            ((android.view.ViewGroup) parent).removeView(progress);
+        section.addView(progress);
+    }
+
     private void applySnapshot(ScanSnapshot snapshot) {
         if (startingScan && (snapshot == launchPrevious || ScanService.snapshot() == null)) return;
         startingScan = false;
         displayedSnapshot = snapshot;
         scanRunning = snapshot.running;
-        start.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
-        for (Button button : toolButtons) button.setEnabled(!scanRunning && !startingScan);
+        moveRunControls(activeTool);
+        start.setVisibility(android.view.View.GONE);
+        if (!scanRunning) cancellingScan = false;
+        updateToolRunButtons(snapshot.cancellable);
         clearAll.setEnabled(!scanRunning && !startingScan);
         start.setEnabled(!scanRunning || snapshot.cancellable);
         target.setEnabled(!scanRunning);
@@ -591,8 +630,11 @@ public final class MainActivity extends Activity {
         toolResults.put(tool, content);
         layout.addView(section);
         toolButtons.add(button);
+        toolRunButtons.put(tool, button);
         button.setOnClickListener(v -> {
-            if (!scanRunning && !startingScan) begin(tool);
+            if (scanRunning || startingScan) {
+                if (tool.equals(activeTool)) stopActiveTool();
+            } else begin(tool);
         });
     }
 
@@ -737,21 +779,30 @@ public final class MainActivity extends Activity {
                 ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE); }
             toolReports.remove(activeTool);
             lastDevices.clear();
-            start.setVisibility(android.view.View.VISIBLE);
+            moveRunControls(activeTool);
+            start.setVisibility(android.view.View.GONE);
+            progress.setVisibility(android.view.View.VISIBLE);
+            progress.setIndeterminate(true);
             start.setEnabled(false);
-            for (Button button : toolButtons) button.setEnabled(false);
+            cancellingScan = false;
+            updateToolRunButtons(false);
             clearAll.setEnabled(false);
             target.setEnabled(false);
             status.setText("Starting scan…");
+            TextView local = toolStatuses.get(activeTool);
+            if (local != null) local.setText("Starting scan…");
         } catch (RuntimeException e) {
             startingScan = false;
             scanRunning = false;
             start.setVisibility(android.view.View.GONE);
             start.setEnabled(true);
-            for (Button button : toolButtons) button.setEnabled(true);
+            updateToolRunButtons(false);
             clearAll.setEnabled(true);
             target.setEnabled(true);
             status.setText("Unable to start scan: " + e.getMessage());
+            progress.setVisibility(android.view.View.GONE);
+            TextView local = toolStatuses.get(activeTool);
+            if (local != null) local.setText(status.getText());
         }
     }
 
