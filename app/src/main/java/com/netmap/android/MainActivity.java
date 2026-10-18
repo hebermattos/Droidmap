@@ -192,7 +192,7 @@ public final class MainActivity extends Activity {
         toolReports.clear();
         for (LinearLayout content : toolResults.values()) {
             content.removeAllViews();
-            ((android.view.View) content.getParent()).setVisibility(android.view.View.VISIBLE);
+            ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE);
             LinearLayout section = (LinearLayout) content.getParent().getParent();
             ((Button) section.getChildAt(1)).setVisibility(android.view.View.GONE);
         }
@@ -273,6 +273,8 @@ public final class MainActivity extends Activity {
                 LinearLayout section = (LinearLayout) content.getParent().getParent();
                 Button toggle = (Button) section.getChildAt(1);
                 toggle.setVisibility(report.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
+                ((android.view.View) content.getParent()).setVisibility(report.isEmpty()
+                        ? android.view.View.GONE : android.view.View.VISIBLE);
             }
             lastDevices = resultsRenderer.render(report);
         } else resultText = snapshot.text;
@@ -579,6 +581,7 @@ public final class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         ScrollView inlineScroll = new ScrollView(this);
         inlineScroll.addView(content);
+        inlineScroll.setVisibility(android.view.View.GONE);
         section.addView(inlineScroll, new LinearLayout.LayoutParams(-1, (int)(280 * getResources().getDisplayMetrics().density)));
         toggle.setOnClickListener(v -> {
             boolean visible = inlineScroll.getVisibility() == android.view.View.VISIBLE;
@@ -731,7 +734,7 @@ public final class MainActivity extends Activity {
             deviceList.removeAllViews();
             LinearLayout content = toolResults.get(activeTool);
             if (content != null) { content.removeAllViews();
-                ((android.view.View) content.getParent()).setVisibility(android.view.View.VISIBLE); }
+                ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE); }
             toolReports.remove(activeTool);
             lastDevices.clear();
             start.setVisibility(android.view.View.VISIBLE);
