@@ -187,7 +187,12 @@ public final class MainActivity extends Activity {
         expandedDevices.clear();
         deviceList.removeAllViews();
         toolReports.clear();
-        for (LinearLayout content : toolResults.values()) content.removeAllViews();
+        for (LinearLayout content : toolResults.values()) {
+            content.removeAllViews();
+            ((android.view.View) content.getParent()).setVisibility(android.view.View.VISIBLE);
+            LinearLayout section = (LinearLayout) content.getParent().getParent();
+            ((Button) section.getChildAt(1)).setVisibility(android.view.View.GONE);
+        }
         for (TextView localStatus : toolStatuses.values()) localStatus.setText("Not run");
         progress.setVisibility(android.view.View.GONE);
         start.setVisibility(android.view.View.GONE);
@@ -257,12 +262,12 @@ public final class MainActivity extends Activity {
             LinearLayout content = toolResults.get(activeTool);
             if (content != null) {
                 content.removeAllViews();
-                DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, null,
+                DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, new ScrollView(this),
                         expandedDevices, this::showNmapOutput,
                         (ip, port) -> runSelectedPort("nmap", ip, port),
                         (ip, port) -> runSelectedPort("nuclei", ip, port));
                 inline.render(report);
-                LinearLayout section = (LinearLayout) content.getParent();
+                LinearLayout section = (LinearLayout) content.getParent().getParent();
                 Button toggle = (Button) section.getChildAt(1);
                 toggle.setVisibility(report.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
             }
@@ -569,10 +574,12 @@ public final class MainActivity extends Activity {
         section.addView(toggle);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        section.addView(content);
+        ScrollView inlineScroll = new ScrollView(this);
+        inlineScroll.addView(content);
+        section.addView(inlineScroll, new LinearLayout.LayoutParams(-1, (int)(280 * getResources().getDisplayMetrics().density)));
         toggle.setOnClickListener(v -> {
-            boolean visible = content.getVisibility() == android.view.View.VISIBLE;
-            content.setVisibility(visible ? android.view.View.GONE : android.view.View.VISIBLE);
+            boolean visible = inlineScroll.getVisibility() == android.view.View.VISIBLE;
+            inlineScroll.setVisibility(visible ? android.view.View.GONE : android.view.View.VISIBLE);
             toggle.setText(visible ? "Show results" : "Hide results");
         });
         toolResults.put(tool, content);
@@ -720,7 +727,9 @@ public final class MainActivity extends Activity {
             resultText = "";
             deviceList.removeAllViews();
             LinearLayout content = toolResults.get(activeTool);
-            if (content != null) content.removeAllViews();
+            if (content != null) { content.removeAllViews();
+                ((android.view.View) content.getParent()).setVisibility(android.view.View.VISIBLE); }
+            toolReports.remove(activeTool);
             lastDevices.clear();
             start.setVisibility(android.view.View.VISIBLE);
             start.setEnabled(false);
