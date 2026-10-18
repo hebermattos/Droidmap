@@ -289,6 +289,8 @@ public final class ScanService extends Service {
         int version=previewVersion.incrementAndGet();
         try {
             String json=ScanReport.preview(target,new ArrayList<>(checks),extra,evidence.snapshot());
+            if ("discovery".equals(tool) || "ports".equals(tool))
+                json=new JSONObject(json).put("tool",tool).put("portsOnly","ports".equals(tool)).toString();
             main.post(() -> {
                 if(destroyed || scanner!=tcp || finishing || version<=acceptedPreview) return;
                 acceptedPreview=version; ScanSnapshot state=latest;
