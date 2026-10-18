@@ -148,7 +148,7 @@ public final class ScanService extends Service {
             List<String> enrichmentNotices=new ArrayList<>(nmapNotices);
             if(nucleiEnabled && !tcp.isCancelled()) {
                 main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nuclei…",results.size(),true);});
-                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,tcp::isCancelled));
+                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,NmapTargets.collect(evidenceChecks,evidence),tcp::isCancelled));
                 preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false);
             }
             main.post(() -> {
