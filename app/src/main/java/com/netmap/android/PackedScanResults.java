@@ -25,11 +25,12 @@ final class PackedScanResults extends AbstractList<TcpScanner.Result> {
     @Override public synchronized boolean add(TcpScanner.Result result) {
         Integer host = hostIndex.get(result.host);
         int port = result.port > 0 && result.port < portIndex.length ? portIndex[result.port] : -1;
-        if (host == null || port < 0 || result.attempts < 1 || result.attempts > 2
-                || result.timeoutMs < 100 || result.timeoutMs > 3000)
+        if (host == null || port < 0 || (result.state != TcpScanner.State.SKIPPED && (result.attempts < 1 || result.attempts > 2
+                || result.timeoutMs < 100 || result.timeoutMs > 3000)))
             throw new IllegalArgumentException("Invalid packed TCP result");
         if (records[host][port] != 0) throw new IllegalStateException("Duplicate TCP check");
-        records[host][port] = (short)((result.timeoutMs << 4) | (result.attempts << 2) | result.state.ordinal());
+        records[host][port] = result.state == TcpScanner.State.SKIPPED ? (short)0xffff
+                : (short)((result.timeoutMs << 4) | (result.attempts << 2) | result.state.ordinal());
         completed++;
         return true;
     }
@@ -56,6 +57,7 @@ final class PackedScanResults extends AbstractList<TcpScanner.Result> {
                 int host = cursor / plan.ports.size(), port = cursor % plan.ports.size();
                 int record = records[host][port] & 0xffff;
                 cursor++;
+                if(record==0xffff) return new TcpScanner.Result(plan.hosts.get(host),plan.ports.get(port),TcpScanner.State.SKIPPED,0,0);
                 return new TcpScanner.Result(plan.hosts.get(host), plan.ports.get(port),
                         STATES[record & 3], (record >>> 2) & 3, record >>> 4);
             }
@@ -73,7 +75,7 @@ final class PackedScanResults extends AbstractList<TcpScanner.Result> {
         return result;
     }
 
-    /** One deflate stream per host, in selected-port order; zero denotes an unfinished check. */
+    /** One deflate stream per host, in selected-port order; zero denotes an unfinished check; 0xffff denotes a skipped check. */
     String encodedHost(int host) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DeflaterOutputStream compressed = new DeflaterOutputStream(bytes)) {
