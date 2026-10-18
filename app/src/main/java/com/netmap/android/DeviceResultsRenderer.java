@@ -67,51 +67,75 @@ final class DeviceResultsRenderer {
         for(ReportPresentation.Device device:model.devices) {
             lastDevices.add(device.ip);
             hosts++;
-            LinearLayout deviceHeader=new LinearLayout(context);
-            deviceHeader.setOrientation(LinearLayout.VERTICAL);
-            deviceHeader.setPadding(dp(8),dp(10),dp(8),dp(5));
-            TextView name=value(deviceHeader,deviceIdentity(device));
-            name.setTextSize(16);
-            name.setTypeface(null,android.graphics.Typeface.BOLD);
+            LinearLayout host=new LinearLayout(context);
+            host.setOrientation(LinearLayout.VERTICAL);
+            table.addView(host,new LinearLayout.LayoutParams(-1,-2));
+            Button toggle=action(host);
+            toggle.setTypeface(null,android.graphics.Typeface.BOLD);
+            toggle.setTextSize(16);
             String metadata=deviceMetadata(device);
+            String suffix=device.ports.size()+" open TCP ports";
+            toggle.setText((expandedDevices.contains(device.ip)?"▾ ":"▸ ")+deviceIdentity(device)+"  ·  "+suffix);
+            toggle.setContentDescription((expandedDevices.contains(device.ip)?"Collapse ":"Expand ")+device.ip+", "+suffix);
             if(!metadata.isEmpty()) {
-                TextView description=value(deviceHeader,metadata);
+                TextView description=value(host,metadata);
                 description.setTextColor(Color.LTGRAY);
                 description.setTextSize(12);
             }
-            table.addView(deviceHeader,new LinearLayout.LayoutParams(-1,-2));
+            LinearLayout details=expandedBody(host);
+            boolean expanded=expandedDevices.contains(device.ip);
+            details.setVisibility(expanded?View.VISIBLE:View.GONE);
             if(device.ports.isEmpty()) {
-                TextView empty=value(table,"No open TCP ports identified");
+                TextView empty=value(details,"No open TCP ports identified");
                 empty.setTextColor(Color.LTGRAY);
-                divider(table);
-                continue;
-            }
-            for(int port:device.ports) {
-                LinearLayout entry=new LinearLayout(context);
-                entry.setOrientation(LinearLayout.VERTICAL);
-                entry.setPadding(dp(16),dp(4),dp(8),dp(4));
-                value(entry,"TCP "+port);
-                LinearLayout tools=new LinearLayout(context);
-                tools.setOrientation(LinearLayout.HORIZONTAL);
-                Button nmap=new Button(context);
-                nmap.setText("Nmap");
-                nmap.setAllCaps(false);
-                nmap.setContentDescription("Run Nmap on "+device.ip+" TCP port "+port);
-                nmap.setOnClickListener(v->runNmapPort.accept(device.ip,port));
-                tools.addView(nmap,new LinearLayout.LayoutParams(0,-2,1));
-                if (hasWebEvidence(device, port)) {
-                    Button nuclei=new Button(context);
-                    nuclei.setText("Nuclei");
-                    nuclei.setAllCaps(false);
-                    nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
-                    nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
-                    tools.addView(nuclei,new LinearLayout.LayoutParams(0,-2,1));
+            } else {
+                LinearLayout row=null;
+                int column=0;
+                for(int port:device.ports) {
+                    if(column%2==0) {
+                        row=new LinearLayout(context);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        details.addView(row,new LinearLayout.LayoutParams(-1,-2));
+                    }
+                    LinearLayout entry=new LinearLayout(context);
+                    entry.setOrientation(LinearLayout.VERTICAL);
+                    entry.setPadding(dp(4),dp(4),dp(4),dp(4));
+                    LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1);
+                    row.addView(entry,cell);
+                    TextView label=value(entry,"TCP "+port);
+                    label.setTypeface(null,android.graphics.Typeface.BOLD);
+                    Button nmap=new Button(context);
+                    nmap.setText("Nmap");
+                    nmap.setAllCaps(false);
+                    nmap.setTextSize(12);
+                    nmap.setMinWidth(0);
+                    nmap.setMinimumWidth(0);
+                    nmap.setContentDescription("Run Nmap on "+device.ip+" TCP port "+port);
+                    nmap.setOnClickListener(v->runNmapPort.accept(device.ip,port));
+                    entry.addView(nmap,new LinearLayout.LayoutParams(-1,-2));
+                    if(hasWebEvidence(device,port)) {
+                        Button nuclei=new Button(context);
+                        nuclei.setText("Nuclei");
+                        nuclei.setAllCaps(false);
+                        nuclei.setTextSize(12);
+                        nuclei.setMinWidth(0);
+                        nuclei.setMinimumWidth(0);
+                        nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
+                        nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
+                        entry.addView(nuclei,new LinearLayout.LayoutParams(-1,-2));
+                    }
+                    column++;
+                    endpoints++;
                 }
-                entry.addView(tools);
-                table.addView(entry,new LinearLayout.LayoutParams(-1,-2));
-                divider(table);
-                endpoints++;
             }
+            toggle.setOnClickListener(v->{
+                boolean show=details.getVisibility()!=View.VISIBLE;
+                details.setVisibility(show?View.VISIBLE:View.GONE);
+                if(show)expandedDevices.add(device.ip);else expandedDevices.remove(device.ip);
+                toggle.setText((show?"▾ ":"▸ ")+deviceIdentity(device)+"  ·  "+suffix);
+                toggle.setContentDescription((show?"Collapse ":"Expand ")+device.ip+", "+suffix);
+            });
+            divider(table);
         }
         if(hosts==0)value(table,"No identified devices found in the selected scan.");
         value(deviceList,hosts+" devices • "+endpoints+" open TCP ports");
