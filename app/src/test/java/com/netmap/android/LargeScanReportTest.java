@@ -15,7 +15,9 @@ public class LargeScanReportTest {
         for (String host : plan.hosts) identified.put(host, new ArrayList<>());
         JSONObject json = new JSONObject(ScanReport.json(results, plan, "192.168.0.0/31", false, 1L,
                 identified, new ArrayList<>(), new ArrayList<>()));
-        assertEquals(6,json.getInt("schemaVersion"));
+        assertEquals(7,json.getInt("schemaVersion"));
+        assertEquals(0,json.getInt("skippedChecks"));
+        assertEquals(4,json.getInt("testedChecks"));
         assertEquals(4,json.getInt("completedChecks"));
         assertEquals(2,json.getJSONArray("checks").length());
         assertEquals(2,json.getJSONObject("packedChecks").getJSONArray("hosts").length());
