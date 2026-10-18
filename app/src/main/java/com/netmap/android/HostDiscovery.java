@@ -25,7 +25,7 @@ final class HostDiscovery {
                 pool.execute(() -> {
                     if (!cancelled.getAsBoolean()) {
                         try {
-                            if (InetAddress.getByName(ScanPlan.stripZone(host)).isReachable(timeout))
+                            if (InetAddress.getByName(host).isReachable(timeout))
                                 responding.add(host);
                         } catch (Exception ignored) {
                             // Android may block ICMP; the TCP scan is still authoritative.
