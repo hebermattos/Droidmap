@@ -29,6 +29,9 @@ public final class MainActivity extends Activity {
     private List<String> lastDevices = new ArrayList<>();
     private TextView status;
     private ProgressBar progress;
+    private TextView progressLog;
+    private final ArrayDeque<String> progressLines = new ArrayDeque<>();
+    private String lastProgressMessage = "";
     private boolean scanRunning, startingScan;
     private ScanSnapshot launchPrevious;
     private Intent pendingScan;
@@ -122,6 +125,16 @@ public final class MainActivity extends Activity {
         status.setPadding(0, pad / 2, 0, pad / 2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         layout.addView(status);
+        TextView progressTitle = new TextView(this);
+        progressTitle.setText("Progress log");
+        progressTitle.setTextSize(13);
+        layout.addView(progressTitle);
+        progressLog = new TextView(this);
+        progressLog.setTextSize(12);
+        progressLog.setTextIsSelectable(true);
+        progressLog.setMaxLines(7);
+        progressLog.setPadding(0, 0, 0, pad / 2);
+        layout.addView(progressLog);
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
@@ -149,6 +162,7 @@ public final class MainActivity extends Activity {
             ignoredPreviousSnapshot = live;
             clearPreviousScanFiles();
             status.setText("Ready — run Discovery to start");
+            resetProgress("Ready — run Discovery to start");
         }
     }
 
@@ -187,12 +201,34 @@ public final class MainActivity extends Activity {
         progress.setMax(snapshot.total);
         progress.setProgress(snapshot.done);
         status.setText(snapshot.message);
+        appendProgress(snapshot.message);
         if (scanRunning) target.setText(snapshot.target);
         if (!report.equals(snapshot.report)) {
             report = snapshot.report;
             resultText = snapshot.text;
             lastDevices = resultsRenderer.render(report);
         } else resultText = snapshot.text;
+    }
+
+    private void appendProgress(String message) {
+        if (message == null || message.isEmpty() || message.equals(lastProgressMessage)) return;
+        lastProgressMessage = message;
+        progressLines.addLast(new java.text.SimpleDateFormat("HH:mm:ss", Locale.ROOT)
+                .format(new Date()) + "  " + message);
+        while (progressLines.size() > 7) progressLines.removeFirst();
+        StringBuilder text = new StringBuilder();
+        for (String line : progressLines) {
+            if (text.length() > 0) text.append("\\n");
+            text.append(line);
+        }
+        progressLog.setText(text.toString());
+    }
+
+    private void resetProgress(String message) {
+        progressLines.clear();
+        lastProgressMessage = "";
+        progressLog.setText("");
+        appendProgress(message);
     }
 
     private void updateSettingsSummary() {
@@ -593,6 +629,7 @@ public final class MainActivity extends Activity {
             for (Button button : toolButtons) button.setEnabled(false);
             target.setEnabled(false);
             status.setText("Starting scan…");
+            resetProgress("Starting scan…");
         } catch (RuntimeException e) {
             startingScan = false;
             scanRunning = false;
