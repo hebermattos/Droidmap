@@ -20,6 +20,10 @@ public final class MainActivity extends Activity {
     private Button start;
     private Button clearAll;
     private final List<Button> toolButtons = new ArrayList<>();
+    private final Map<String, LinearLayout> toolResults = new LinkedHashMap<>();
+    private final Map<String, String> toolReports = new HashMap<>();
+    private final Map<String, TextView> toolStatuses = new HashMap<>();
+    private String activeTool = "discovery";
     private TextView settingsSummary;
     private LinearLayout deviceList;
     private final Set<String> expandedDevices = new HashSet<>();
@@ -182,6 +186,9 @@ public final class MainActivity extends Activity {
         lastDevices.clear();
         expandedDevices.clear();
         deviceList.removeAllViews();
+        toolReports.clear();
+        for (LinearLayout content : toolResults.values()) content.removeAllViews();
+        for (TextView localStatus : toolStatuses.values()) localStatus.setText("Not run");
         progress.setVisibility(android.view.View.GONE);
         start.setVisibility(android.view.View.GONE);
         clearPreviousScanFiles();
@@ -240,10 +247,25 @@ public final class MainActivity extends Activity {
             progress.setProgress(snapshot.done);
         }
         status.setText(snapshot.message);
+        TextView localStatus = toolStatuses.get(activeTool);
+        if (localStatus != null) localStatus.setText(snapshot.message);
         if (scanRunning) target.setText(snapshot.target);
         if (!report.equals(snapshot.report)) {
             report = snapshot.report;
             resultText = snapshot.text;
+            toolReports.put(activeTool, report);
+            LinearLayout content = toolResults.get(activeTool);
+            if (content != null) {
+                content.removeAllViews();
+                DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, null,
+                        expandedDevices, this::showNmapOutput,
+                        (ip, port) -> runSelectedPort("nmap", ip, port),
+                        (ip, port) -> runSelectedPort("nuclei", ip, port));
+                inline.render(report);
+                LinearLayout section = (LinearLayout) content.getParent();
+                Button toggle = (Button) section.getChildAt(1);
+                toggle.setVisibility(report.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
+            }
             lastDevices = resultsRenderer.render(report);
         } else resultText = snapshot.text;
     }
@@ -535,6 +557,26 @@ public final class MainActivity extends Activity {
         button.setText(text);
         button.setContentDescription(description);
         layout.addView(button);
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        TextView localStatus = new TextView(this);
+        localStatus.setText("Not run");
+        section.addView(localStatus);
+        toolStatuses.put(tool, localStatus);
+        Button toggle = new Button(this);
+        toggle.setText("Hide results");
+        toggle.setVisibility(android.view.View.GONE);
+        section.addView(toggle);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        section.addView(content);
+        toggle.setOnClickListener(v -> {
+            boolean visible = content.getVisibility() == android.view.View.VISIBLE;
+            content.setVisibility(visible ? android.view.View.GONE : android.view.View.VISIBLE);
+            toggle.setText(visible ? "Show results" : "Hide results");
+        });
+        toolResults.put(tool, content);
+        layout.addView(section);
         toolButtons.add(button);
         button.setOnClickListener(v -> {
             if (!scanRunning && !startingScan) begin(tool);
@@ -547,7 +589,7 @@ public final class MainActivity extends Activity {
 
     private boolean hasDiscoveryResults() {
         try {
-            org.json.JSONObject previous = new org.json.JSONObject(report);
+            org.json.JSONObject previous = new org.json.JSONObject(toolReports.getOrDefault("discovery", ""));
             return previous.optBoolean("discoveryReady", false)
                     && !previous.optBoolean("cancelled", true)
                     && previous.optBoolean("tcpScanComplete", false)
@@ -568,7 +610,7 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
-            org.json.JSONObject data=new org.json.JSONObject(report);
+            org.json.JSONObject data=new org.json.JSONObject(toolReports.getOrDefault("discovery", ""));
             boolean found=false;
             for(String field:new String[]{"checks","advertisedEndpointChecks"}) {
                 org.json.JSONArray rows=data.optJSONArray(field);
@@ -666,6 +708,7 @@ public final class MainActivity extends Activity {
         if (keyboard != null) keyboard.hideSoftInputFromWindow(target.getWindowToken(), 0);
         target.clearFocus();
         try {
+            activeTool = request.getStringExtra("tool");
             launchPrevious = ScanService.snapshot();
             ignoredPreviousSnapshot = null;
             displayedSnapshot = launchPrevious;
@@ -676,6 +719,8 @@ public final class MainActivity extends Activity {
             report = "";
             resultText = "";
             deviceList.removeAllViews();
+            LinearLayout content = toolResults.get(activeTool);
+            if (content != null) content.removeAllViews();
             lastDevices.clear();
             start.setVisibility(android.view.View.VISIBLE);
             start.setEnabled(false);
