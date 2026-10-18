@@ -91,6 +91,11 @@ public final class MainActivity extends Activity {
         options.setText("Options");
         options.setContentDescription("Open options menu");
         header.addView(options);
+        clearAll = new Button(this);
+        clearAll.setText("Clear All");
+        clearAll.setContentDescription("Clear all saved scans and results");
+        clearAll.setOnClickListener(v -> confirmClearAll());
+        header.addView(clearAll);
         layout.addView(header);
         options.setOnClickListener(this::showOptions);
         target =
@@ -132,11 +137,6 @@ public final class MainActivity extends Activity {
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
-        clearAll = new Button(this);
-        clearAll.setText("Clear All");
-        clearAll.setContentDescription("Clear all saved scans and results");
-        clearAll.setOnClickListener(v -> confirmClearAll());
-        layout.addView(clearAll);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         // Tool result panels own the visible content; retain this off-screen renderer
