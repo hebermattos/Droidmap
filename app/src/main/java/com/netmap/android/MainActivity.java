@@ -137,6 +137,9 @@ public final class MainActivity extends Activity {
         layout.addView(clearAll);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        // Tool result panels own the visible content; retain this off-screen renderer
+        // for existing device selection/report plumbing without duplicate results.
+        scroll.setVisibility(android.view.View.GONE);
         deviceList = new LinearLayout(this);
         deviceList.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(deviceList);
