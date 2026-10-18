@@ -22,7 +22,7 @@ public final class TcpScanner {
     private final Connector connector;
     public TcpScanner() { connector = this::probe; }
     TcpScanner(Connector connector) { this.connector = connector; }
-    public enum State { OPEN, CLOSED, NO_RESPONSE, ERROR }
+    public enum State { OPEN, CLOSED, NO_RESPONSE, ERROR, SKIPPED }
     public static final class Result {
         public final String host;
         public final int port;
@@ -50,14 +50,28 @@ public final class TcpScanner {
         try {
             AdaptivePolicy policy=plan.adaptive?new AdaptivePolicy(plan.timeoutMs):null;
             Set<String> responding=ConcurrentHashMap.newKeySet();
-            int seed=plan.ports.contains(80)?80:plan.ports.contains(443)?443:plan.ports.get(0);
-            if(plan.adaptive) {
-                List<java.util.concurrent.Future<?>> first=new ArrayList<>();
-                for(String host:plan.hosts) first.add(workers.submit(()->task(plan,host,seed,policy,responding,results,complete,total,listener)));
-                for(java.util.concurrent.Future<?> future:first) try { future.get(); } catch(java.util.concurrent.ExecutionException e) { throw new IllegalStateException("Probe failed",e.getCause()); }
+            // Fast mode preflights up to three selected TCP ports per host.
+            // A refused connection is positive evidence that the IP responded.
+            List<Integer> probes=new ArrayList<>();
+            for(int candidate:new int[]{80,443,22,53,8080}) {
+                if(plan.ports.contains(candidate)) probes.add(candidate);
+                if(probes.size()==3) break;
             }
+            if(probes.isEmpty()) probes.add(plan.ports.get(0));
+            boolean preflight=plan.mode==ScanPlan.Mode.FAST && plan.hosts.size()>1;
+            int seed=plan.ports.contains(80)?80:plan.ports.contains(443)?443:plan.ports.get(0);
+            List<java.util.concurrent.Future<?>> first=new ArrayList<>();
+            if(preflight) {
+                for(String host:plan.hosts) for(int port:probes)
+                    first.add(workers.submit(()->task(plan,host,port,policy,responding,results,complete,total,listener)));
+            } else if(plan.adaptive) {
+                for(String host:plan.hosts)
+                    first.add(workers.submit(()->task(plan,host,seed,policy,responding,results,complete,total,listener)));
+            }
+            for(java.util.concurrent.Future<?> future:first)
+                try { future.get(); } catch(java.util.concurrent.ExecutionException e) { throw new IllegalStateException("Preflight failed",e.getCause()); }
             List<String> ordered=new ArrayList<>(plan.hosts);
-            if(plan.adaptive) ordered.sort((a,b)->Boolean.compare(responding.contains(b),responding.contains(a)));
+            if(plan.adaptive || preflight) ordered.sort((x,y)->Boolean.compare(responding.contains(y),responding.contains(x)));
             // Fixed worker loops avoid queuing one Future per selected port.
             List<java.util.concurrent.Future<?>> pending = new ArrayList<>();
             AtomicInteger next = new AtomicInteger();
@@ -67,7 +81,14 @@ public final class TcpScanner {
                     while (!cancelled.get() && (index = next.getAndIncrement()) < total) {
                         String host = ordered.get(index / plan.ports.size());
                         int port = plan.ports.get(index % plan.ports.size());
-                        if (plan.adaptive && port == seed) continue;
+                        if (preflight && probes.contains(port)) continue;
+                        if (!preflight && plan.adaptive && port == seed) continue;
+                        if (preflight && !responding.contains(host)) {
+                            Result skipped=new Result(host,port,State.SKIPPED,0,0);
+                            results.add(skipped);
+                            listener.onResult(skipped,complete.incrementAndGet(),total);
+                            continue;
+                        }
                         task(plan, host, port, policy, responding, results, complete, total, listener);
                     }
                 }));
