@@ -10,7 +10,7 @@ import java.util.function.BooleanSupplier;
 final class NucleiEnricher {
     private NucleiEnricher() {}
 
-    static List<String> enrich(Context context, DeviceEvidence evidence, BooleanSupplier cancelled) {
+    static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, BooleanSupplier cancelled) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnuclei.so");
         if(!binary.isFile()) {
@@ -44,6 +44,8 @@ final class NucleiEnricher {
         for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet()) {
             if(cancelled.getAsBoolean())break;
             String host=entry.getKey();
+            Set<Integer> allowedPorts=verifiedPorts.getOrDefault(host,new LinkedHashSet<>());
+            if(allowedPorts.isEmpty())continue;
             SortedMap<Integer,String> services=new TreeMap<>();
             Set<Integer> opened=new HashSet<>();
             SortedMap<Integer,String> webEndpoints=new TreeMap<>();
@@ -55,7 +57,7 @@ final class NucleiEnricher {
                     try {
                         int slash=observation.source.indexOf('/');
                         int webPort=Integer.parseInt(observation.source.substring(slash+1));
-                        if(webPort>0&&webPort<=65535)
+                        if(allowedPorts.contains(webPort))
                             webEndpoints.put(webPort,observation.source.startsWith("HTTPS")?"https":"http");
                     }catch(NumberFormatException ignored){}
                 if(observation.source.startsWith("Nmap service ")&&observation.field.equals("serviceName"))
@@ -63,7 +65,7 @@ final class NucleiEnricher {
             }
             for(Map.Entry<Integer,String> service:services.entrySet()) {
                 String name=service.getValue().toLowerCase(Locale.ROOT);
-                if(!opened.contains(service.getKey()))continue;
+                if(!opened.contains(service.getKey())||!allowedPorts.contains(service.getKey()))continue;
                 if(name.equals("https")||name.equals("ssl/http")||name.equals("https-alt"))
                     webEndpoints.putIfAbsent(service.getKey(),"https");
                 else if(name.equals("http")||name.equals("http-alt")||name.equals("http-proxy"))
@@ -72,6 +74,7 @@ final class NucleiEnricher {
             for(Map.Entry<Integer,String> service:webEndpoints.entrySet()) {
                 if(cancelled.getAsBoolean())break;
                 int port=service.getKey();
+                if(!allowedPorts.contains(port))continue;
                 boolean https=service.getValue().equals("https");
                 String address=ScanPlan.isIpv6(host)?"["+ScanPlan.stripZone(host)+"]":host;
                 String url=(https?"https":"http")+"://"+address+":"+port+"/";
