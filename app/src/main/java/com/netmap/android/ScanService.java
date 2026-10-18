@@ -193,6 +193,7 @@ public final class ScanService extends Service {
             DeviceEvidence evidence=new DeviceEvidence(plan.hosts);
             Set<String> verifiedOpen=new HashSet<>();
             for(TcpScanner.Result item:open)verifiedOpen.add(item.host+":"+item.port);
+            Map<String,LinkedHashSet<Integer>> verifiedPorts=NmapTargets.collect(open,evidence);
             org.json.JSONArray devices=data.optJSONArray("devices");
             if(devices!=null)for(int i=0;i<devices.length();i++){
                 JSONObject device=devices.optJSONObject(i);
@@ -220,7 +221,7 @@ public final class ScanService extends Service {
                         controller::isCancelled,()->{});
             } else {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nuclei on open web ports…",0,true);});
-                notices=NucleiEnricher.enrich(this,evidence,controller::isCancelled);
+                notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,controller::isCancelled);
             }
             org.json.JSONArray updated=new org.json.JSONArray();
             for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet())
