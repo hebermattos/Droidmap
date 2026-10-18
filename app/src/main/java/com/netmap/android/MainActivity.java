@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private EditText target;
     private Button start;
+    private Button clearAll;
     private final List<Button> toolButtons = new ArrayList<>();
     private TextView settingsSummary;
     private LinearLayout deviceList;
@@ -125,6 +126,11 @@ public final class MainActivity extends Activity {
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
+        clearAll = new Button(this);
+        clearAll.setText("Clear All");
+        clearAll.setContentDescription("Clear all saved scans and results");
+        clearAll.setOnClickListener(v -> confirmClearAll());
+        layout.addView(clearAll);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         deviceList = new LinearLayout(this);
@@ -152,6 +158,47 @@ public final class MainActivity extends Activity {
             clearPreviousScanFiles();
             status.setText("Ready — run Discovery to start");
         }
+    }
+
+    private void confirmClearAll() {
+        if (scanRunning || startingScan) return;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Clear all results?")
+                .setMessage("Delete Discovery data, open ports, Nmap and Nuclei results, scan history and saved Nmap output? Scan settings will be kept.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear All", (dialog, which) -> clearAllResults())
+                .show();
+    }
+
+    private void clearAllResults() {
+        if (scanRunning || startingScan) return;
+        ignoredPreviousSnapshot = ScanService.snapshot();
+        displayedSnapshot = null;
+        launchPrevious = null;
+        pendingScan = null;
+        exporter.clear();
+        report = "";
+        resultText = "";
+        lastDevices.clear();
+        expandedDevices.clear();
+        deviceList.removeAllViews();
+        progress.setVisibility(android.view.View.GONE);
+        start.setVisibility(android.view.View.GONE);
+        clearPreviousScanFiles();
+        boolean nmapCleared = deleteScanDirectory(new java.io.File(getFilesDir(), "nmap-output"));
+        status.setText(nmapCleared ? "All results cleared — run Discovery to start"
+                : "Results cleared, but some Nmap output files could not be deleted");
+    }
+
+    private boolean deleteScanDirectory(java.io.File path) {
+        if (!path.exists()) return true;
+        boolean success = true;
+        if (path.isDirectory()) {
+            java.io.File[] children = path.listFiles();
+            if (children == null) return false;
+            for (java.io.File child : children) success &= deleteScanDirectory(child);
+        }
+        return path.delete() && success;
     }
 
     private void clearPreviousScanFiles() {
@@ -183,6 +230,7 @@ public final class MainActivity extends Activity {
         scanRunning = snapshot.running;
         start.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
         for (Button button : toolButtons) button.setEnabled(!scanRunning && !startingScan);
+        clearAll.setEnabled(!scanRunning && !startingScan);
         start.setEnabled(!scanRunning || snapshot.cancellable);
         target.setEnabled(!scanRunning);
         progress.setVisibility(scanRunning ? android.view.View.VISIBLE : android.view.View.GONE);
@@ -632,6 +680,7 @@ public final class MainActivity extends Activity {
             start.setVisibility(android.view.View.VISIBLE);
             start.setEnabled(false);
             for (Button button : toolButtons) button.setEnabled(false);
+            clearAll.setEnabled(false);
             target.setEnabled(false);
             status.setText("Starting scan…");
         } catch (RuntimeException e) {
@@ -640,6 +689,7 @@ public final class MainActivity extends Activity {
             start.setVisibility(android.view.View.GONE);
             start.setEnabled(true);
             for (Button button : toolButtons) button.setEnabled(true);
+            clearAll.setEnabled(true);
             target.setEnabled(true);
             status.setText("Unable to start scan: " + e.getMessage());
         }
