@@ -112,6 +112,23 @@ public final class ScanService extends Service {
             // Write the interruption marker before any network checks.
             store.save(latest);
             if(!portsOnly) identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
+            main.post(() -> {
+                if (!destroyed && scanner == tcp && !tcp.isCancelled())
+                    publish("Discovering active IPs…", 0, true);
+            });
+            Set<String> liveHosts = HostDiscovery.discover(plan, tcp::isCancelled, count -> {
+                if (count == plan.hosts.size() || count % 16 == 0) main.post(() -> {
+                    if (!destroyed && scanner == tcp && !tcp.isCancelled())
+                        publish("Discovering IPs: " + count + " / " + plan.hosts.size(), 0, true);
+                });
+            });
+            if (tcp.isCancelled()) return;
+            Set<String> observedHosts = new HashSet<>(liveHosts);
+            observedHosts.addAll(evidence.snapshot().keySet());
+            main.post(() -> {
+                if (!destroyed && scanner == tcp && !tcp.isCancelled())
+                    publish("Scanning TCP ports • " + observedHosts.size() + " responsive IPs prioritized", 0, true);
+            });
             AtomicInteger completed=new AtomicInteger(); AtomicLong lastUpdate=new AtomicLong();
             Queue<TcpScanner.Result> liveChecks=new ConcurrentLinkedQueue<>();
             Set<String> liveResponders=ConcurrentHashMap.newKeySet();
@@ -125,7 +142,7 @@ public final class ScanService extends Service {
                     if(destroyed || scanner!=tcp || tcp.isCancelled() || finishing) return;
                     publish("Checked "+completed.get()+" / "+total+" TCP connections",completed.get(),true);
                 });
-            });
+            }, observedHosts);
             List<TcpScanner.Result> evidenceChecks = results instanceof PackedScanResults
                     ? ((PackedScanResults)results).evidenceChecks() : results;
             if (!portsOnly && !tcp.isCancelled() && wifi.links != null) {
