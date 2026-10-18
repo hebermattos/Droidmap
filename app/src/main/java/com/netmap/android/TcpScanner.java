@@ -47,6 +47,9 @@ public final class TcpScanner {
     }
     public boolean isCancelled() { return cancelled.get(); }
     public List<Result> scan(ScanPlan plan, Listener listener) throws InterruptedException {
+        return scan(plan, listener, Collections.emptySet());
+    }
+    public List<Result> scan(ScanPlan plan, Listener listener, Set<String> discoveredHosts) throws InterruptedException {
         if (cancelled.get()) return Collections.emptyList();
         ExecutorService workers = Executors.newFixedThreadPool(32);
         runningWorkers = workers;
@@ -58,6 +61,7 @@ public final class TcpScanner {
         try {
             AdaptivePolicy policy=plan.adaptive?new AdaptivePolicy(plan.timeoutMs):null;
             Set<String> responding=ConcurrentHashMap.newKeySet();
+            responding.addAll(discoveredHosts);
             // Fast mode preflights up to three selected TCP ports per host.
             // A refused connection is positive evidence that the IP responded.
             List<Integer> probes=new ArrayList<>();
