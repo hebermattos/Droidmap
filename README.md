@@ -1,3 +1,7 @@
+## Scan progress log
+
+The main screen shows a compact, timestamped rolling log (up to seven latest messages) for Discovery, Nmap, and Nuclei. Discovery reports TCP checks and identification stages, Nmap reports analysis stages, and Nuclei reports each web endpoint with completion, failure and finding counts. Starting a new scan clears the log. The Discovery results still display only the simple IP/port table; the log is separate from the results.
+
 ## Independent scan actions
 
 1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
