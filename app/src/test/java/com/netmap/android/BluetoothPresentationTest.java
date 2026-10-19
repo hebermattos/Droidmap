@@ -42,4 +42,20 @@ public class BluetoothPresentationTest {
         assertFalse(BluetoothPresentation.summary(row).contains("Connecting attempt"));
         assertTrue(BluetoothPresentation.summary(row).contains("Stopped"));
     }
+    @Test public void pendingNativeCallbackIsNotTurnedIntoAnApplicationTimeout() throws Exception {
+        JSONObject row = new JSONObject().put("address", "a").put("inspectionStartedAt", 1L)
+                .put("inspectionStatus", "Running")
+                .put("inspectionStages", new JSONObject().put("reads", new JSONObject()
+                        .put("status", "running").put("at", 1L).put("detail", "Waiting for Android characteristic callback")));
+        BluetoothPresentation.enrich(row);
+        assertTrue(row.getString("summary").contains("Waiting for Android characteristic callback"));
+        assertEquals("running", row.getJSONObject("inspectionStages").getJSONObject("reads").getString("status"));
+        assertFalse(row.getString("summary").toLowerCase(java.util.Locale.ROOT).contains("timed out"));
+        row.getJSONObject("inspectionStages").getJSONObject("reads").put("status", "cancelled");
+        row.put("inspectionStatus", "Stopped — partial results retained");
+        BluetoothPresentation.enrich(row);
+        assertTrue(row.getString("summary").contains("Stopped"));
+        assertFalse(row.getString("summary").contains("Waiting for Android"));
+    }
+
 }

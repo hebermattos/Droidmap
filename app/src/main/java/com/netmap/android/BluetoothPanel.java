@@ -20,7 +20,6 @@ final class BluetoothPanel {
     private final Activity activity;
     private final BooleanSupplier networkBusy;
     private final Button main, export, inspectAll;
-    private final Spinner duration;
     private final TextView status;
     private final LinearLayout devices;
     private final ScrollView scroll;
@@ -60,12 +59,9 @@ final class BluetoothPanel {
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
         LinearLayout controls = new LinearLayout(activity);
-        duration = new Spinner(activity);
-        duration.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"30 seconds", "60 seconds", "120 seconds"}));
-        duration.setSelection(saved == null ? 1 : saved.getInt("btDuration", 1));
-        duration.setContentDescription("Bluetooth scan duration");
-        controls.addView(duration, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView mode = new TextView(activity);
+        mode.setText("Continuous until Stop");
+        controls.addView(mode, new LinearLayout.LayoutParams(0, -2, 1));
         export = new Button(activity); export.setText("Export BT JSON"); controls.addView(export);
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
@@ -90,7 +86,7 @@ final class BluetoothPanel {
     void close() { onStop(); io.shutdown(); }
     void save(Bundle out) {
         out.putBoolean("btPending", pendingStart); out.putBoolean("btInspect", pendingInspection);
-        out.putString("btAddress", pendingAddress); out.putInt("btDuration", duration.getSelectedItemPosition());
+        out.putString("btAddress", pendingAddress);
         out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", scroll.getVisibility() == View.VISIBLE);
     }
     void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); scroll.setVisibility(View.GONE); refresh(); }
@@ -149,7 +145,7 @@ final class BluetoothPanel {
             if (networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
             Intent intent = new Intent(activity, BluetoothScanService.class)
                     .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
-                    .putExtra("address", pendingAddress).putExtra("seconds", new int[]{30,60,120}[duration.getSelectedItemPosition()]);
+                    .putExtra("address", pendingAddress);
             if (!pendingInspection) { cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); }
             scroll.setVisibility(View.VISIBLE);
             activity.startForegroundService(intent);
@@ -185,7 +181,7 @@ final class BluetoothPanel {
         main.setText(state.running ? "Stop Bluetooth" : state.devices.isEmpty() ? "Scan Bluetooth" : (scroll.getVisibility() == View.VISIBLE ? "− " : "+ ") + "Bluetooth");
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
-        duration.setEnabled(!state.running); export.setEnabled(!state.devices.isEmpty());
+        export.setEnabled(!state.devices.isEmpty());
         int eligible = BluetoothScanService.eligibleDevices().size();
         inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
                 : "Inspect connectable devices (" + eligible + ")");
