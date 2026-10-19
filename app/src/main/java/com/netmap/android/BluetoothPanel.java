@@ -20,6 +20,7 @@ final class BluetoothPanel {
     private final Activity activity;
     private final BooleanSupplier networkBusy;
     private final Button main, export, inspectAll;
+    private final Spinner mode;
     private final TextView status;
     private final LinearLayout devices;
     private final ScrollView scroll;
@@ -59,8 +60,11 @@ final class BluetoothPanel {
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
         LinearLayout controls = new LinearLayout(activity);
-        TextView mode = new TextView(activity);
-        mode.setText("Continuous until Stop");
+        mode = new Spinner(activity);
+        mode.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"BLE", "Classic", "Both"}));
+        mode.setContentDescription("Bluetooth discovery mode; BLE avoids Classic inquiry contention");
+        mode.setSelection(saved == null ? 0 : saved.getInt("btMode", 0));
         controls.addView(mode, new LinearLayout.LayoutParams(0, -2, 1));
         export = new Button(activity); export.setText("Export BT JSON"); controls.addView(export);
         export.setOnClickListener(v -> {
@@ -85,6 +89,7 @@ final class BluetoothPanel {
     void onStop() { handler.removeCallbacks(poll); }
     void close() { onStop(); io.shutdown(); }
     void save(Bundle out) {
+        out.putInt("btMode", mode.getSelectedItemPosition());
         out.putBoolean("btPending", pendingStart); out.putBoolean("btInspect", pendingInspection);
         out.putString("btAddress", pendingAddress);
         out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", scroll.getVisibility() == View.VISIBLE);
@@ -145,7 +150,7 @@ final class BluetoothPanel {
             if (networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
             Intent intent = new Intent(activity, BluetoothScanService.class)
                     .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
-                    .putExtra("address", pendingAddress);
+                    .putExtra("address", pendingAddress).putExtra("mode", String.valueOf(mode.getSelectedItem()));
             if (!pendingInspection) { cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); }
             scroll.setVisibility(View.VISIBLE);
             activity.startForegroundService(intent);
@@ -182,6 +187,7 @@ final class BluetoothPanel {
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
         export.setEnabled(!state.devices.isEmpty());
+        mode.setEnabled(!state.running && !pendingStart);
         int eligible = BluetoothScanService.eligibleDevices().size();
         inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
                 : "Inspect connectable devices (" + eligible + ")");
@@ -189,13 +195,16 @@ final class BluetoothPanel {
     }
     private void refresh() {
         BluetoothScanService.State state = BluetoothScanService.snapshot(); label();
-        if (rendered == state && revision == state.revision) return;
-        if (rendered != state) { cards.clear(); devices.removeAllViews(); }
-        rendered = state; revision = state.revision;
-        status.setText((state.message.equals("Not run") ? "BLE + Classic • No Wi-Fi Discovery required" : state.message) + " • " + state.devices.size() + " devices"
+        status.setText((state.message.equals("Not run") ? "Continuous until Stop • No Wi-Fi Discovery required" : state.message) + " • " + state.devices.size() + " devices"
+                + (state.started > 0 ? "\nBLE: " + state.bleStatus + " • " + state.bleObservations + " advertisements"
+                    + (state.lastBleAt > 0 ? " • last " + Math.max(0, (System.currentTimeMillis() - state.lastBleAt) / 1000) + "s ago" : "")
+                    + "\nClassic: " + state.classicStatus + " • " + state.classicObservations + " observations" : "")
                 + (state.omitted > 0 ? " • Capacity reached (512); " + state.omitted + " observations omitted" : "")
                 + (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 && state.running ? " • Notifications disabled; use Stop here" : ""));
+        if (rendered == state && revision == state.revision) return;
+        if (rendered != state) { cards.clear(); devices.removeAllViews(); }
+        rendered = state; revision = state.revision;
         for (Map.Entry<String, JSONObject> entry : state.devices.entrySet()) {
             Card card = cards.get(entry.getKey());
             if (card == null) { card = new Card(entry.getKey()); cards.put(entry.getKey(), card); }

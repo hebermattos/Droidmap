@@ -120,6 +120,40 @@ public final class ScannerTests {
         TcpScanner[] cancelBetween={null}; AtomicInteger cancelCalls=new AtomicInteger();
         cancelBetween[0]=new TcpScanner((host,port,timeout)-> { cancelCalls.incrementAndGet(); cancelBetween[0].cancel(); return TcpScanner.State.NO_RESPONSE; });
         check(cancelBetween[0].scan(new ScanPlan("10.0.0.1","80",500,ScanPlan.Mode.COMPLETE),(r,c,t)->{}).isEmpty() && cancelCalls.get()==1,"Cancellation suppresses retries and partial connection results");
+        cancellationDuringQueuedPreflight();
         System.out.println("PASS: " + assertions + " assertions (validation, real sockets, concurrency, cancellation)");
+    }
+
+    private static void cancellationDuringQueuedPreflight() throws Exception {
+        for (boolean adaptive : new boolean[]{false, true}) {
+            CountDownLatch entered = new CountDownLatch(32);
+            CountDownLatch hold = new CountDownLatch(1);
+            TcpScanner scanner = new TcpScanner((host, port, timeout) -> {
+                entered.countDown();
+                try { hold.await(); } catch (InterruptedException expected) { Thread.currentThread().interrupt(); }
+                return TcpScanner.State.NO_RESPONSE;
+            });
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            AtomicReference<List<TcpScanner.Result>> results = new AtomicReference<>();
+            Thread scan = new Thread(() -> {
+                try {
+                    results.set(scanner.scan(new ScanPlan("10.0.0.0/24", "80,443,22", 500,
+                            adaptive ? ScanPlan.Mode.COMPLETE : ScanPlan.Mode.FAST, adaptive), (r,c,t) -> {}));
+                } catch (Throwable error) { failure.set(error); }
+            }, "queued-preflight-cancellation-test");
+            try {
+                scan.start();
+                check(entered.await(2, TimeUnit.SECONDS), "Preflight fills all 32 workers");
+                long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                while (scan.getState() != Thread.State.WAITING && System.nanoTime() < until) Thread.yield();
+                check(scan.getState() == Thread.State.WAITING, "Caller awaits preflight with more tasks queued");
+                scanner.cancel();
+                scan.join(2000);
+                check(!scan.isAlive(), "Cancellation releases queued preflight Futures without caller interruption");
+                check(failure.get() == null && results.get() != null, "Cancelled preflight returns partial results normally");
+            } finally {
+                scanner.cancel(); hold.countDown(); scan.interrupt(); scan.join(2000);
+            }
+        }
     }
 }
