@@ -20,13 +20,13 @@ final class BluetoothPanel {
     private final Activity activity;
     private final BooleanSupplier networkBusy;
     private final Button main, export, inspectAll;
-    private final Spinner duration;
     private final TextView status;
     private final LinearLayout devices;
     private final ScrollView scroll;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, Card> cards = new LinkedHashMap<>();
     private final Set<String> expanded = new HashSet<>();
+    private final Set<String> technicalExpanded = new HashSet<>();
     private final Runnable poll = new Runnable() {
         @Override public void run() { refresh(); handler.postDelayed(this, 1000); }
     };
@@ -44,6 +44,8 @@ final class BluetoothPanel {
             pendingAddress = saved.getString("btAddress", "");
             ArrayList<String> values = saved.getStringArrayList("btExpanded");
             if (values != null) expanded.addAll(values);
+            ArrayList<String> technical = saved.getStringArrayList("btTechnical");
+            if (technical != null) technicalExpanded.addAll(technical);
         } else if (!BluetoothScanService.snapshot().running) BluetoothScanService.clear();
         devices = new LinearLayout(activity); devices.setOrientation(LinearLayout.VERTICAL);
         scroll = new ScrollView(activity); scroll.addView(devices); scroll.setVisibility(View.GONE);
@@ -57,12 +59,9 @@ final class BluetoothPanel {
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
         LinearLayout controls = new LinearLayout(activity);
-        duration = new Spinner(activity);
-        duration.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"30 seconds", "60 seconds", "120 seconds"}));
-        duration.setSelection(saved == null ? 1 : saved.getInt("btDuration", 1));
-        duration.setContentDescription("Bluetooth scan duration");
-        controls.addView(duration, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView mode = new TextView(activity);
+        mode.setText("Continuous until Stop");
+        controls.addView(mode, new LinearLayout.LayoutParams(0, -2, 1));
         export = new Button(activity); export.setText("Export BT JSON"); controls.addView(export);
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
@@ -87,10 +86,10 @@ final class BluetoothPanel {
     void close() { onStop(); io.shutdown(); }
     void save(Bundle out) {
         out.putBoolean("btPending", pendingStart); out.putBoolean("btInspect", pendingInspection);
-        out.putString("btAddress", pendingAddress); out.putInt("btDuration", duration.getSelectedItemPosition());
-        out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putBoolean("btVisible", scroll.getVisibility() == View.VISIBLE);
+        out.putString("btAddress", pendingAddress);
+        out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", scroll.getVisibility() == View.VISIBLE);
     }
-    void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); devices.removeAllViews(); scroll.setVisibility(View.GONE); refresh(); }
+    void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); scroll.setVisibility(View.GONE); refresh(); }
 
     private void request(boolean inspect, String address) {
         if (pendingStart || networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
@@ -146,8 +145,8 @@ final class BluetoothPanel {
             if (networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
             Intent intent = new Intent(activity, BluetoothScanService.class)
                     .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
-                    .putExtra("address", pendingAddress).putExtra("seconds", new int[]{30,60,120}[duration.getSelectedItemPosition()]);
-            if (!pendingInspection) { cards.clear(); expanded.clear(); devices.removeAllViews(); }
+                    .putExtra("address", pendingAddress);
+            if (!pendingInspection) { cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); }
             scroll.setVisibility(View.VISIBLE);
             activity.startForegroundService(intent);
             status.setText("Starting Bluetooth…");
@@ -182,7 +181,7 @@ final class BluetoothPanel {
         main.setText(state.running ? "Stop Bluetooth" : state.devices.isEmpty() ? "Scan Bluetooth" : (scroll.getVisibility() == View.VISIBLE ? "− " : "+ ") + "Bluetooth");
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
-        duration.setEnabled(!state.running); export.setEnabled(!state.devices.isEmpty());
+        export.setEnabled(!state.devices.isEmpty());
         int eligible = BluetoothScanService.eligibleDevices().size();
         inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
                 : "Inspect connectable devices (" + eligible + ")");
@@ -205,16 +204,22 @@ final class BluetoothPanel {
     }
     private final class Card {
         final String address;
-        final TextView heading, details;
-        final Button inspect;
+        final TextView heading, summary, details;
+        final Button inspect, technical;
         final LinearLayout body;
         Card(String address) {
             this.address = address;
             LinearLayout box = new LinearLayout(activity); box.setOrientation(LinearLayout.VERTICAL);
             heading = new TextView(activity); heading.setTextSize(15); heading.setPadding(4, 12, 4, 12); box.addView(heading);
             body = new LinearLayout(activity); body.setOrientation(LinearLayout.VERTICAL); body.setBackgroundColor(0xff282828);
+            summary = new TextView(activity); summary.setTextIsSelectable(true); summary.setTextSize(14); summary.setPadding(8, 8, 8, 8); body.addView(summary);
             inspect = new Button(activity); inspect.setText("Inspect services (GATT / SDP)"); body.addView(inspect);
             inspect.setOnClickListener(v -> request(true, address));
+            technical = new Button(activity); body.addView(technical);
+            technical.setOnClickListener(v -> {
+                if (!technicalExpanded.remove(address)) technicalExpanded.add(address);
+                update(BluetoothScanService.snapshot().devices.get(address), BluetoothScanService.snapshot().running);
+            });
             details = new TextView(activity); details.setTextIsSelectable(true); details.setTextSize(12); details.setPadding(8, 8, 8, 8); body.addView(details);
             box.addView(body); devices.addView(box);
             heading.setOnClickListener(v -> { if (!expanded.remove(address)) expanded.add(address); update(BluetoothScanService.snapshot().devices.get(address), BluetoothScanService.snapshot().running); });
@@ -223,16 +228,30 @@ final class BluetoothPanel {
             if (row == null) return;
             boolean open = expanded.contains(address);
             heading.setText((open ? "− " : "+ ") + row.optString("name", "Unnamed device") + "\n" + address
-                    + " • " + row.optString("type") + (row.has("rssi") ? " • " + row.optInt("rssi") + " dBm" : " • Not seen nearby")
+                    + " • " + BluetoothPresentation.transport(row) + (row.has("rssi") ? " • " + row.optInt("rssi") + " dBm" : " • Not seen nearby")
                     + " • " + row.optString("bond"));
             heading.setContentDescription((open ? "Collapse " : "Expand ") + row.optString("name", address));
             body.setVisibility(open ? View.VISIBLE : View.GONE);
-            inspect.setEnabled(!running && !networkBusy.getAsBoolean());
-            if (open) details.setText(format(row));
+            inspect.setEnabled(!running && !networkBusy.getAsBoolean()
+                    && !(row.optBoolean("ble") && !row.optBoolean("classic") && row.has("connectable") && !row.optBoolean("connectable")));
+            if (open) {
+                BluetoothPresentation.enrich(row);
+                summary.setText(row.optString("summary"));
+                boolean showTechnical = technicalExpanded.contains(address);
+                technical.setText((showTechnical ? "− " : "+ ") + "Technical details");
+                technical.setContentDescription((showTechnical ? "Hide" : "Show") + " technical Bluetooth details");
+                details.setVisibility(showTechnical ? View.VISIBLE : View.GONE);
+                if (showTechnical) details.setText(format(row));
+            }
         }
     }
     private static String format(JSONObject row) {
-        StringBuilder text = new StringBuilder();
+        StringBuilder text = new StringBuilder(BluetoothPresentation.decodedDetails(row));
+        JSONArray attempts = row.optJSONArray("connectionAttempts");
+        for (int i = 0; attempts != null && i < attempts.length(); i++) {
+            JSONObject attempt = attempts.optJSONObject(i);
+            if (attempt != null) text.append("Connection attempt ").append(attempt.optInt("number")).append(": ").append(attempt.optString("status")).append(" — ").append(attempt.optString("detail")).append("\n");
+        }
         JSONObject stages = row.optJSONObject("inspectionStages");
         if (stages != null) {
             text.append("Inspection stages:\n");
