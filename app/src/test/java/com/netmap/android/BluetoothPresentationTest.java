@@ -58,4 +58,26 @@ public class BluetoothPresentationTest {
         assertFalse(row.getString("summary").contains("Waiting for Android"));
     }
 
+    @Test public void exportedDiscoveryHealthDistinguishesRequestsFromReceivedAdvertisements() throws Exception {
+        BluetoothScanService.clear();
+        BluetoothScanService.State state = BluetoothScanService.snapshot();
+        assertEquals("BLE", state.mode);
+        state.bleStatus = "Requested; waiting for advertisements";
+        state.classicStatus = "Disabled";
+        JSONObject waiting = new JSONObject(BluetoothScanService.exportJson());
+        assertEquals(0, waiting.getLong("bleObservations"));
+        assertEquals(0, waiting.getLong("lastBleAt"));
+        assertEquals("Disabled", waiting.getString("classicStatus"));
+        state.bleStatus = "Receiving advertisements";
+        state.bleObservations = 9;
+        state.lastBleAt = 123456L;
+        state.classicObservations = 2;
+        JSONObject received = new JSONObject(BluetoothScanService.exportJson());
+        assertEquals(9, received.getLong("bleObservations"));
+        assertEquals(2, received.getLong("classicObservations"));
+        assertEquals(123456L, received.getLong("lastBleAt"));
+        assertEquals("Receiving advertisements", received.getString("bleStatus"));
+        BluetoothScanService.clear();
+        assertEquals(0, BluetoothScanService.snapshot().bleObservations);
+    }
 }

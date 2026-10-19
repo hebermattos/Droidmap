@@ -22,6 +22,8 @@ public final class BluetoothScanService extends Service {
         long revision, started, runId;
         String message = "Not run", inspecting = "";
         int omitted, inspectionTotal, inspectionDone;
+        String mode = "BLE", bleStatus = "Not started", classicStatus = "Not started";
+        long bleObservations, classicObservations, lastBleAt;
         final JSONArray warnings = new JSONArray();
         JSONObject adapterCapabilities = new JSONObject();
     }
@@ -31,7 +33,9 @@ public final class BluetoothScanService extends Service {
     static String exportJson() {
         for (JSONObject row : state.devices.values()) BluetoothPresentation.enrich(row);
         return object("schema", 1, "tool", "bluetooth", "startedAt", state.started,
-                "running", state.running, "status", state.message, "inspectionTotal", state.inspectionTotal, "inspectionDone", state.inspectionDone, "omittedObservations", state.omitted,
+                "running", state.running, "status", state.message,
+                "scanMode", state.mode, "bleStatus", state.bleStatus, "classicStatus", state.classicStatus,
+                "bleObservations", state.bleObservations, "classicObservations", state.classicObservations, "lastBleAt", state.lastBleAt, "inspectionTotal", state.inspectionTotal, "inspectionDone", state.inspectionDone, "omittedObservations", state.omitted,
                 "devices", new JSONArray(state.devices.values()), "warnings", state.warnings, "adapterCapabilities", state.adapterCapabilities,
                 "limitations", "Only observable devices; addresses may rotate; company IDs describe advertisement owners, not verified hardware manufacturers.").toString();
     }
@@ -40,6 +44,7 @@ public final class BluetoothScanService extends Service {
     private BluetoothLeScanner scanner;
     private ScanCallback scanCallback;
     private boolean registered, classicDiscoveryEnabled, awaitingSdp;
+    private int classicRetryDelay = 2000;
     private BluetoothGatt gatt;
     private final ArrayDeque<BluetoothGattCharacteristic> reads = new ArrayDeque<>();
     private final Map<BluetoothGattCharacteristic, JSONObject> characteristicRows = new IdentityHashMap<>();
@@ -68,13 +73,14 @@ public final class BluetoothScanService extends Service {
                 return;
             }
             if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                if (classicDiscoveryEnabled) scheduleClassicDiscovery();
+                if (classicDiscoveryEnabled) { state.classicStatus = "Between inquiry rounds"; touch(); scheduleClassicDiscovery(); }
                 return;
             }
             BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             if (device == null) return;
             try {
                 if (BluetoothDevice.ACTION_FOUND.equals(action) && classicDiscoveryEnabled) {
+                    state.classicObservations++;
                     JSONObject row = observe(device, "Classic");
                     if (row == null) return;
                     if (intent.hasExtra(BluetoothDevice.EXTRA_RSSI)) signal(row, intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, (short) 0));
@@ -152,12 +158,18 @@ public final class BluetoothScanService extends Service {
             if (!START.equals(action) && adapter.isDiscovering()) {
                 state.message = "Stop the active Bluetooth discovery before inspection"; touch(); stopSelf(); return START_NOT_STICKY;
             }
-            if (START.equals(action)) state = new State();
+            if (START.equals(action)) {
+                state = new State();
+                String mode = intent.getStringExtra("mode");
+                state.mode = "Classic".equals(mode) || "Both".equals(mode) ? mode : "BLE";
+                state.bleStatus = "Classic".equals(state.mode) ? "Disabled" : "Starting";
+                state.classicStatus = "BLE".equals(state.mode) ? "Disabled" : "Starting";
+            }
             state.running = true;
             state.runId = ++session + SystemClock.elapsedRealtimeNanos();
             if (START.equals(action)) state.started = System.currentTimeMillis();
             state.inspecting = "";
-            state.message = START.equals(action) ? "Scanning BLE + Classic until Stop…" : "Inspecting " + address + "…";
+            state.message = START.equals(action) ? "Scanning " + state.mode + " until Stop…" : "Inspecting " + address + "…";
             state.adapterCapabilities = object("ble", getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE),
                     "extendedAdvertising", adapter.isLeExtendedAdvertisingSupported(), "codedPhy", adapter.isLeCodedPhySupported(),
                     "phy2M", adapter.isLe2MPhySupported(), "offloadedFiltering", adapter.isOffloadedFilteringSupported());
@@ -177,9 +189,9 @@ public final class BluetoothScanService extends Service {
                     return START_NOT_STICKY;
                 }
                 for (BluetoothDevice device : adapter.getBondedDevices()) observe(device, "Paired (cached)");
-                startBle(adapter.isLeExtendedAdvertisingSupported());
-                classicDiscoveryEnabled = true;
-                discoverClassic();
+                if (!"Classic".equals(state.mode)) startBle(adapter.isLeExtendedAdvertisingSupported());
+                classicDiscoveryEnabled = !"BLE".equals(state.mode);
+                if (classicDiscoveryEnabled) discoverClassic();
             } else {
                 inspectionQueue = new BluetoothInspectionQueue(targets);
                 state.inspectionTotal = inspectionQueue.total(); state.inspectionDone = 0;
@@ -207,7 +219,7 @@ public final class BluetoothScanService extends Service {
 
     private void startBle(boolean extended) {
         scanner = adapter.getBluetoothLeScanner();
-        if (scanner == null) { state.warnings.put("BLE scanner unavailable"); state.message = "BLE unavailable; Classic discovery will keep running"; touch(); return; }
+        if (scanner == null) { state.warnings.put("BLE scanner unavailable"); state.bleStatus = "Scanner unavailable"; touch(); return; }
         long run = state.runId;
         scanCallback = new ScanCallback() {
             @Override public void onScanResult(int type, ScanResult result) {
@@ -218,7 +230,7 @@ public final class BluetoothScanService extends Service {
                 handler.post(() -> { if (state.running && run == state.runId && scanCallback == this) {
                     state.warnings.put("BLE scan failed (code " + code + ")" + (extended ? "; retrying legacy BLE" : ""));
                     if (extended) { stopBle(); startBle(false); }
-                    else state.message = "BLE scan failed (code " + code + "); Classic discovery will keep running";
+                    else { stopBle(); state.bleStatus = "Failed (code " + code + ")"; }
                     touch();
                 }});
             }
@@ -226,18 +238,25 @@ public final class BluetoothScanService extends Service {
         android.bluetooth.le.ScanSettings.Builder settings = new android.bluetooth.le.ScanSettings.Builder()
                 .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY).setReportDelay(0).setLegacy(!extended);
         if (extended && adapter.isLeCodedPhySupported()) settings.setPhy(android.bluetooth.le.ScanSettings.PHY_LE_ALL_SUPPORTED);
-        try { scanner.startScan(Collections.emptyList(), settings.build(), scanCallback); }
+        try {
+            scanner.startScan(Collections.emptyList(), settings.build(), scanCallback);
+            state.bleStatus = "Requested; waiting for advertisements";
+            touch();
+        }
         catch (IllegalArgumentException | IllegalStateException error) {
             stopBle();
             state.warnings.put("BLE configuration failed: " + error.getMessage());
             if (extended) startBle(false);
-            else state.message = "BLE unavailable; Classic discovery will keep running";
+            else state.bleStatus = "Configuration failed";
             touch();
         }
     }
 
     private void accept(ScanResult result) {
         try {
+            state.bleObservations++;
+            state.lastBleAt = System.currentTimeMillis();
+            state.bleStatus = "Receiving advertisements";
             JSONObject row = observe(result.getDevice(), "BLE");
             if (row == null) return;
             signal(row, result.getRssi());
@@ -329,7 +348,7 @@ public final class BluetoothScanService extends Service {
 
     private void scheduleClassicDiscovery() {
         handler.removeCallbacks(classicRetry);
-        handler.postDelayed(classicRetry, 2000); // Pause between native inquiry rounds, not a scan deadline.
+        handler.postDelayed(classicRetry, classicRetryDelay); // Retry spacing, never a run deadline.
     }
 
     private void discoverClassic() {
@@ -339,10 +358,19 @@ public final class BluetoothScanService extends Service {
             if (!adapter.startDiscovery()) {
                 if (!contains(state.warnings, "Classic discovery could not start; retrying"))
                     state.warnings.put("Classic discovery could not start; retrying");
-                state.message = "Classic discovery will retry; BLE results retained"; touch();
+                state.classicStatus = "Could not start; retrying"; touch();
                 scheduleClassicDiscovery();
+                classicRetryDelay = Math.min(30000, classicRetryDelay * 2);
+            } else {
+                classicRetryDelay = 2000;
+                state.classicStatus = "Inquiry requested"; touch();
             }
-        } catch (RuntimeException e) { finish("Classic discovery failed: " + e.getMessage()); }
+        } catch (SecurityException e) { finish("Bluetooth permission revoked — partial results retained"); }
+        catch (RuntimeException e) {
+            classicDiscoveryEnabled = false;
+            state.classicStatus = "Failed: " + e.getMessage();
+            state.warnings.put("Classic discovery failed: " + e.getMessage()); touch();
+        }
     }
 
     private void nextInspection() {
@@ -599,6 +627,8 @@ public final class BluetoothScanService extends Service {
             }
             inspectionQueue = null;
         }
+        if (scanCallback != null) state.bleStatus = "Stopped";
+        if (classicDiscoveryEnabled) state.classicStatus = "Stopped";
         state.running = false; state.inspecting = ""; state.message = message + (state.warnings.length() > 0 ? " • " + state.warnings.length() + " warning(s); see export" : ""); touch();
         release(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
     }
