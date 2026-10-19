@@ -18,8 +18,8 @@ public final class BluetoothSettingsTests {
     }
     public static void main(String[] args) {
         BluetoothSettings defaults = BluetoothSettings.defaults();
-        check(defaults.mode.equals("BLE") && defaults.discoverySeconds == 0 && defaults.sdpSeconds == 0
-                && defaults.gattSeconds == 0 && defaults.readSeconds == 0, "Existing unlimited behavior remains the default");
+        check(defaults.mode.equals("Both") && defaults.discoverySeconds == 30 && defaults.sdpSeconds == 30
+                && defaults.gattSeconds == 30 && defaults.readSeconds == 30, "Defaults use BLE + Classic and 30 seconds for every timeout");
         for (String mode : BluetoothSettings.MODES) for (int seconds : BluetoothSettings.SECONDS) {
             BluetoothSettings value = new BluetoothSettings(mode, seconds, seconds, seconds, seconds);
             check(BluetoothSettings.SECONDS[BluetoothSettings.index(value.readSeconds)] == seconds, "Option round trip");

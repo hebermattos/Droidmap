@@ -8,10 +8,11 @@ final class BluetoothSettingsStore {
     private final SharedPreferences preferences;
     BluetoothSettingsStore(Context context) { preferences = context.getSharedPreferences("bluetooth-options", Context.MODE_PRIVATE); }
     BluetoothSettings load() {
+        BluetoothSettings defaults = BluetoothSettings.defaults();
         try {
-            return new BluetoothSettings(preferences.getString("mode", "BLE"),
-                    preferences.getInt("discovery", 0), preferences.getInt("sdp", 0),
-                    preferences.getInt("gatt", 0), preferences.getInt("read", 0));
+            return new BluetoothSettings(preferences.getString("mode", defaults.mode),
+                    preferences.getInt("discovery", defaults.discoverySeconds), preferences.getInt("sdp", defaults.sdpSeconds),
+                    preferences.getInt("gatt", defaults.gattSeconds), preferences.getInt("read", defaults.readSeconds));
         } catch (IllegalArgumentException | ClassCastException invalid) { return BluetoothSettings.defaults(); }
     }
     void save(BluetoothSettings settings) {

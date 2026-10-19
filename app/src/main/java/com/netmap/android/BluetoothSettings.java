@@ -13,7 +13,7 @@ final class BluetoothSettings {
         discoverySeconds = validate(discovery); sdpSeconds = validate(sdp);
         gattSeconds = validate(gatt); readSeconds = validate(read);
     }
-    static BluetoothSettings defaults() { return new BluetoothSettings("BLE", 0, 0, 0, 0); }
+    static BluetoothSettings defaults() { return new BluetoothSettings("Both", 30, 30, 30, 30); }
     static int validate(int seconds) {
         for (int value : SECONDS) if (value == seconds) return seconds;
         throw new IllegalArgumentException("Invalid Bluetooth timeout");
