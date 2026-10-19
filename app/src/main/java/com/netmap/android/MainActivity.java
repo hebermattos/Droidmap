@@ -17,6 +17,10 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private BluetoothPanel bluetoothPanel;
+    private LinearLayout homePage, wifiPage, bluetoothPage;
+    private Button backToHome;
+    private String currentPage = "home";
+    private final Map<String, String> toolEndpoints = new HashMap<>();
     private EditText target;
     private Button start;
     private Button clearAll;
@@ -103,16 +107,35 @@ public final class MainActivity extends Activity {
         header.addView(clearAll);
         layout.addView(header);
         options.setOnClickListener(this::showOptions);
+        homePage = new LinearLayout(this);
+        homePage.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(homePage);
+        for (String name : new String[] {"Wi-Fi", "Bluetooth"}) {
+            Button choice = new Button(this);
+            choice.setText(name);
+            choice.setOnClickListener(v -> showPage("Wi-Fi".equals(name) ? "wifi" : "bluetooth"));
+            homePage.addView(choice);
+        }
+        backToHome = new Button(this);
+        backToHome.setText("Back to home");
+        backToHome.setOnClickListener(v -> showPage("home"));
+        layout.addView(backToHome);
+        wifiPage = new LinearLayout(this);
+        wifiPage.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(wifiPage);
+        bluetoothPage = new LinearLayout(this);
+        bluetoothPage.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(bluetoothPage);
         target =
                 field(
-                        layout,
+                        wifiPage,
                         "Target IP or private network (/24–/32)",
                         "192.168.0.0/24",
                         R.id.target);
         settingsSummary = new TextView(this);
         settingsSummary.setTextSize(13);
         settingsSummary.setPadding(0, pad / 2, 0, pad / 2);
-        layout.addView(settingsSummary);
+        wifiPage.addView(settingsSummary);
         updateSettingsSummary();
         start = new Button(this);
         start.setText("Cancel running scan");
@@ -139,10 +162,17 @@ public final class MainActivity extends Activity {
         status.setPadding(0, pad / 2, 0, pad / 2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
         // Keep the status object for internal feedback, without a duplicate top label.
-        addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
-        addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
-        addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
-        bluetoothPanel = new BluetoothPanel(this, layout, () -> scanRunning || startingScan, state);
+        addToolButton(wifiPage, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
+        // Analysis panels only provide progress, stop and result toggles for a selected endpoint.
+        addToolButton(wifiPage, "Nmap results", "Selected IP and port Nmap results", "nmap");
+        addToolButton(wifiPage, "Nuclei results", "Selected IP and port Nuclei results", "nuclei");
+        bluetoothPanel = new BluetoothPanel(this, bluetoothPage, () -> scanRunning || startingScan, state);
+        activeTool = state == null ? "discovery" : state.getString("activeTool", "discovery");
+        for (String tool : new String[] {"nmap", "nuclei"}) {
+            String endpoint = state == null ? "" : state.getString(tool + "Endpoint", "");
+            if (!endpoint.isEmpty()) toolEndpoints.put(tool, endpoint);
+        }
+        showPage(state == null ? "home" : state.getString("currentPage", "home"));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         // Tool result panels own the visible content; retain this off-screen renderer
@@ -178,6 +208,20 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void showPage(String page) {
+        currentPage = page;
+        homePage.setVisibility("home".equals(page) ? android.view.View.VISIBLE : android.view.View.GONE);
+        wifiPage.setVisibility("wifi".equals(page) ? android.view.View.VISIBLE : android.view.View.GONE);
+        bluetoothPage.setVisibility("bluetooth".equals(page) ? android.view.View.VISIBLE : android.view.View.GONE);
+        backToHome.setVisibility("home".equals(page) ? android.view.View.GONE : android.view.View.VISIBLE);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!"home".equals(currentPage)) showPage("home");
+        else super.onBackPressed();
+    }
+
     private void confirmClearAll() {
         if (scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy())) return;
         new android.app.AlertDialog.Builder(this)
@@ -202,6 +246,7 @@ public final class MainActivity extends Activity {
         expandedDevices.clear();
         deviceList.removeAllViews();
         toolReports.clear();
+        toolEndpoints.clear();
         for (LinearLayout content : toolResults.values()) {
             content.removeAllViews();
             ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE);
@@ -212,6 +257,7 @@ public final class MainActivity extends Activity {
         start.setVisibility(android.view.View.GONE);
         clearPreviousScanFiles();
         boolean nmapCleared = deleteScanDirectory(new java.io.File(getFilesDir(), "nmap-output"));
+        updateToolRunButtons(false);
         status.setText(nmapCleared ? "All results cleared — run Discovery to start"
                 : "Results cleared, but some Nmap output files could not be deleted");
     }
@@ -257,7 +303,14 @@ public final class MainActivity extends Activity {
             Button button = entry.getValue();
             boolean active = (scanRunning || startingScan) && tool.equals(activeTool);
             String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "Nuclei";
-            String runLabel = "discovery".equals(tool) ? "Discover devices" : "Run " + name;
+            boolean discovery = "discovery".equals(tool);
+            String endpoint = toolEndpoints.getOrDefault(tool, "");
+            if (!endpoint.isEmpty()) name += " · " + endpoint;
+            boolean visible = discovery || active || toolReports.containsKey(tool) || !endpoint.isEmpty();
+            button.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+            android.view.View section = (android.view.View) toolStatuses.get(tool).getParent();
+            section.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
+            String runLabel = discovery ? "Discover devices" : name + " results";
             boolean hasResults = !toolReports.getOrDefault(tool, "").isEmpty();
             LinearLayout content = toolResults.get(tool);
             boolean expanded = content != null
@@ -266,7 +319,7 @@ public final class MainActivity extends Activity {
                     : hasResults ? (expanded ? "− " : "+ ") + name : runLabel);
             button.setEnabled(active ? cancellable && !cancellingScan : !scanRunning && !startingScan && (bluetoothPanel == null || !bluetoothPanel.busy()));
             button.setContentDescription(active ? "Stop running " + name
-                    : hasResults ? (expanded ? "Collapse " : "Expand ") + name + " results. Long press to run again"
+                    : hasResults ? (expanded ? "Collapse " : "Expand ") + name + (discovery ? " results. Long press to run again" : " results")
                     : runLabel);
         }
     }
@@ -361,6 +414,7 @@ public final class MainActivity extends Activity {
                 },
                 new OptionsPage.Actions() {
                     @Override public void useWifi(boolean allAddresses) {
+                        showPage("wifi");
                         selectWifiNetwork(allAddresses);
                     }
                     @Override public void openHistory() { showHistory(); }
@@ -638,6 +692,7 @@ public final class MainActivity extends Activity {
         layout.addView(section);
         toolButtons.add(button);
         toolRunButtons.put(tool, button);
+        updateToolRunButtons(false);
         button.setOnClickListener(v -> {
             if (scanRunning || startingScan) {
                 if (tool.equals(activeTool)) stopActiveTool();
@@ -645,10 +700,10 @@ public final class MainActivity extends Activity {
                 boolean shown = inlineScroll.getVisibility() == android.view.View.VISIBLE;
                 inlineScroll.setVisibility(shown ? android.view.View.GONE : android.view.View.VISIBLE);
                 updateToolRunButtons(false);
-            } else begin(tool);
+            } else if ("discovery".equals(tool)) begin(tool);
         });
         button.setOnLongClickListener(v -> {
-            if (scanRunning || startingScan) return false;
+            if (scanRunning || startingScan || !"discovery".equals(tool)) return false;
             begin(tool);
             return true;
         });
@@ -714,6 +769,11 @@ public final class MainActivity extends Activity {
     }
 
     private void begin(String tool, String selectedIp, int selectedPort) {
+        if (!"discovery".equals(tool) && (selectedIp == null || selectedIp.isEmpty()
+                || selectedPort < 1 || selectedPort > 65535)) {
+            Toast.makeText(this, "Choose an open IP and port from Discovery.", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (("nmap".equals(tool) || "nuclei".equals(tool)) && !hasDiscoveryResults()) {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("Discovery required")
@@ -789,6 +849,18 @@ public final class MainActivity extends Activity {
         target.clearFocus();
         try {
             activeTool = request.getStringExtra("tool");
+            showPage("wifi");
+            if (!"discovery".equals(activeTool)) {
+                toolEndpoints.put(activeTool, request.getStringExtra("selectedIp") + ":"
+                        + request.getIntExtra("selectedPort", 0));
+            } else {
+                for (String tool : new String[] {"nmap", "nuclei"}) {
+                    toolEndpoints.remove(tool);
+                    toolReports.remove(tool);
+                    toolResults.get(tool).removeAllViews();
+                    toolStatuses.get(tool).setText("Not run");
+                }
+            }
             launchPrevious = ScanService.snapshot();
             ignoredPreviousSnapshot = null;
             displayedSnapshot = launchPrevious;
@@ -864,6 +936,10 @@ public final class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         bluetoothPanel.save(state);
+        state.putString("currentPage", currentPage);
+        state.putString("activeTool", activeTool);
+        for (Map.Entry<String, String> entry : toolEndpoints.entrySet())
+            state.putString(entry.getKey() + "Endpoint", entry.getValue());
         state.putStringArrayList("expandedDevices", new ArrayList<>(expandedDevices));
         if (pendingScan != null) state.putParcelable("pendingScan", pendingScan);
         exporter.saveState(state);
