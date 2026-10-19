@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
+    private BluetoothPanel bluetoothPanel;
     private EditText target;
     private Button start;
     private Button clearAll;
@@ -49,6 +50,10 @@ public final class MainActivity extends Activity {
                     ScanSnapshot snapshot = ScanService.snapshot();
                     if (snapshot != null && snapshot != displayedSnapshot
                             && snapshot != ignoredPreviousSnapshot) applySnapshot(snapshot);
+                    if (!scanRunning && !startingScan && bluetoothPanel != null) {
+                        updateToolRunButtons(false);
+                        clearAll.setEnabled(!bluetoothPanel.busy());
+                    }
                     uiHandler.postDelayed(this, 500);
                 }
             };
@@ -137,6 +142,7 @@ public final class MainActivity extends Activity {
         addToolButton(layout, "Discover devices", "Find devices and identify services without Nmap or Nuclei", "discovery");
         addToolButton(layout, "Run Nmap", "Discover open ports and run Nmap analysis", "nmap");
         addToolButton(layout, "Run Nuclei", "Discover HTTP services and run Nuclei checks", "nuclei");
+        bluetoothPanel = new BluetoothPanel(this, layout, () -> scanRunning || startingScan, state);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         // Tool result panels own the visible content; retain this off-screen renderer
@@ -146,7 +152,10 @@ public final class MainActivity extends Activity {
         deviceList.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(deviceList);
         layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(layout);
+        ScrollView page = new ScrollView(this);
+        page.setFillViewport(true);
+        page.addView(layout);
+        setContentView(page);
         resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput,
                 (ip, port) -> runSelectedPort("nmap", ip, port),
                 (ip, port) -> runSelectedPort("nuclei", ip, port));
@@ -170,17 +179,18 @@ public final class MainActivity extends Activity {
     }
 
     private void confirmClearAll() {
-        if (scanRunning || startingScan) return;
+        if (scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy())) return;
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Clear all results?")
-                .setMessage("Delete Discovery data, open ports, Nmap and Nuclei results, scan history and saved Nmap output? Scan settings will be kept.")
+                .setMessage("Delete Bluetooth, Discovery, open ports, Nmap and Nuclei results, scan history and saved Nmap output? Scan settings will be kept.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Clear All", (dialog, which) -> clearAllResults())
                 .show();
     }
 
     private void clearAllResults() {
-        if (scanRunning || startingScan) return;
+        if (scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy())) return;
+        if (bluetoothPanel != null) bluetoothPanel.clear();
         ignoredPreviousSnapshot = ScanService.snapshot();
         displayedSnapshot = null;
         launchPrevious = null;
@@ -231,11 +241,13 @@ public final class MainActivity extends Activity {
     protected void onStart() {
         super.onStart();
         uiHandler.post(refreshScan);
+        bluetoothPanel.onStart();
     }
 
     @Override
     protected void onStop() {
         uiHandler.removeCallbacks(refreshScan);
+        bluetoothPanel.onStop();
         super.onStop();
     }
 
@@ -252,7 +264,7 @@ public final class MainActivity extends Activity {
                     && ((android.view.View) content.getParent()).getVisibility() == android.view.View.VISIBLE;
             button.setText(active ? (cancellingScan ? "Stopping " + name + "…" : "Stop " + name)
                     : hasResults ? (expanded ? "− " : "+ ") + name : runLabel);
-            button.setEnabled(active ? cancellable && !cancellingScan : !scanRunning && !startingScan);
+            button.setEnabled(active ? cancellable && !cancellingScan : !scanRunning && !startingScan && (bluetoothPanel == null || !bluetoothPanel.busy()));
             button.setContentDescription(active ? "Stop running " + name
                     : hasResults ? (expanded ? "Collapse " : "Expand ") + name + " results. Long press to run again"
                     : runLabel);
@@ -658,6 +670,10 @@ public final class MainActivity extends Activity {
     }
 
     private void runSelectedPort(String tool, String ip, int port) {
+        if (bluetoothPanel != null && bluetoothPanel.busy()) {
+            Toast.makeText(this, "Stop Bluetooth before starting another scan", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (scanRunning || startingScan) {
             Toast.makeText(this,"A scan is already running.",Toast.LENGTH_SHORT).show();
             return;
@@ -690,6 +706,10 @@ public final class MainActivity extends Activity {
     }
 
     private void begin(String tool) {
+        if (bluetoothPanel != null && bluetoothPanel.busy()) {
+            Toast.makeText(this, "Stop Bluetooth before starting another scan", Toast.LENGTH_SHORT).show();
+            return;
+        }
         begin(tool,null,0);
     }
 
@@ -745,6 +765,7 @@ public final class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
+        if (bluetoothPanel.permissions(request)) return;
         if (request != 20) return;
         getPreferences(MODE_PRIVATE).edit().putBoolean("notificationAsked", true).apply();
         Intent scan = pendingScan;
@@ -813,6 +834,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (bluetoothPanel.result(request, result, data)) return;
         if (request != 10) return;
         if (result != RESULT_OK || data == null || data.getData() == null) {
             exporter.clear();
@@ -841,6 +863,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        bluetoothPanel.save(state);
         state.putStringArrayList("expandedDevices", new ArrayList<>(expandedDevices));
         if (pendingScan != null) state.putParcelable("pendingScan", pendingScan);
         exporter.saveState(state);
@@ -849,6 +872,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        bluetoothPanel.close();
         uiHandler.removeCallbacks(refreshScan);
         background.shutdown();
         super.onDestroy();
