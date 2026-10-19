@@ -1,13 +1,13 @@
 ## Scan progress indicators
 
-The main screen shows the current scan stage and a progress bar, without a scrolling or timestamped log. Discovery displays TCP check progress and subsequent identification status. Nmap and Nuclei show their current analysis stages; the progress bar is indeterminate when a reliable total is unavailable. Detailed results remain separate from the scan status.
+The home screen offers **Wi-Fi** and **Bluetooth**. Open either area to access its actions and results; **Back to home** (or Android Back) returns to the two choices without stopping an active scan. Options and Clear All remain in the header. The Wi-Fi area shows the current scan stage and a progress bar, without a scrolling or timestamped log. Discovery displays TCP check progress and subsequent identification status. Nmap and Nuclei show their current analysis stages; the progress bar is indeterminate when a reliable total is unavailable. Detailed results remain separate from the scan status.
 
 ## Independent scan actions
 
-1. Select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
-2. After a completed TCP discovery, choose **Run Nmap** or **Run Nuclei**. These buttons consume the saved discovery results for that target and Wi-Fi network. They do **not** repeat the TCP discovery sweep.
+1. Open **Wi-Fi**, select a private IP address or Wi-Fi network, then run **Discover devices** first. Discovery checks the configured TCP ports, identifies devices and saves the verified-open ports for later analysis. Its on-screen output is only a compact two-column table of IP addresses and open TCP ports, including live previews; detailed identification evidence remains internal for Nmap and Nuclei.
+2. After a completed TCP discovery, expand an IP and use **Nmap** or **Nuclei** beside a verified-open port. There are no global Nmap or Nuclei run actions. These buttons consume the saved discovery results for that single IP and port on the current Wi-Fi network. They do **not** repeat the TCP discovery sweep.
 3. **Run Nmap** analyzes only verified-open TCP ports, including relevant service and vulnerability scripts. **Run Nuclei** analyzes only confirmed-open HTTP/HTTPS endpoints.
-4. **Cancel running scan** cancels the active action. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
+4. The active action button becomes **Stop** and cancels that action. Analysis panels show the selected IP and port and provide stop/result toggles only; start each analysis from its port row. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
 
 Only one action can run at a time. The screen is cleared whenever a new scan starts. Discovery results are retained internally for Nmap and Nuclei during the current app session, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
 
