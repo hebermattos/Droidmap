@@ -29,6 +29,7 @@ public final class BluetoothScanService extends Service {
     static State snapshot() { return state; }
     static void clear() { if (!state.running) state = new State(); }
     static String exportJson() {
+        for (JSONObject row : state.devices.values()) BluetoothPresentation.enrich(row);
         return object("schema", 1, "tool", "bluetooth", "startedAt", state.started,
                 "running", state.running, "status", state.message, "inspectionTotal", state.inspectionTotal, "inspectionDone", state.inspectionDone, "omittedObservations", state.omitted,
                 "devices", new JSONArray(state.devices.values()), "warnings", state.warnings, "adapterCapabilities", state.adapterCapabilities,
@@ -49,7 +50,8 @@ public final class BluetoothScanService extends Service {
     private boolean advancing;
     private String currentStage = "";
     private Runnable readDeadline;
-    private int failedReads, totalReads;
+    private int failedReads, totalReads, gattAttempts;
+    private boolean retryPending, connectionEstablished;
     private final java.util.concurrent.ExecutorService catalogIo = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     static List<String> eligibleDevices() {
@@ -288,6 +290,7 @@ public final class BluetoothScanService extends Service {
                 put(row, "adStructures", fields);
                 put(row, "truncatedAdvertisement", parsed.truncated());
             }
+            BluetoothPresentation.enrich(row);
             touch();
         } catch (SecurityException e) { finish("Bluetooth permission revoked — partial results retained"); }
     }
@@ -351,10 +354,11 @@ public final class BluetoothScanService extends Service {
         advancing = false;
         String address = inspectionQueue.next();
         if (address == null) { finish("Inspection queue finished: " + state.inspectionDone + "/" + state.inspectionTotal + " processed (see per-device results)"); return; }
-        state.inspecting = address; failedReads = 0; totalReads = 0;
+        state.inspecting = address; failedReads = 0; totalReads = 0; gattAttempts = 0; retryPending = false; connectionEstablished = false;
         JSONObject row = state.devices.get(address);
         put(row, "inspectionStatus", "Running");
         put(row, "inspectionStartedAt", System.currentTimeMillis());
+        put(row, "connectionAttempts", new JSONArray());
         // A new attempt owns these fields; never present old services as a fresh successful inspection.
         for (String key : new String[]{"gattServices", "gattStatus", "gattTruncated", "sdpUuids", "sdpStatus"}) row.remove(key);
         state.message = "Inspecting " + (state.inspectionDone + 1) + "/" + state.inspectionTotal + ": " + row.optString("name", address);
@@ -392,7 +396,7 @@ public final class BluetoothScanService extends Service {
         for (String key : new String[]{"sdp", "connection", "services", "reads"}) {
             JSONObject item = stages == null ? null : stages.optJSONObject(key);
             String status = item == null ? "pending" : item.optString("status");
-            if (status.equals("running")) stage(key, outcome, detail);
+            if (status.equals("running") || status.equals("retrying")) stage(key, outcome, detail);
             else if (status.equals("pending")) stage(key, outcome.equals("cancelled") ? "cancelled" : "skipped", "Not reached: " + detail);
         }
     }
@@ -411,13 +415,48 @@ public final class BluetoothScanService extends Service {
 
     private void completeDevice(String message) {
         if (!state.running || inspectionQueue == null || advancing) return;
-        advancing = true;
+        advancing = true; retryPending = false;
+        endConnectionAttempt("failed", message);
         finishStages("failed", message);
         JSONObject row = state.devices.get(state.inspecting);
         put(row, "inspectionStatus", message); put(row, "inspectionFinishedAt", System.currentTimeMillis());
         closeInspection(); inspectionQueue.complete(); state.inspectionDone = inspectionQueue.completed();
         state.inspecting = ""; touch();
         handler.postDelayed(this::nextInspection, 300);
+    }
+
+    private void endConnectionAttempt(String outcome, String detail) {
+        JSONObject row = state.devices.get(state.inspecting);
+        JSONArray attempts = row == null ? null : row.optJSONArray("connectionAttempts");
+        JSONObject attempt = attempts == null ? null : attempts.optJSONObject(attempts.length() - 1);
+        if (attempt != null && attempt.optString("status").equals("running")) {
+            put(attempt, "status", outcome); put(attempt, "detail", detail); put(attempt, "finishedAt", System.currentTimeMillis());
+        }
+    }
+
+    private void connectionFailure(BluetoothDevice device, int code, String reason) {
+        if (!state.running || !device.getAddress().equals(state.inspecting) || retryPending || advancing) return;
+        JSONObject row = state.devices.get(state.inspecting);
+        endConnectionAttempt("failed", reason);
+        put(row, "gattStatus", reason);
+        if (!BluetoothGattRetry.eligible(gattAttempts, code, connectionEstablished, row.optBoolean("connectable"))) {
+            completeDevice(reason); return;
+        }
+        // Close and invalidate the previous GATT before scheduling another connection.
+        closeInspection(); retryPending = true;
+        put(row, "inspectionStatus", "Waiting for connection retry 2/2");
+        stage("connection", "retrying", reason + "; retry 2/2 in 2 seconds");
+        state.message = "Retrying " + row.optString("name", state.inspecting) + " (2/2)…"; touch();
+        final long run = state.runId;
+        final String address = state.inspecting;
+        handler.postDelayed(() -> {
+            if (!state.running || state.runId != run || !address.equals(state.inspecting) || !retryPending) return;
+            try {
+                if (!permitted(this) || !adapter.isEnabled()) { finish("Bluetooth unavailable — retry queue cancelled"); return; }
+                beginGatt(device);
+            } catch (SecurityException e) { finish("Bluetooth permission revoked — queue cancelled"); }
+            catch (RuntimeException e) { completeDevice("Connection retry failed: " + e.getMessage()); }
+        }, BluetoothGattRetry.DELAY_MS);
     }
 
     private void beginGatt(BluetoothDevice device) {
@@ -430,10 +469,24 @@ public final class BluetoothScanService extends Service {
         if (row.has("connectable") && !row.optBoolean("connectable")) {
             stage("connection", "skipped", "Advertisement is not connectable"); put(row, "gattStatus", "Advertisement is not connectable"); completeDevice("Service inspection finished"); return;
         }
-        stage("connection", "running", "Connecting over BLE");
+        retryPending = false; gattAttempts++;
+        put(row, "inspectionStatus", "Running (connection attempt " + gattAttempts + "/2)");
+        state.message = "Inspecting " + (state.inspectionDone + 1) + "/" + state.inspectionTotal + ": " + row.optString("name", state.inspecting)
+                + " (connection attempt " + gattAttempts + "/2)";
+        JSONArray attempts = row.optJSONArray("connectionAttempts");
+        if (attempts == null) { attempts = new JSONArray(); put(row, "connectionAttempts", attempts); }
+        attempts.put(object("number", gattAttempts, "startedAt", System.currentTimeMillis(), "status", "running"));
+        stage("connection", "running", "Connecting over BLE (attempt " + gattAttempts + "/2)");
         put(row, "gattStatus", "Connecting for read-only service discovery…"); touch();
         final long run = state.runId;
-        deadline = () -> { stage(currentStage.isEmpty() ? "connection" : currentStage, "timed_out", "GATT deadline of 25 seconds exceeded"); completeDevice("GATT inspection timed out — partial results retained"); };
+        deadline = () -> {
+            if (!connectionEstablished && currentStage.equals("connection")) {
+                connectionFailure(device, 147, "Connection timed out after 25 seconds");
+            } else {
+                stage(currentStage.isEmpty() ? "services" : currentStage, "timed_out", "GATT deadline of 25 seconds exceeded");
+                completeDevice("GATT inspection timed out — partial results retained");
+            }
+        };
         handler.postDelayed(deadline, 25000);
         BluetoothGattCallback callback = new BluetoothGattCallback() {
             private void dispatch(BluetoothGatt connection, Runnable work) {
@@ -444,8 +497,9 @@ public final class BluetoothScanService extends Service {
             @Override public void onConnectionStateChange(BluetoothGatt connection, int status, int newState) {
                 dispatch(connection, () -> {
                     if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        put(row, "gattStatus", "Disconnected: " + BluetoothGattStatus.connection(status)); completeDevice("GATT disconnected: " + BluetoothGattStatus.connection(status));
+                        connectionFailure(device, status, "GATT disconnected: " + BluetoothGattStatus.connection(status));
                     } else if (newState == BluetoothProfile.STATE_CONNECTED) {
+                        connectionEstablished = true; endConnectionAttempt("success", "Connected");
                         stage("connection", "success", "Connected"); stage("services", "running", "Discovering services and characteristics");
                         if (!connection.discoverServices()) completeDevice("GATT service discovery could not start");
                     }
@@ -497,7 +551,7 @@ public final class BluetoothScanService extends Service {
         try { gatt = device.connectGatt(this, false, callback, BluetoothDevice.TRANSPORT_LE); }
         catch (SecurityException e) { finish("Bluetooth permission revoked — queue cancelled"); return; }
         catch (RuntimeException e) { completeDevice("GATT connection failed: " + e.getMessage()); return; }
-        if (gatt == null) completeDevice("GATT connection could not start");
+        if (gatt == null) connectionFailure(device, 133, "GATT connection could not start (no connection handle)");
     }
 
     private void readResult(BluetoothGattCharacteristic characteristic, byte[] value, int status) {
@@ -559,6 +613,8 @@ public final class BluetoothScanService extends Service {
     }
 
     private void finish(String message) {
+        retryPending = false;
+        endConnectionAttempt("cancelled", message);
         if (inspectionQueue != null) {
             finishStages("cancelled", message);
             for (String address : inspectionQueue.cancel()) {
@@ -567,7 +623,7 @@ public final class BluetoothScanService extends Service {
                 JSONObject stages = queued.optJSONObject("inspectionStages");
                 if (stages != null) for (String key : new String[]{"connection", "services", "reads", "sdp"}) {
                     JSONObject item = stages.optJSONObject(key);
-                    if (item != null && (item.optString("status").equals("pending") || item.optString("status").equals("running")))
+                    if (item != null && (item.optString("status").equals("pending") || item.optString("status").equals("running") || item.optString("status").equals("retrying")))
                         put(stages, key, object("status", "cancelled", "detail", message));
                 }
             }
