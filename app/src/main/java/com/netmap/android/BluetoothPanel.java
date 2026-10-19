@@ -199,7 +199,7 @@ final class BluetoothPanel {
         status.setText((state.message.equals("Not run") ? "Bluetooth • Configure mode and timeouts in Options" : state.message)
                 + "\n" + state.devices.size() + " devices • " + BluetoothScanService.eligibleDevices().size() + " ready to inspect"
                 + (state.started > 0 ? "\nBLE: " + state.bleStatus + " • " + state.bleObservations + " advertisements"
-                    + (state.lastBleAt > 0 ? " • last " + Math.max(0, (System.currentTimeMillis() - state.lastBleAt) / 1000) + "s ago" : "")
+                    + (state.lastBleAt > 0 ? " • last received at " + android.text.format.DateFormat.format("HH:mm:ss", state.lastBleAt) : "")
                     + "\nClassic: " + state.classicStatus + " • " + state.classicObservations + " observations" : "")
                 + (state.omitted > 0 ? " • Capacity reached (512); " + state.omitted + " observations omitted" : "")
                 + (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -217,7 +217,7 @@ final class BluetoothPanel {
         timingStatus.setVisibility(state.operationStarted >= 0 ? View.VISIBLE : View.GONE);
         timeProgress.setVisibility(state.running ? View.VISIBLE : View.GONE);
         if (state.operationStarted < 0) return;
-        StringBuilder text = new StringBuilder("Elapsed: ")
+        StringBuilder text = new StringBuilder(state.running ? "Elapsed: " : "Duration: ")
                 .append(BluetoothTimings.clock(BluetoothScanService.operationElapsed() / 1000));
         if (!state.inspecting.isEmpty()) {
             JSONObject device = state.devices.get(state.inspecting);
@@ -225,7 +225,7 @@ final class BluetoothPanel {
                     .append(": ").append(device == null ? state.inspecting : device.optString("name", state.inspecting));
         }
         BluetoothTimings.Snapshot progress = null;
-        for (BluetoothTimings.Snapshot timer : state.timings.snapshots(SystemClock.uptimeMillis())) {
+        for (BluetoothTimings.Snapshot timer : state.timings.snapshots(state.running ? SystemClock.uptimeMillis() : Math.max(0, state.operationEnded))) {
             text.append('\n').append(BluetoothTimings.describe(timer));
             if (timer.running() && timer.limitSeconds() > 0
                     && (progress == null || timer.remainingMs() < progress.remainingMs())) progress = timer;
