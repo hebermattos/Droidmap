@@ -5,6 +5,9 @@ classes_dir="$(mktemp -d)"
 trap 'rm -rf "$classes_dir"' EXIT
 python3 "$project_dir/tests/generate-nmap-fixture.py" "$project_dir/app/src/main/assets/nmap-command-templates.json" "$classes_dir/TestNmapTemplates.java"
 sources=(
+  "$project_dir/app/src/main/java/com/netmap/android/BluetoothSettings.java"
+  "$project_dir/app/src/main/java/com/netmap/android/BluetoothDeadlines.java"
+  "$project_dir/tests/BluetoothSettingsTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothVendorDecoder.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothGattRetry.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothDeviceSummary.java"
@@ -71,3 +74,5 @@ java -cp "$classes_dir" com.netmap.android.BluetoothAdvertisementTests
 java -cp "$classes_dir" com.netmap.android.BluetoothInspectionTests "$project_dir/app/src/main/assets/bluetooth-assigned-numbers.tsv"
 
 java -cp "$classes_dir" com.netmap.android.BluetoothPrioritiesTests
+
+java -cp "$classes_dir" com.netmap.android.BluetoothSettingsTests

@@ -90,6 +90,25 @@ final class OptionsPage {
         intensity.setEnabled(!scanning);
         args.setEnabled(!scanning);
 
+        heading(activity, form, "Bluetooth");
+        BluetoothSettingsStore bluetoothStore = new BluetoothSettingsStore(activity);
+        BluetoothSettings bluetooth = bluetoothStore.load();
+        Spinner bluetoothMode = spinner(activity, form, "Discovery mode", BluetoothSettings.MODES,
+                java.util.Arrays.asList(BluetoothSettings.MODES).indexOf(bluetooth.mode));
+        Spinner bluetoothDiscovery = spinner(activity, form, "Discovery duration", BluetoothSettings.LABELS,
+                BluetoothSettings.index(bluetooth.discoverySeconds));
+        Spinner bluetoothSdp = spinner(activity, form, "SDP response timeout", BluetoothSettings.LABELS,
+                BluetoothSettings.index(bluetooth.sdpSeconds));
+        Spinner bluetoothGatt = spinner(activity, form, "GATT inspection timeout (per attempt)", BluetoothSettings.LABELS,
+                BluetoothSettings.index(bluetooth.gattSeconds));
+        Spinner bluetoothRead = spinner(activity, form, "Characteristic read timeout", BluetoothSettings.LABELS,
+                BluetoothSettings.index(bluetooth.readSeconds));
+        TextView bluetoothHelp = new TextView(activity);
+        bluetoothHelp.setText("No limit waits until Stop or an Android outcome. GATT includes connection, service discovery and reads per attempt. Changes apply to the next run. Android's own limits still apply.");
+        form.addView(bluetoothHelp);
+        for (Spinner option : new Spinner[]{bluetoothMode, bluetoothDiscovery, bluetoothSdp, bluetoothGatt, bluetoothRead})
+            option.setEnabled(!scanning);
+
         // Nuclei intentionally has no duplicated enable toggle: its separate tool button starts it.
         heading(activity, form, "History and reports");
         action(activity, form, "History", !scanning, () -> { dialog.dismiss(); actions.openHistory(); });
@@ -102,7 +121,7 @@ final class OptionsPage {
 
         if (!scanning) {
             heading(activity, form, "Save settings");
-            action(activity, form, "Save scan and Nmap settings", true, () -> {
+            action(activity, form, "Save settings", true, () -> {
                 int timeoutValue;
                 try {
                     timeoutValue = Integer.parseInt(timeout.getText().toString().trim());
@@ -125,6 +144,13 @@ final class OptionsPage {
                         mode.getSelectedItemPosition() == 0 ? ScanPlan.Mode.FAST : ScanPlan.Mode.COMPLETE,
                         adaptive.isChecked(), current.nmap, args.getText().toString(),
                         intensity.getSelectedItemPosition());
+                BluetoothSettings updatedBluetooth = new BluetoothSettings(
+                        BluetoothSettings.MODES[bluetoothMode.getSelectedItemPosition()],
+                        BluetoothSettings.SECONDS[bluetoothDiscovery.getSelectedItemPosition()],
+                        BluetoothSettings.SECONDS[bluetoothSdp.getSelectedItemPosition()],
+                        BluetoothSettings.SECONDS[bluetoothGatt.getSelectedItemPosition()],
+                        BluetoothSettings.SECONDS[bluetoothRead.getSelectedItemPosition()]);
+                bluetoothStore.save(updatedBluetooth);
                 onSave.accept(updated);
                 dialog.dismiss();
             });

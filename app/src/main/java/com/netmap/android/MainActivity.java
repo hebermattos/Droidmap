@@ -352,7 +352,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showOptions(android.view.View anchor) {
-        OptionsPage.show(this, settings, scanRunning, !lastDevices.isEmpty(),
+        OptionsPage.show(this, settings, scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy()), !lastDevices.isEmpty(),
                 !resultText.isEmpty(), !scanRunning && !report.isEmpty(),
                 updated -> {
                     settings = updated;
