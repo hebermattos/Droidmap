@@ -195,8 +195,7 @@ public final class MainActivity extends Activity {
         for (LinearLayout content : toolResults.values()) {
             content.removeAllViews();
             ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE);
-            LinearLayout section = (LinearLayout) content.getParent().getParent();
-            ((Button) section.getChildAt(1)).setVisibility(android.view.View.GONE);
+
         }
         for (TextView localStatus : toolStatuses.values()) localStatus.setText("Not run");
         progress.setVisibility(android.view.View.GONE);
@@ -246,10 +245,17 @@ public final class MainActivity extends Activity {
             Button button = entry.getValue();
             boolean active = (scanRunning || startingScan) && tool.equals(activeTool);
             String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "Nuclei";
+            String runLabel = "discovery".equals(tool) ? "Discover devices" : "Run " + name;
+            boolean hasResults = !toolReports.getOrDefault(tool, "").isEmpty();
+            LinearLayout content = toolResults.get(tool);
+            boolean expanded = content != null
+                    && ((android.view.View) content.getParent()).getVisibility() == android.view.View.VISIBLE;
             button.setText(active ? (cancellingScan ? "Stopping " + name + "…" : "Stop " + name)
-                    : "discovery".equals(tool) ? "Discover devices" : "Run " + name);
+                    : hasResults ? (expanded ? "− " : "+ ") + name : runLabel);
             button.setEnabled(active ? cancellable && !cancellingScan : !scanRunning && !startingScan);
-            button.setContentDescription(active ? "Stop running " + name : "Run " + name);
+            button.setContentDescription(active ? "Stop running " + name
+                    : hasResults ? (expanded ? "Collapse " : "Expand ") + name + " results. Long press to run again"
+                    : runLabel);
         }
     }
 
@@ -309,11 +315,9 @@ public final class MainActivity extends Activity {
                         (ip, port) -> runSelectedPort("nmap", ip, port),
                         (ip, port) -> runSelectedPort("nuclei", ip, port));
                 inline.render(report);
-                LinearLayout section = (LinearLayout) content.getParent().getParent();
-                Button toggle = (Button) section.getChildAt(1);
-                toggle.setVisibility(report.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
                 ((android.view.View) content.getParent()).setVisibility(report.isEmpty()
                         ? android.view.View.GONE : android.view.View.VISIBLE);
+                updateToolRunButtons(snapshot.cancellable);
             }
             lastDevices = resultsRenderer.render(report);
         } else resultText = snapshot.text;
@@ -612,21 +616,12 @@ public final class MainActivity extends Activity {
         localStatus.setText("Not run");
         section.addView(localStatus);
         toolStatuses.put(tool, localStatus);
-        Button toggle = new Button(this);
-        toggle.setText("Hide results");
-        toggle.setVisibility(android.view.View.GONE);
-        section.addView(toggle);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         ScrollView inlineScroll = new ScrollView(this);
         inlineScroll.addView(content);
         inlineScroll.setVisibility(android.view.View.GONE);
         section.addView(inlineScroll, new LinearLayout.LayoutParams(-1, (int)(280 * getResources().getDisplayMetrics().density)));
-        toggle.setOnClickListener(v -> {
-            boolean visible = inlineScroll.getVisibility() == android.view.View.VISIBLE;
-            inlineScroll.setVisibility(visible ? android.view.View.GONE : android.view.View.VISIBLE);
-            toggle.setText(visible ? "Show results" : "Hide results");
-        });
         toolResults.put(tool, content);
         layout.addView(section);
         toolButtons.add(button);
@@ -634,7 +629,16 @@ public final class MainActivity extends Activity {
         button.setOnClickListener(v -> {
             if (scanRunning || startingScan) {
                 if (tool.equals(activeTool)) stopActiveTool();
+            } else if (!toolReports.getOrDefault(tool, "").isEmpty()) {
+                boolean shown = inlineScroll.getVisibility() == android.view.View.VISIBLE;
+                inlineScroll.setVisibility(shown ? android.view.View.GONE : android.view.View.VISIBLE);
+                updateToolRunButtons(false);
             } else begin(tool);
+        });
+        button.setOnLongClickListener(v -> {
+            if (scanRunning || startingScan) return false;
+            begin(tool);
+            return true;
         });
     }
 
