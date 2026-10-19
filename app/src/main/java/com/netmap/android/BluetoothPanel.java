@@ -19,8 +19,9 @@ final class BluetoothPanel {
     private static final int PERMISSIONS = 41, ENABLE = 42, EXPORT = 43;
     private final Activity activity;
     private final BooleanSupplier networkBusy;
-    private final Button main, export, inspectAll;
-    private final TextView status;
+    private final Button main, export, inspectAll, rescan;
+    private final TextView status, timingStatus;
+    private final ProgressBar timeProgress;
     private final LinearLayout devices;
     private final ScrollView scroll;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -58,21 +59,27 @@ final class BluetoothPanel {
             else request(false, "");
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
+        rescan = new Button(activity); rescan.setText("New scan");
+        rescan.setOnClickListener(v -> request(false, "")); parent.addView(rescan);
+        status = new TextView(activity); status.setTextSize(13);
+        status.setPadding(8, 8, 8, 8); status.setBackgroundColor(0xff202020);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); parent.addView(status);
+        timingStatus = new TextView(activity); timingStatus.setTextSize(14);
+        timingStatus.setPadding(8, 8, 8, 8); timingStatus.setTextIsSelectable(true);
+        timingStatus.setTypeface(android.graphics.Typeface.MONOSPACE); parent.addView(timingStatus);
+        timeProgress = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
+        timeProgress.setMax(100); parent.addView(timeProgress, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout controls = new LinearLayout(activity);
-        export = new Button(activity); export.setText("Export BT JSON"); controls.addView(export);
+        inspectAll = new Button(activity); controls.addView(inspectAll, new LinearLayout.LayoutParams(0, -2, 1));
+        export = new Button(activity); export.setText("Export JSON"); controls.addView(export, new LinearLayout.LayoutParams(0, -2, 1));
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
             activity.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                     .setType("application/json").putExtra(Intent.EXTRA_TITLE, "droidmap-bluetooth.json"), EXPORT);
         });
         parent.addView(controls);
-        inspectAll = new Button(activity);
-        inspectAll.setText("Inspect connectable devices");
         inspectAll.setContentDescription("Inspect observed connectable BLE devices one at a time, strongest signal first");
         inspectAll.setOnClickListener(v -> request(true, ""));
-        parent.addView(inspectAll);
-        status = new TextView(activity); status.setTextSize(13);
-        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); parent.addView(status);
         parent.addView(scroll, new LinearLayout.LayoutParams(-1, (int)(260 * activity.getResources().getDisplayMetrics().density)));
         if ((saved != null && saved.getBoolean("btVisible")) || BluetoothScanService.snapshot().running) scroll.setVisibility(View.VISIBLE);
         refresh();
@@ -179,14 +186,18 @@ final class BluetoothPanel {
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
         export.setEnabled(!state.devices.isEmpty());
+        rescan.setVisibility(!state.running && !state.devices.isEmpty() ? View.VISIBLE : View.GONE);
+        rescan.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean());
         int eligible = BluetoothScanService.eligibleDevices().size();
         inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
-                : "Inspect connectable devices (" + eligible + ")");
+                : "Inspect (" + eligible + ")");
         inspectAll.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean() && eligible > 0);
     }
     private void refresh() {
         BluetoothScanService.State state = BluetoothScanService.snapshot(); label();
-        status.setText((state.message.equals("Not run") ? "Continuous until Stop • No Wi-Fi Discovery required" : state.message) + " • " + state.devices.size() + " devices"
+        refreshTimings(state);
+        status.setText((state.message.equals("Not run") ? "Bluetooth • Configure mode and timeouts in Options" : state.message)
+                + "\n" + state.devices.size() + " devices • " + BluetoothScanService.eligibleDevices().size() + " ready to inspect"
                 + (state.started > 0 ? "\nBLE: " + state.bleStatus + " • " + state.bleObservations + " advertisements"
                     + (state.lastBleAt > 0 ? " • last " + Math.max(0, (System.currentTimeMillis() - state.lastBleAt) / 1000) + "s ago" : "")
                     + "\nClassic: " + state.classicStatus + " • " + state.classicObservations + " observations" : "")
@@ -201,6 +212,32 @@ final class BluetoothPanel {
             if (card == null) { card = new Card(entry.getKey()); cards.put(entry.getKey(), card); }
             card.update(entry.getValue(), state.running);
         }
+    }
+    private void refreshTimings(BluetoothScanService.State state) {
+        timingStatus.setVisibility(state.operationStarted >= 0 ? View.VISIBLE : View.GONE);
+        timeProgress.setVisibility(state.running ? View.VISIBLE : View.GONE);
+        if (state.operationStarted < 0) return;
+        StringBuilder text = new StringBuilder("Elapsed: ")
+                .append(BluetoothTimings.clock(BluetoothScanService.operationElapsed() / 1000));
+        if (!state.inspecting.isEmpty()) {
+            JSONObject device = state.devices.get(state.inspecting);
+            text.append("\nDevice ").append(state.inspectionDone + 1).append('/').append(state.inspectionTotal)
+                    .append(": ").append(device == null ? state.inspecting : device.optString("name", state.inspecting));
+        }
+        BluetoothTimings.Snapshot progress = null;
+        for (BluetoothTimings.Snapshot timer : state.timings.snapshots(SystemClock.uptimeMillis())) {
+            text.append('\n').append(BluetoothTimings.describe(timer));
+            if (timer.running() && timer.limitSeconds() > 0
+                    && (progress == null || timer.remainingMs() < progress.remainingMs())) progress = timer;
+        }
+        if (state.running && state.inspectionTotal > 0 && state.inspecting.isEmpty()) text.append("\nPreparing next device…");
+        if (state.running && state.inspectionTotal > 0) text.append("\nTimers apply to the current device; queue finish time varies.");
+        timingStatus.setText(text);
+        timeProgress.setIndeterminate(progress == null);
+        if (progress != null) {
+            timeProgress.setProgress(progress.percent());
+            timeProgress.setContentDescription(BluetoothTimings.describe(progress));
+        } else timeProgress.setContentDescription("Bluetooth operation in progress");
     }
     private final class Card {
         final String address;
@@ -230,6 +267,7 @@ final class BluetoothPanel {
             heading.setText((open ? "− " : "+ ") + row.optString("name", "Unnamed device") + "\n" + address
                     + " • " + BluetoothPresentation.transport(row) + (row.has("rssi") ? " • " + row.optInt("rssi") + " dBm" : " • Not seen nearby")
                     + " • " + row.optString("bond"));
+            heading.setBackgroundColor(address.equals(BluetoothScanService.snapshot().inspecting) ? 0xff383838 : 0xff161616);
             heading.setContentDescription((open ? "Collapse " : "Expand ") + row.optString("name", address));
             body.setVisibility(open ? View.VISIBLE : View.GONE);
             inspect.setEnabled(!running && !networkBusy.getAsBoolean()
@@ -250,7 +288,16 @@ final class BluetoothPanel {
         JSONArray attempts = row.optJSONArray("connectionAttempts");
         for (int i = 0; attempts != null && i < attempts.length(); i++) {
             JSONObject attempt = attempts.optJSONObject(i);
-            if (attempt != null) text.append("Connection attempt ").append(attempt.optInt("number")).append(": ").append(attempt.optString("status")).append(" — ").append(attempt.optString("detail")).append("\n");
+            if (attempt != null) text.append("Connection attempt ").append(attempt.optInt("number")).append(": ").append(attempt.optString("status")).append(" — ").append(attempt.optString("detail"))
+                    .append(attempt.has("durationMs") ? " • " + BluetoothTimings.clock(attempt.optLong("durationMs") / 1000) + " elapsed" : "").append("\n");
+        }
+        JSONObject timings = row.optJSONObject("inspectionTimings");
+        if (timings != null) for (String key : new String[]{"sdp", "gatt", "read", "retry"}) {
+            JSONObject timer = timings.optJSONObject(key);
+            if (timer != null && !timer.optString("status").equals("running"))
+                text.append(BluetoothTimings.label(key)).append(": ")
+                    .append(BluetoothTimings.clock(timer.optLong("elapsedMs") / 1000)).append(" elapsed • ")
+                    .append(timer.optString("status")).append('\n');
         }
         JSONObject stages = row.optJSONObject("inspectionStages");
         if (stages != null) {
