@@ -19,7 +19,7 @@ final class BluetoothPanel {
     private static final int PERMISSIONS = 41, ENABLE = 42, EXPORT = 43;
     private final Activity activity;
     private final BooleanSupplier networkBusy;
-    private final Button main, export;
+    private final Button main, export, inspectAll;
     private final Spinner duration;
     private final TextView status;
     private final LinearLayout devices;
@@ -70,6 +70,11 @@ final class BluetoothPanel {
                     .setType("application/json").putExtra(Intent.EXTRA_TITLE, "droidmap-bluetooth.json"), EXPORT);
         });
         parent.addView(controls);
+        inspectAll = new Button(activity);
+        inspectAll.setText("Inspect connectable devices");
+        inspectAll.setContentDescription("Inspect observed connectable BLE devices one at a time, strongest signal first");
+        inspectAll.setOnClickListener(v -> request(true, ""));
+        parent.addView(inspectAll);
         status = new TextView(activity); status.setTextSize(13);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); parent.addView(status);
         parent.addView(scroll, new LinearLayout.LayoutParams(-1, (int)(260 * activity.getResources().getDisplayMetrics().density)));
@@ -140,7 +145,7 @@ final class BluetoothPanel {
             pendingStart = false;
             if (networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
             Intent intent = new Intent(activity, BluetoothScanService.class)
-                    .setAction(pendingInspection ? BluetoothScanService.INSPECT : BluetoothScanService.START)
+                    .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
                     .putExtra("address", pendingAddress).putExtra("seconds", new int[]{30,60,120}[duration.getSelectedItemPosition()]);
             if (!pendingInspection) { cards.clear(); expanded.clear(); devices.removeAllViews(); }
             scroll.setVisibility(View.VISIBLE);
@@ -178,6 +183,10 @@ final class BluetoothPanel {
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
         duration.setEnabled(!state.running); export.setEnabled(!state.devices.isEmpty());
+        int eligible = BluetoothScanService.eligibleDevices().size();
+        inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
+                : "Inspect connectable devices (" + eligible + ")");
+        inspectAll.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean() && eligible > 0);
     }
     private void refresh() {
         BluetoothScanService.State state = BluetoothScanService.snapshot(); label();
@@ -224,6 +233,16 @@ final class BluetoothPanel {
     }
     private static String format(JSONObject row) {
         StringBuilder text = new StringBuilder();
+        JSONObject stages = row.optJSONObject("inspectionStages");
+        if (stages != null) {
+            text.append("Inspection stages:\n");
+            for (String key : new String[]{"sdp", "connection", "services", "reads"}) {
+                JSONObject result = stages.optJSONObject(key);
+                if (result != null) text.append(key).append(": ").append(result.optString("status"))
+                        .append(" — ").append(result.optString("detail")).append('\n');
+            }
+            text.append('\n');
+        }
         text.append("Sources: ").append(row.optJSONArray("sources")).append('\n');
         for (String key : new String[]{"beacon", "observations", "firstSeen", "lastSeen", "rssi", "minRssi", "maxRssi", "deviceClass", "majorClass", "connectable",
                 "legacyAdvertisement", "primaryPhy", "secondaryPhy", "advertisingSid", "periodicInterval", "dataStatus", "flags", "txPower", "advertisedTxPower", "inspectionStatus", "sdpStatus", "gattStatus", "gattTruncated"}) {
@@ -242,7 +261,7 @@ final class BluetoothPanel {
             text.append("\nManufacturer advertisements:\n");
             for (Iterator<String> keys = manufacturers.keys(); keys.hasNext();) {
                 String id = keys.next(); JSONObject value = manufacturers.optJSONObject(id);
-                text.append(id).append(" • ").append(value.optString("company")).append("\n  ").append(value.optString("hex")).append('\n');
+                text.append(id).append(" • ").append(BluetoothAdvertisement.company(Integer.decode(id))).append("\n  ").append(value.optString("hex")).append('\n');
             }
         }
         JSONObject data = row.optJSONObject("serviceData");
@@ -257,16 +276,16 @@ final class BluetoothPanel {
             text.append("\nGATT services:\n");
             for (int i = 0; i < services.length(); i++) {
                 JSONObject service = services.optJSONObject(i);
-                text.append(service.optString("name")).append(" ").append(service.optString("uuid")).append('\n');
+                text.append(BluetoothAdvertisement.uuidName(service.optString("uuid"))).append(" ").append(service.optString("uuid")).append('\n');
                 JSONArray chars = service.optJSONArray("characteristics");
                 for (int j = 0; chars != null && j < chars.length(); j++) {
                     JSONObject c = chars.optJSONObject(j);
-                    text.append("  ").append(c.optString("name")).append(" ").append(c.optString("uuid")).append('\n');
+                    text.append("  ").append(BluetoothAdvertisement.uuidName(c.optString("uuid"))).append(" ").append(c.optString("uuid")).append('\n');
                     text.append("    ").append(properties(c.optInt("properties"))).append('\n');
                     if (c.has("value")) text.append("    Value: ").append(c.optString("value")).append('\n');
-                    if (c.has("readStatus")) text.append("    Read status: ").append(c.opt("readStatus")).append('\n');
+                    if (c.has("readStatus") || c.has("readStatusText")) text.append("    Read status: ").append(c.optString("readStatusText", String.valueOf(c.opt("readStatus")))).append('\n');
                     JSONArray descriptors = c.optJSONArray("descriptors");
-                    for (int k = 0; descriptors != null && k < descriptors.length(); k++) text.append("    Descriptor: ").append(descriptors.optString(k)).append('\n');
+                    for (int k = 0; descriptors != null && k < descriptors.length(); k++) text.append("    Descriptor: ").append(descriptors.optString(k)).append(" ").append(BluetoothAdvertisement.uuidName(descriptors.optString(k))).append('\n');
                 }
             }
         }

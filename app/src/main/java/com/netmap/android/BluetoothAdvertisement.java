@@ -60,17 +60,22 @@ final class BluetoothAdvertisement {
     }
 
     static String company(int id) {
+        String assigned = BluetoothCatalog.company(id);
+        if (!assigned.isEmpty()) return assigned;
         return switch (id) {
             case 0x004c -> "Apple";
             case 0x0075 -> "Samsung";
             case 0x0006 -> "Microsoft";
             case 0x00e0 -> "Google";
+            case 0x05d6 -> "Zhuhai Jieli technology Co.,Ltd";
             case 0x0059 -> "Nordic Semiconductor";
             default -> "Unknown";
         };
     }
 
     static String uuidName(String uuid) {
+        String assigned = BluetoothCatalog.uuid(uuid);
+        if (!assigned.isEmpty()) return assigned;
         if (uuid == null || !uuid.toLowerCase(Locale.ROOT).endsWith("-0000-1000-8000-00805f9b34fb")) return "";
         return switch (uuid.substring(0, 8).toLowerCase(Locale.ROOT)) {
             case "00001800" -> "Generic Access";
@@ -98,18 +103,15 @@ final class BluetoothAdvertisement {
     }
 
     static boolean readableInfo(String service, String characteristic) {
-        String name = uuidName(characteristic);
-        return (service.equals("00001800-0000-1000-8000-00805f9b34fb") && name.equals("Device Name"))
-                || (service.equals("0000180f-0000-1000-8000-00805f9b34fb") && name.equals("Battery Level"))
-                || (service.equals("0000180a-0000-1000-8000-00805f9b34fb") && switch (name) {
-                    case "Model Number", "Serial Number", "Firmware Revision", "Hardware Revision", "Software Revision", "Manufacturer Name" -> true;
-                    default -> false;
-                });
+        if (characteristic == null) return false;
+        return (service.equals("00001800-0000-1000-8000-00805f9b34fb") && characteristic.equals("00002a00-0000-1000-8000-00805f9b34fb"))
+                || (service.equals("0000180f-0000-1000-8000-00805f9b34fb") && characteristic.equals("00002a19-0000-1000-8000-00805f9b34fb"))
+                || (service.equals("0000180a-0000-1000-8000-00805f9b34fb") && characteristic.matches("00002a2[4-9]-0000-1000-8000-00805f9b34fb"));
     }
 
     static String value(String uuid, byte[] bytes) {
         if (bytes == null) return "";
-        if (uuidName(uuid).equals("Battery Level"))
+        if ("00002a19-0000-1000-8000-00805f9b34fb".equals(uuid))
             return bytes.length == 1 && (bytes[0] & 255) <= 100 ? (bytes[0] & 255) + "%" : "Invalid battery value";
         return new String(bytes, 0, Math.min(bytes.length, 512), StandardCharsets.UTF_8)
                 .replaceAll("[\\p{Cntrl}]", " ").trim();
