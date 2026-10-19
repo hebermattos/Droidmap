@@ -352,3 +352,7 @@ Connectable BLE devices get at most **two connection attempts**. Only establishm
 The duration selector and automatic discovery stop are removed. BLE discovery stays active and native Classic rounds repeat until **Stop**, Bluetooth is disabled, a fatal error occurs or the app/service is terminated. Stop discovery before starting a service inspection. Collection and parser/device limits are unchanged.
 
 The former 12-second SDP, 25-second GATT and five-second characteristic-read deadlines are removed. Inspections wait for Android callbacks; Stop promptly closes the current GATT connection and cancels the remaining queue and scheduled retries. The existing two-second retry/Classic-round pauses and UI refresh intervals are scheduling delays, not execution time limits. Native Android Bluetooth timeout/error statuses are still reported and can qualify for the existing single controlled connection retry. Package IDs and signing configuration remain unchanged.
+
+### Cancelling network Discovery (v0.13.5)
+
+Stop completes cancellation during both initial IP reachability and queued TCP preflight checks. Queued TCP tasks are explicitly cancelled so their waiters can exit, and cancellation during initial IP discovery still saves a cancelled partial report and releases the foreground service. Cancelled results do not become a completed Discovery baseline for Nmap/Nuclei.

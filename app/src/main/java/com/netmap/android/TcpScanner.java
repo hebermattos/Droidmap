@@ -42,7 +42,13 @@ public final class TcpScanner {
     public void cancel() {
         cancelled.set(true);
         ExecutorService workers = runningWorkers;
-        if (workers != null) workers.shutdownNow();
+        if (workers != null) {
+            // shutdownNow removes queued FutureTasks without completing their Futures.
+            // Cancel those handles too, so a preflight future.get() cannot wait forever.
+            for (Runnable queued : workers.shutdownNow())
+                if (queued instanceof java.util.concurrent.Future<?>)
+                    ((java.util.concurrent.Future<?>) queued).cancel(false);
+        }
         for (Socket socket : active) try { socket.close(); } catch (IOException ignored) { }
     }
     public boolean isCancelled() { return cancelled.get(); }

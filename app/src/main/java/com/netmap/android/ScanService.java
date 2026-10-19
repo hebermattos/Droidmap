@@ -122,7 +122,8 @@ public final class ScanService extends Service {
                         publish("Discovering IPs: " + count + " / " + plan.hosts.size(), 0, true);
                 });
             });
-            if (tcp.isCancelled()) return;
+            // Even cancellation during host discovery must reach report finalization.
+            // TcpScanner returns an empty result when already cancelled.
             Set<String> observedHosts = new HashSet<>(liveHosts);
             observedHosts.addAll(evidence.snapshot().keySet());
             main.post(() -> {
