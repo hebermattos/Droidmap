@@ -8,28 +8,28 @@ import java.util.*;
 final class NmapEnricher {
     private NmapEnricher() {}
 
-    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,String customArgs,int versionIntensity,java.util.function.BooleanSupplier cancelled,Runnable progress) {
+    static List<String> enrich(Context context,ScanPlan plan,List<TcpScanner.Result> checks,DeviceEvidence evidence,String customArgs,int versionIntensity,java.util.function.BooleanSupplier cancelled,java.util.function.Consumer<String> progress) {
         List<String> notices=new ArrayList<>();
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnmap.so");
-        if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); return notices; }
+        if(!binary.isFile()) { notices.add("Nmap enrichment unavailable for this device ABI."); for(String notice:notices)progress.accept(notice); return notices; }
         final NmapCommands templates;
         try(InputStream input=context.getAssets().open(NmapCommandsJson.ASSET)) {
             templates=NmapCommandsJson.parse(NmapRunner.readBounded(input,65536));
         } catch(Exception e) {
             notices.add("Nmap template unavailable or invalid: "+DeviceEvidence.clean(
                     e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));
-            return notices;
+            for(String notice:notices)progress.accept(notice); return notices;
         }
         File data;
         try { data=installData(context); }
-        catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); return notices; }
+        catch(IOException e) { notices.add("Nmap data unavailable: "+e.getMessage()); for(String notice:notices)progress.accept(notice); return notices; }
 
         final List<String> parsedCustomArgs;
         try { parsedCustomArgs=NmapCustomArgs.parse(customArgs); }
-        catch(IllegalArgumentException e) { notices.add("Nmap custom parameters rejected: "+e.getMessage()); return notices; }
+        catch(IllegalArgumentException e) { notices.add("Nmap custom parameters rejected: "+e.getMessage()); progress.accept(notices.get(0)); return notices; }
         Map<String,LinkedHashSet<Integer>> targets=NmapTargets.collect(checks,evidence);
         NmapOutputStore outputStore=new NmapOutputStore(context.getFilesDir()); int attempted=0, enriched=0;
-        if(targets.isEmpty()) notices.add("Nmap skipped: no verified-open TCP ports were found.");
+        if(targets.isEmpty()) {notices.add("Nmap skipped: no verified-open TCP ports were found.");progress.accept(notices.get(0));}
         for(Map.Entry<String,LinkedHashSet<Integer>> target:targets.entrySet()) {
             String host=target.getKey();
             if(cancelled.getAsBoolean()) break;
@@ -41,10 +41,10 @@ final class NmapEnricher {
                     evidence.add(host,source,"outputStatus",storageError.getMessage());
                     notices.add("Nmap "+host+" output unavailable: "+storageError.getMessage());
                 }
-            },parsedCustomArgs,versionIntensity);
+            },parsedCustomArgs,versionIntensity,progress);
             try {
                 LinkedHashSet<Integer> selected=target.getValue();
-                evidence.nmapStatus(host,"Nmap","Running service detection");progress.run();
+                evidence.nmapStatus(host,"Nmap","Running service detection");progress.accept("Nmap • "+host+" • Starting service detection");
                 String xml=runner.scan(binary.getAbsolutePath(),data.getAbsolutePath(),host,selected,plan.timeoutMs);
                 try {NmapXmlParser.parse(xml,evidence);}
                 catch(Exception parseError) {throw new IOException("Nmap process finished, but XML processing failed: "+parseError.getMessage(),parseError);} evidence.nmapStatus(host,"Nmap","Completed"); enriched++;
@@ -61,7 +61,7 @@ final class NmapEnricher {
                     for(int port:openPorts) targetPorts.add(port+"/tcp");
                     evidence.add(host,"Nmap vulnerabilities","targetPorts",targetPorts.toString());
                     evidence.add(host,"Nmap vulnerabilities","selectionRule","NSE selects applicable scripts by port and detected service; host-level results are labeled separately.");
-                    evidence.nmapStatus(host,"Nmap vulnerabilities","Running vulnerability detection");progress.run();
+                    evidence.nmapStatus(host,"Nmap vulnerabilities","Running vulnerability detection");progress.accept("Nmap • "+host+" • Starting vulnerability detection");
                     String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
                     try {NmapXmlParser.parseVulnerabilities(vulnXml,evidence,openPorts);}
                     catch(Exception parseError) {throw new IOException("Nmap process finished, but vulnerability XML processing failed: "+parseError.getMessage(),parseError);}
@@ -73,7 +73,8 @@ final class NmapEnricher {
                 String error=DeviceEvidence.clean(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage());
                 evidence.nmapStatus(host,"Nmap","Failed: "+error);
                 notices.add("Nmap "+host+": "+error);
-            } finally {progress.run();}
+                progress.accept("Nmap • "+host+" • "+(cancelled.getAsBoolean()?"Cancelled: ":"Failed: ")+error);
+            }
         }
         if(targets.size()>attempted) notices.add("Nmap cancelled: "+(targets.size()-attempted)+" target(s) not attempted.");
         if(attempted>0) notices.add("Nmap service enrichment: "+enriched+" / "+attempted+" attempted targets; "+targets.size()+" found targets with open TCP ports.");

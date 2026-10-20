@@ -10,6 +10,7 @@ final class NmapRunner {
     private final java.util.function.Consumer<Execution> completed;
     private final List<String> customArgs;
     private final int versionIntensity;
+    private final java.util.function.Consumer<String> progress;
     static final class Execution {
         final List<String> command;
         final String profile, stdout, stderr, error;
@@ -32,11 +33,16 @@ final class NmapRunner {
         private final int limit;
         private boolean truncated;
         Capture(int limit){this.limit=limit;}
+        private String latest="";
+        synchronized String latest(){return latest;}
         void read(InputStream input)throws IOException {
             byte[] buffer=new byte[8192];int count;
             while((count=input.read(buffer))!=-1) synchronized(this) {
                 int accepted=Math.min(count,limit-bytes.size());
                 bytes.write(buffer,0,accepted);if(accepted<count)truncated=true;
+                String chunk=new String(buffer,0,count,StandardCharsets.UTF_8);
+                String[] lines=chunk.split("[\\r\\n]+");
+                for(String line:lines)if(!ToolProgress.clean(line).isEmpty())latest=ToolProgress.clean(line);
             }
         }
         synchronized boolean truncated(){return truncated;}
@@ -50,12 +56,23 @@ final class NmapRunner {
     }
     NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,
             java.util.function.Consumer<Execution> completed,List<String> customArgs,int versionIntensity) {
+        this(templates,launcher,cancelled,completed,customArgs,versionIntensity,message->{});
+    }
+    NmapRunner(NmapCommands templates,Launcher launcher,java.util.function.BooleanSupplier cancelled,
+            java.util.function.Consumer<Execution> completed,List<String> customArgs,int versionIntensity,
+            java.util.function.Consumer<String> progress) {
+        this.progress=progress;
         this.versionIntensity=NmapCommands.bounded(versionIntensity,0,9,"Nmap version intensity");
         this.templates=Objects.requireNonNull(templates);this.launcher=launcher;this.cancelled=cancelled;this.completed=completed;this.customArgs=Collections.unmodifiableList(new ArrayList<>(customArgs));
     }
-    private void awaitExit(Process process,int seconds,String timeoutMessage)throws Exception {
+    private void awaitExit(Process process,int seconds,String timeoutMessage,ToolProgress log,Capture stdout,Capture stderr)throws Exception {
         long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(seconds);
+        String lastOut="",lastErr="";
         while(!process.waitFor(100,TimeUnit.MILLISECONDS)) {
+            String out=stdout.latest(),err=stderr.latest();
+            if(!out.equals(lastOut)){lastOut=out;log.event(out);}
+            if(!err.equals(lastErr)){lastErr=err;log.event("Diagnostic: "+err);}
+            log.tick();
             if(cancelled.getAsBoolean()||Thread.currentThread().isInterrupted()) throw new IOException("Nmap cancelled");
             if(seconds>0&&System.nanoTime()>=deadline) throw new IOException(timeoutMessage);
         }
@@ -77,6 +94,8 @@ final class NmapRunner {
         final List<String> command;
         try {command=templates.command(profile,host,values,customArgs);}
         catch(RuntimeException invalidCommand) {xmlOutput.delete();throw invalidCommand;}
+        ToolProgress log=new ToolProgress("Nmap • "+host+" • TCP "+ports+" • "+(profile==templates.services?"Services":"Vulnerabilities"),progress);
+        log.event(host+" • TCP "+ports+" • "+(profile==templates.services?"Service detection":"Vulnerability detection"));
         long started=System.nanoTime();
         Process process=null;Integer exitCode=null;String error="";
         Capture stdout=new Capture(templates.maximumOutputBytes),stderr=new Capture(templates.maximumOutputBytes);
@@ -92,7 +111,7 @@ final class NmapRunner {
             Process active=process;
             out=readers.submit(()->{stdout.read(active.getInputStream());return null;});
             err=readers.submit(()->{stderr.read(active.getErrorStream());return null;});
-            awaitExit(process,profile.processTimeoutSeconds,"Nmap timed out");
+            awaitExit(process,profile.processTimeoutSeconds,"Nmap timed out",log,stdout,stderr);
             exitCode=process.exitValue();
             out.get(templates.outputReadTimeoutSeconds,TimeUnit.SECONDS);
             err.get(templates.outputReadTimeoutSeconds,TimeUnit.SECONDS);
@@ -116,6 +135,11 @@ final class NmapRunner {
             }
             if(out!=null)out.cancel(true);if(err!=null)err.cancel(true);readers.shutdownNow();
             xmlOutput.delete();
+            if(!stdout.latest().isEmpty())log.event(stdout.latest());
+            if(!stderr.latest().isEmpty())log.event("Diagnostic: "+stderr.latest());
+            log.event(error.isEmpty()?"Process completed • exit "+exitCode:
+                    (cancelled.getAsBoolean()?"Cancelled: ":"Failed: ")+error);
+            log.flush();
             completed.accept(new Execution(command,profile==templates.services?"Service detection":"Vulnerability detection",
                     stdout.text(),stderr.text(),error,exitCode,TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started)));
         }

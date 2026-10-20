@@ -405,3 +405,7 @@ Bluetooth, Discovery, Nmap and Nuclei results expand to their full content heigh
 ### Search ports on a device without open ports
 
 Expand an IP in Discovery. When no TCP ports were found, **Search all TCP ports** starts a new Discovery for that IP only, checking TCP ports 1–65535 with the saved timeout and scan mode. This replaces the current Discovery results with the selected IP; saved scan settings are unchanged. Progress and Stop remain in the Discovery section. Newly verified-open ports offer their individual Nmap actions (and Nuclei where web evidence exists). No service analysis runs when no ports are verified open. An empty result applies to the completed scan, not to every possible service or protocol.
+
+### Live Nmap and Nuclei logs
+
+The active tool section shows the target, current phase, elapsed time and up to eight recent timestamped messages. Updates are limited to once per second; the final status is kept with the result. Nmap emits verbose stage updates and process statistics every five seconds, reports service and vulnerability detection separately and keeps its full text output in the existing output viewer. Nuclei shows endpoint completion, diagnostic errors and template matches requiring verification. Elapsed time is not an estimate of time remaining. Cancellation retains partial results.
