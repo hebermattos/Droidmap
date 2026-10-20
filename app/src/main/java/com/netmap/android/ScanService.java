@@ -165,7 +165,7 @@ public final class ScanService extends Service {
                     lastPreview.set(0);
                     main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nmap…",results.size(),true);});
                     nmapNotices=NmapEnricher.enrich(this,plan,observedChecks,evidence,nmapArgs,nmapVersionIntensity,tcp::isCancelled,
-                            ()->preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false));
+                            message->main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish(message,results.size(),true);}));
                 }
             }
             List<String> enrichmentNotices=new ArrayList<>(nmapNotices);
@@ -244,21 +244,19 @@ public final class ScanService extends Service {
                     evidence.add(host,source,observation.optString("field"),observation.optString("value"));
                 }
             }
+            final String[] toolLog={""};
             List<String> notices;
             if("nmap".equals(tool)) {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nmap on open ports…",0,true);});
-                AtomicInteger steps=new AtomicInteger();
                 notices=NmapEnricher.enrich(this,plan,open,evidence,nmapArgs,nmapVersionIntensity,
-                        controller::isCancelled,()->{
-                            int count=steps.incrementAndGet();
+                        controller::isCancelled,message->{toolLog[0]=message;
                             main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
-                                publish("Nmap analysis step "+count+" • "+verifiedPorts.size()+" hosts",0,true);});
-                        });
+                                publish(message,0,true);});});
             } else {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nuclei on open web ports…",0,true);});
                 notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,controller::isCancelled,
-                        message->main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
-                            publish(message,0,true);}));
+                        message->{toolLog[0]=message;main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
+                            publish(message,0,true);});});
             }
             org.json.JSONArray updated=new org.json.JSONArray();
             for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet())
@@ -268,6 +266,7 @@ public final class ScanService extends Service {
             if(messages==null) messages=new org.json.JSONArray();
             for(String notice:notices) messages.put(notice);
             data.put("identificationNotices",messages);
+            data.put("toolLog",toolLog[0]);
             data.put("tool",tool);
             data.put("discoveryReady",true);
             data.put("nmapEnabled","nmap".equals(tool));
@@ -275,7 +274,7 @@ public final class ScanService extends Service {
             data.put("finishedAtEpochMs",System.currentTimeMillis());
             data.put("cancelled",controller.isCancelled());
             ScanSnapshot finished=new ScanSnapshot(started,false,false,open.size(),open.size(),target,
-                    controller.isCancelled()?"Analysis cancelled — partial results":tool+" analysis completed",
+                    (controller.isCancelled()?"Analysis cancelled — partial results":tool+" analysis finished")+"\n"+toolLog[0],
                     data.toString(2),new ReportPresentation(data).fullText());
             store.save(finished);
             main.post(()->finish(finished));
@@ -365,7 +364,7 @@ public final class ScanService extends Service {
     private Notification notification(ScanSnapshot state) {
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder=new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_scan_notification)
-            .setContentTitle("Droidmap • "+state.target).setContentText(state.message).setContentIntent(open)
+            .setContentTitle("Droidmap • "+state.target).setContentText(state.message.split("\\n",2)[0]).setContentIntent(open)
             .setOnlyAlertOnce(true).setOngoing(state.running).setAutoCancel(!state.running).setCategory(Notification.CATEGORY_PROGRESS);
         if(state.running) builder.setProgress(state.total,state.done,state.done==0);
         if(state.running && state.cancellable) {

@@ -76,6 +76,9 @@
       "argv": [
         "--datadir",
         "{dataDir}",
+        "-v",
+        "--stats-every",
+        "5s",
         "-n",
         "-sT",
         "-sV",
@@ -109,6 +112,9 @@
       "argv": [
         "--datadir",
         "{dataDir}",
+        "-v",
+        "--stats-every",
+        "5s",
         "-n",
         "-sT",
         "-sV",

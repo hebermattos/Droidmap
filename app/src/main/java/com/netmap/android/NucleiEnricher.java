@@ -13,9 +13,12 @@ final class NucleiEnricher {
     static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, BooleanSupplier cancelled,
             java.util.function.Consumer<String> progress) {
         List<String> notices=new ArrayList<>();
+        ToolProgress log=new ToolProgress("Nuclei",progress);
+        log.event("Preparing bundled templates and runtime");
         File binary=new File(context.getApplicationInfo().nativeLibraryDir,"libnuclei.so");
         if(!binary.isFile()) {
             notices.add("Nuclei unavailable: an Android-compatible ARM64 executable is not bundled.");
+            log.event(notices.get(notices.size()-1));log.flush();
             return notices;
         }
         File templates=new File(context.getFilesDir(),"nuclei-templates");
@@ -31,6 +34,7 @@ final class NucleiEnricher {
             }
         } catch(IOException e) {
             notices.add("Nuclei templates unavailable: "+DeviceEvidence.clean(e.getMessage()));
+            log.event(notices.get(notices.size()-1));log.flush();
             return notices;
         }
         // Nuclei writes configuration and cache files; Android's nativeLibraryDir is read-only.
@@ -39,6 +43,7 @@ final class NucleiEnricher {
         if((!runtimeHome.isDirectory()&&!runtimeHome.mkdirs()) ||
            (!runtimeCache.isDirectory()&&!runtimeCache.mkdirs())) {
             notices.add("Nuclei unavailable: cannot initialize writable runtime directories.");
+            log.event(notices.get(notices.size()-1));log.flush();
             return notices;
         }
         int checked=0,found=0,completed=0,failed=0;
@@ -91,12 +96,13 @@ final class NucleiEnricher {
                     command.environment().put("TMPDIR",context.getCacheDir().getAbsolutePath());
                     process=command.start();
                     checked++;
-                    progress.accept("Nuclei: checking endpoint "+checked+" • "+url);
+                    log.event("Endpoint "+checked+" • "+url+" • "+templateNames.length+" configured templates");
                     String endpointStatus="incomplete";
                     StringBuilder errors=new StringBuilder();
                     // Read until Nuclei exits or the user cancels; no global execution deadline.
                     BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream()));
                     while(!cancelled.getAsBoolean()) {
+                        log.tick();
                         if(!reader.ready()) {
                             if(!process.isAlive())break;
                             Thread.sleep(50);continue;
@@ -116,7 +122,9 @@ final class NucleiEnricher {
                             evidence.add(host,"Nuclei","finding:"+port+":"+DeviceEvidence.clean(finding),
                                     "VULNERABLE — "+DeviceEvidence.clean(description));
                             found++;
+                            log.event("Match • "+severity+" • "+title+" • verification required");
                         } catch(org.json.JSONException ignored) {
+                            log.event("Diagnostic: "+line);
                             if(errors.length()<1200)errors.append(line,0,Math.min(line.length(),300)).append(" | ");
                         }
                     }
@@ -124,14 +132,16 @@ final class NucleiEnricher {
                         failed++;endpointStatus="cancelled";process.destroyForcibly();
                         notices.add("Nuclei cancelled for "+url+".");
                     } else if(process.waitFor()!=0) {
-                        failed++;
-                        String detail=errors.length()==0?"no diagnostic output":DeviceEvidence.clean(errors.toString());
+                        failed++;endpointStatus="failed";
+                        String detail=errors.length()==0?"no diagnostic output":ToolProgress.clean(errors.toString());
                         notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+"): "+detail);
                     } else {completed++;endpointStatus="completed";}
                     evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.length+" configured templates");
-                    progress.accept("Nuclei: "+completed+" completed, "+failed+" failed, "+found+" findings");
+                    log.event(url+" • "+endpointStatus+" • "+found+" total matches");
+                    if(endpointStatus.equals("failed"))log.event("Exit "+process.exitValue()+": "+errors);
                 } catch(Exception error) {
                     failed++;
+                    log.event("Failed • "+url+" • "+error.getMessage());
                     evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • failed");
                     notices.add("Nuclei "+host+": "+DeviceEvidence.clean(error.getMessage()==null?error.toString():error.getMessage()));
                 } finally {if(process!=null)process.destroyForcibly();}
@@ -139,6 +149,9 @@ final class NucleiEnricher {
         }
         notices.add("Nuclei: "+checked+" web endpoints attempted; "+completed+" completed; "+failed+" failed/incomplete; "+found+" findings; "+templateNames.length+" bundled templates (verification required).");
         if(checked==0)notices.add("Nuclei skipped: no HTTP/HTTPS endpoints confirmed by HTTP probes or Nmap.");
+        log.event((cancelled.getAsBoolean()?"Cancelled":"Finished")+" • "+completed+" completed • "+failed+" failed/incomplete • "+found+" matches");
+        if(checked==0)log.event("No confirmed HTTP/HTTPS endpoints to check");
+        log.flush();
         return notices;
     }
 }

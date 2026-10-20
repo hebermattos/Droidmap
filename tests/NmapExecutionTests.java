@@ -28,6 +28,23 @@ public final class NmapExecutionTests {
     public static void main(String[] args)throws Exception {
         dataDir=Files.createTempDirectory("nmap-xml-test").toString();
         AtomicReference<NmapRunner.Execution> capture=new AtomicReference<>();
+        List<String> live=new ArrayList<>();
+        NmapRunner reporting=new NmapRunner(templates(4096,5),command->{
+            Files.writeString(Path.of(command.get(command.indexOf("-oX")+1)),"<nmaprun/>");
+            return new ProcessBuilder("/bin/sh","-c","printf 'Scanning services\\n'; sleep 1.2; printf 'done\\n'").start();
+        },()->false,capture::set,Collections.emptyList(),7,live::add);
+        scan(reporting);
+        check(live.size()>=3,"live heartbeat before process completion");
+        check(live.get(0).contains("192.168.1.10")&&live.get(0).contains("Service detection"),"target and phase displayed");
+        check(live.get(live.size()-1).contains("exit 0"),"final process status displayed");
+        check(ToolProgress.clean("\u001b[31mERR\u001b[0m").equals("ERR"),"terminal ANSI removed");
+        List<String> bounded=new ArrayList<>();
+        ToolProgress log=new ToolProgress("Test",bounded::add);
+        for(int i=0;i<100;i++)log.event("event "+i+"x".repeat(500));
+        log.flush();
+        check(bounded.size()==2,"rapid diagnostics throttled");
+        check(log.text().split("\\n").length==9&&log.text().length()<2200,"recent log bounded");
+
         for(int intensity=0;intensity<=9;intensity++) {
             final int selected=intensity;
             NmapRunner configured=new NmapRunner(TestNmapTemplates.load(),command->{

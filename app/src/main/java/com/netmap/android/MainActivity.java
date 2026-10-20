@@ -680,6 +680,8 @@ public final class MainActivity extends Activity {
         section.setOrientation(LinearLayout.VERTICAL);
         TextView localStatus = new TextView(this);
         localStatus.setText("Not run");
+        localStatus.setTextIsSelectable(true);
+        localStatus.setTextSize(13);
         section.addView(localStatus);
         toolStatuses.put(tool, localStatus);
         LinearLayout content = new LinearLayout(this);
