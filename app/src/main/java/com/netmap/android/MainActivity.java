@@ -188,7 +188,7 @@ public final class MainActivity extends Activity {
         setContentView(page);
         resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput,
                 (ip, port) -> runSelectedPort("nmap", ip, port),
-                (ip, port) -> runSelectedPort("nuclei", ip, port));
+                (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
         if (state != null) {
             pendingScan = state.getParcelable("pendingScan");
             exporter.restore(state);
@@ -378,7 +378,7 @@ public final class MainActivity extends Activity {
                 DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, new ScrollView(this),
                         expandedDevices, this::showNmapOutput,
                         (ip, port) -> runSelectedPort("nmap", ip, port),
-                        (ip, port) -> runSelectedPort("nuclei", ip, port));
+                        (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
                 inline.render(report);
                 ((android.view.View) content.getParent()).setVisibility(report.isEmpty()
                         ? android.view.View.GONE : android.view.View.VISIBLE);
@@ -726,6 +726,15 @@ public final class MainActivity extends Activity {
         } catch (org.json.JSONException error) { return false; }
     }
 
+    /** A focused Discovery keeps newly opened endpoints eligible for per-port analysis. */
+    private void searchAllPorts(String ip) {
+        if (scanRunning || startingScan || bluetoothPanel != null && bluetoothPanel.busy()) {
+            Toast.makeText(this, "Stop the current scan before starting another scan", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        begin("discovery", ip, 0);
+    }
+
     private void runSelectedPort(String tool, String ip, int port) {
         if (bluetoothPanel != null && bluetoothPanel.busy()) {
             Toast.makeText(this, "Stop Bluetooth before starting another scan", Toast.LENGTH_SHORT).show();
@@ -784,12 +793,13 @@ public final class MainActivity extends Activity {
                     .setNegativeButton("Cancel", null).show();
             return;
         }
-        boolean portsOnly = false;
-        String targetValue = target.getText().toString().trim();
+        boolean allPorts = "discovery".equals(tool) && selectedIp != null;
+        String targetValue = allPorts ? selectedIp : target.getText().toString().trim();
+        String portSelection = allPorts ? ScanPlan.ALL_PORTS : settings.ports;
         try {
             new ScanPlan(
                     targetValue,
-                    settings.ports,
+                    portSelection,
                     settings.timeoutMs,
                     settings.mode,
                     settings.adaptive);
@@ -804,7 +814,7 @@ public final class MainActivity extends Activity {
                         .putExtra("tool", tool)
                         .putExtra("selectedIp", selectedIp)
                         .putExtra("selectedPort", selectedPort)
-                        .putExtra("ports", settings.ports)
+                        .putExtra("ports", portSelection)
                         .putExtra("timeout", settings.timeoutMs)
                         .putExtra("complete", settings.mode == ScanPlan.Mode.COMPLETE)
                         .putExtra("adaptive", settings.adaptive)
