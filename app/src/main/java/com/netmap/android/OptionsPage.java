@@ -2,7 +2,6 @@ package com.netmap.android;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.text.InputType;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
@@ -51,32 +50,7 @@ final class OptionsPage {
         });
 
         heading(activity, form, "TCP discovery");
-        Spinner mode = spinner(activity, form, "Scan mode",
-                new String[] {"Fast", "Complete"}, current.mode == ScanPlan.Mode.FAST ? 0 : 1);
-        EditText ports = field(activity, form, "TCP ports (list or ranges)",
-                current.ports.equals(ScanPlan.ALL_PORTS)
-                        ? (current.mode == ScanPlan.Mode.FAST ? ScanPlan.FAST_PORTS : ScanPlan.COMPLETE_PORTS)
-                        : current.ports);
-        CheckBox allPorts = checkbox(activity, form, "All TCP ports (1–65535)",
-                current.ports.equals(ScanPlan.ALL_PORTS));
-        ports.setEnabled(!scanning && !allPorts.isChecked());
-        allPorts.setEnabled(!scanning);
-        allPorts.setOnCheckedChangeListener((v, checked) -> ports.setEnabled(!scanning && !checked));
-        EditText timeout = field(activity, form, "Connection timeout (100–3000 ms)",
-                Integer.toString(current.timeoutMs));
-        timeout.setInputType(InputType.TYPE_CLASS_NUMBER);
-        CheckBox adaptive = checkbox(activity, form, "Adaptive scan (prioritize responders)", current.adaptive);
-        mode.setEnabled(!scanning);
-        timeout.setEnabled(!scanning);
-        adaptive.setEnabled(!scanning);
-        mode.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                String existing = ports.getText().toString();
-                if (existing.equals(ScanPlan.FAST_PORTS) || existing.equals(ScanPlan.COMPLETE_PORTS))
-                    ports.setText(position == 0 ? ScanPlan.FAST_PORTS : ScanPlan.COMPLETE_PORTS);
-            }
-        });
+        ScanOptionsEditor scanOptions = new ScanOptionsEditor(activity, form, current, !scanning);
 
         heading(activity, form, "Nmap");
         TextView nmapHint = new TextView(activity);
@@ -122,28 +96,9 @@ final class OptionsPage {
         if (!scanning) {
             heading(activity, form, "Save settings");
             action(activity, form, "Save settings", true, () -> {
-                int timeoutValue;
-                try {
-                    timeoutValue = Integer.parseInt(timeout.getText().toString().trim());
-                    if (timeoutValue < 100 || timeoutValue > 3000) throw new IllegalArgumentException();
-                } catch (IllegalArgumentException e) {
-                    timeout.setError("Enter 100–3000 ms");
-                    timeout.requestFocus();
-                    return;
-                }
-                String selectedPorts = allPorts.isChecked()
-                        ? ScanPlan.ALL_PORTS : ports.getText().toString().trim();
-                try {
-                    ScanPlan.parsePorts(selectedPorts);
-                } catch (IllegalArgumentException e) {
-                    ports.setError(e.getMessage());
-                    ports.requestFocus();
-                    return;
-                }
-                ScanSettings updated = new ScanSettings(selectedPorts, timeoutValue,
-                        mode.getSelectedItemPosition() == 0 ? ScanPlan.Mode.FAST : ScanPlan.Mode.COMPLETE,
-                        adaptive.isChecked(), current.nmap, args.getText().toString(),
+                ScanSettings updated = scanOptions.read(args.getText().toString(),
                         intensity.getSelectedItemPosition());
+                if (updated == null) return;
                 BluetoothSettings updatedBluetooth = new BluetoothSettings(
                         BluetoothSettings.MODES[bluetoothMode.getSelectedItemPosition()],
                         BluetoothSettings.SECONDS[bluetoothDiscovery.getSelectedItemPosition()],
@@ -197,14 +152,6 @@ final class OptionsPage {
         spinner.setSelection(position);
         form.addView(spinner);
         return spinner;
-    }
-
-    private static CheckBox checkbox(Activity activity, LinearLayout form, String label, boolean selected) {
-        CheckBox box = new CheckBox(activity);
-        box.setText(label);
-        box.setChecked(selected);
-        form.addView(box);
-        return box;
     }
 
     private static void action(Activity activity, LinearLayout form, String label,
