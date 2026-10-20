@@ -239,7 +239,12 @@ final class ReportPresentation {
                 .append("Vulnerabilities: ").append(device.vulnerabilitySummary()).append("\n");
             for(String key:Arrays.asList("reportedManufacturer","reportedModel","dnsHostname"))if(!device.json.optString(key).isEmpty())text.append(label(key)).append(": ").append(device.json.optString(key)).append("\n");
             JSONArray macs=device.json.optJSONArray("macAddresses");
-            if(macs!=null)for(int i=0;i<macs.length();i++){JSONObject mac=macs.optJSONObject(i);if(mac!=null)text.append("MAC: ").append(mac.optString("address")).append(" · ").append(mac.optString("source")).append(" · ").append(mac.optString("kind")).append("\n");}
+            if(macs!=null)for(int i=0;i<macs.length();i++) {
+                JSONObject mac=macs.optJSONObject(i); if(mac==null)continue;
+                text.append("MAC: ").append(mac.optString("address")).append(" · ").append(mac.optString("source")).append(" · ").append(mac.optString("kind")).append("\n");
+                JSONObject match=mac.optJSONObject("macIdentification");
+                if(match!=null)text.append(match.optString("summary")).append("\n");
+            }
             for(String url:device.webLinks())text.append("Web interface: ").append(url).append("\n");
             text.append("\nPorts and services\n");
             if(device.ports.isEmpty())text.append("No open TCP ports observed.\n");

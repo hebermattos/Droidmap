@@ -109,6 +109,7 @@ public final class ScanService extends Service {
     }
     private void scan(ScanPlan plan,String target,long started,TcpScanner tcp,DeviceIdentifier identity,NsdDiscovery nsd,DeviceEvidence evidence,WifiIpv6Scope wifi) {
         try {
+            loadMacCatalog();
             // Write the interruption marker before any network checks.
             store.save(latest);
             if(!portsOnly) identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
@@ -193,6 +194,7 @@ public final class ScanService extends Service {
     /** Uses the completed Discovery snapshot instead of rescanning the network. */
     private void analyzeDiscovery(ScanPlan plan,String target,long started,TcpScanner controller) {
         try {
+            loadMacCatalog();
             ScanSnapshot saved=new LatestScanStore(new File(getFilesDir(),"discovery-scan.json")).load();
             if(saved==null || saved.report.isEmpty()) throw new IllegalStateException("Run Discovery first.");
             JSONObject data=new JSONObject(saved.report);
@@ -278,6 +280,13 @@ public final class ScanService extends Service {
             store.save(finished);
             main.post(()->finish(finished));
         }catch(Exception error){finishError(error);}
+    }
+
+    /** Called only on the scan worker, before previews and final reports. */
+    private void loadMacCatalog() {
+        if (MacVendorCatalog.loaded()) return;
+        try { MacVendorCatalog.load(getAssets().open("mac-vendors.tsv")); }
+        catch (java.io.IOException error) { android.util.Log.w("Droidmap", "MAC registry unavailable", error); }
     }
 
     private void saveReport(ScanPlan plan,String target,long started,List<TcpScanner.Result> results,List<TcpScanner.Result> extra,

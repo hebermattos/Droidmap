@@ -303,6 +303,12 @@ require the saved signing key.
 Open **Options → Nmap settings** and choose **Service/version detection intensity** from 0 to 9. The saved value applies to service detection in both the service and vulnerability profiles through `--version-intensity`. The app default remains **2**, equivalent to the previous `--version-light`; **7** is Nmap's native default and **9** tries all probes. Higher values can improve identification and take longer. This setting controls probe intensity, not the number of scanned ports or NSE script categories. Disabling Nmap preserves the selected intensity. Custom global parameters remain available without additional validation; use the intensity selector for this option.
 
 
+## Wi-Fi MAC identification (v0.15.2)
+
+Wi-Fi Discovery now uses the same offline IEEE registry as Bluetooth. Expand an IP to see its observed MACs, allocation owners, match status and source limitations. In detailed reports, the matched prefix and registry source are available under **Identification → Confidence and sources**. Live previews, final JSON (`devices[].macAddresses[].macIdentification`) and text exports retain the result. Protocol-reported manufacturers, models and identity confidence remain independent of the MAC allocation owner, which may be a component supplier.
+
+Wi-Fi uses IEEE individual/local address bits, independently of Bluetooth random-address rules. Locally administered addresses (possibly randomized or manually configured) receive no manufacturer attribution. Unknown prefixes and unavailable MACs remain unknown. Android restrictions may prevent neighbor/ARP access; the lookup does not bypass those restrictions or derive a MAC from an IP. The registry is loaded on the scan worker before previews, including scans started directly from Wi-Fi without opening Bluetooth. Old saved reports remain readable; run Discovery again to collect MAC identification. Package IDs and signing configuration are unchanged.
+
 ## Offline MAC identification (v0.15.0)
 
 Bluetooth device summaries now include the address type and the IEEE registration owner associated with its MAC prefix. The bundled `mac-vendors.tsv` contains MA-L (24-bit), MA-M (28-bit) and MA-S (36-bit) prefixes, with the most specific match taking precedence. It loads on a background worker; lookups require no network connection and send no device addresses to external services.
