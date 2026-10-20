@@ -57,7 +57,7 @@ final class DeviceResultsRenderer {
         } catch(JSONException error){value(deviceList,"Summary unavailable. Open Full report in Options.");}
         resultsScroll.post(()->resultsScroll.scrollTo(0,scrollPosition));return lastDevices;
     }
-    /** The dedicated quick scan intentionally shows only IP addresses and open TCP ports. */
+    /** Compact IP/port results with sourced MAC identification inside the expanded IP. */
     private void simplePortsTable(ReportPresentation model) {
         TextView heading=value(deviceList,"IP addresses and open TCP ports");
         heading.setTextSize(18);
@@ -85,6 +85,17 @@ final class DeviceResultsRenderer {
             LinearLayout details=expandedBody(host);
             boolean expanded=expandedDevices.contains(device.ip);
             details.setVisibility(expanded?View.VISIBLE:View.GONE);
+            JSONArray macs=device.json.optJSONArray("macAddresses");
+            if(macs!=null)for(int i=0;i<macs.length();i++) {
+                JSONObject mac=macs.optJSONObject(i); if(mac==null)continue;
+                detail(details,"MAC",mac.optString("address")+" · "+mac.optString("kind"));
+                JSONObject match=mac.optJSONObject("macIdentification");
+                if(match!=null) {
+                    detail(details,"MAC manufacturer",match.optString("vendor").isEmpty()?match.optString("status")
+                            :match.optString("vendor")+" ["+match.optString("status")+"]");
+                    detail(details,"MAC evidence",mac.optString("source")+" · "+match.optString("note"));
+                }
+            }
             if(device.ports.isEmpty()) {
                 TextView empty=value(details,"No open TCP ports identified");
                 empty.setTextColor(Color.LTGRAY);
@@ -391,12 +402,23 @@ final class DeviceResultsRenderer {
                 for(DeviceEvidence.Observation mac:MacAddresses.observations(legacy))addresses.add(mac.value);
             }
             for(String address:addresses)detail(body,"MAC",address+" · "+MacAddresses.kind(address));
+            if(macs!=null)for(int i=0;i<macs.length();i++) {
+                JSONObject mac=macs.optJSONObject(i);
+                JSONObject match=mac==null?null:mac.optJSONObject("macIdentification");
+                if(match!=null)detail(body,"MAC manufacturer",mac.optString("address")+" · "
+                        +(match.optString("vendor").isEmpty()?match.optString("status")
+                        :match.optString("vendor")+" ["+match.optString("status")+"]"));
+            }
             section(body,prefix+"identity-details","Confidence and sources",false,more->{
                 String[] technical={"identityConfidence","suggestedManufacturer","modelConfidence","manufacturerConfidence","typeConfidence","identificationStatus","probeCoverage"};
                 for(String field:technical)detail(more,ReportPresentation.label(field),device.json.optString(field));
                 if(macs!=null)for(int i=0;i<macs.length();i++) {
                     JSONObject mac=macs.optJSONObject(i);
                     if(mac!=null)detail(more,"MAC source",mac.optString("address")+" · "+mac.optString("source"));
+                    JSONObject match=mac==null?null:mac.optJSONObject("macIdentification");
+                    if(match!=null)detail(more,"MAC identification source",match.optString("source")
+                            +(match.optString("prefix").isEmpty()?"":" · "+match.optString("prefix")+"/"+match.optInt("prefixBits"))
+                            +" · "+match.optString("note"));
                 }
                 JSONArray reasons=device.json.optJSONArray("identificationReasons");
                 if(reasons!=null)for(int i=0;i<reasons.length();i++)detail(more,"Evidence",reasons.optString(i));

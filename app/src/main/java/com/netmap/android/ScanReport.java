@@ -26,9 +26,11 @@ final class ScanReport {
             if(!maker.isEmpty()) text.append("  Manufacturer (reported): ").append(maker).append("\n");
             List<DeviceEvidence.Observation> macs=MacAddresses.observations(info);
             if(macs.isEmpty()) text.append("  MAC: Unavailable — not observed or access restricted.\n");
-            for(DeviceEvidence.Observation mac:macs)
+            for(DeviceEvidence.Observation mac:macs) {
                 text.append("  MAC [").append(mac.source).append("]: ").append(mac.value)
                         .append(" — ").append(MacAddresses.kind(mac.value)).append("\n");
+                text.append("  ").append(MacVendorCatalog.identifyWifi(mac.value).summary()).append("\n");
+            }
             if(!model.isEmpty()) text.append("  Model (reported): ").append(model).append("\n");
             if(!profile.manufacturer.isEmpty() && maker.isEmpty()) text.append("  Manufacturer (suggested): ").append(profile.manufacturer).append("\n");
             text.append("  Identification: ").append(profile.confidence.label).append("\n");
@@ -97,9 +99,14 @@ final class ScanReport {
             device.put("reportedName",DeviceEvidence.first(info,"friendlyName","serviceName","netbiosName","dnsHostname","httpTitle"));
             device.put("reportedMac",DeviceEvidence.first(info,"reportedMac"));
             JSONArray macs=new JSONArray();
-            for(DeviceEvidence.Observation mac:MacAddresses.observations(info))
+            for(DeviceEvidence.Observation mac:MacAddresses.observations(info)) {
+                var match = MacVendorCatalog.identifyWifi(mac.value);
                 macs.put(new JSONObject().put("address",mac.value).put("source",mac.source)
-                        .put("kind",MacAddresses.kind(mac.value)));
+                        .put("kind",MacAddresses.kind(mac.value)).put("macIdentification",new JSONObject()
+                                .put("addressType",match.addressType()).put("status",match.status())
+                                .put("vendor",match.vendor()).put("prefix",match.prefix()).put("prefixBits",match.prefix().length()*4)
+                                .put("source","IEEE MA-L / MA-M / MA-S (offline)").put("note",match.note()).put("summary",match.summary())));
+            }
             device.put("macAddresses",macs);
             device.put("reportedManufacturer",profile.manufacturerConfidence == DeviceConfidence.CONFLICTING?"":DeviceEvidence.first(info,"manufacturer"));
             device.put("reportedModel",profile.model);

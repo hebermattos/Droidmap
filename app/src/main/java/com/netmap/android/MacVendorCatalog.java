@@ -33,6 +33,16 @@ final class MacVendorCatalog {
         vendors = Collections.unmodifiableMap(parsed);
     }
 
+    static Identification identifyWifi(String address) {
+        String mac = MacAddresses.normalize(address);
+        if (mac.isEmpty()) return new Identification("Unknown", "Unavailable", "", "", "No usable Wi-Fi MAC address was observed.");
+        if ((Integer.parseInt(mac.substring(0, 2), 16) & 2) != 0)
+            return new Identification(MacAddresses.kind(mac), "Unavailable for local address", "", "",
+                    "Locally administered Wi-Fi addresses may be randomized or manually assigned; their prefix cannot reliably identify a manufacturer.");
+        Identification match = identify(mac, "public", false);
+        return new Identification(MacAddresses.kind(mac), match.status(), match.vendor(), match.prefix(), match.note());
+    }
+
     static Identification identify(String address, String type, boolean classicObserved) {
         String normalized = address == null ? "" : address.toUpperCase(Locale.ROOT);
         if (!normalized.matches("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")
