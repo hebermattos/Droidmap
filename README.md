@@ -55,7 +55,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 On Windows, use `gradlew.bat :app:assembleDebug :app:lintDebug`.
 
-The Android CI workflow can also be run manually on the feature branch. It builds and uploads the `droidmap-debug` APK artifact. Debug builds are suitable for local testing; store distribution requires your own release signing configuration.
+The Android CI workflow can also be run manually on the feature branch. It builds and uploads the `Droidmap-update-APK` artifact containing `Droidmap-update.apk`. Debug builds are suitable for local testing; store distribution requires your own release signing configuration.
 
 ## Use
 
@@ -171,14 +171,21 @@ This uses `com.netmap.android.dns` and the launcher label **Netmap Lite DNS**. I
 
 ## Repeatable local APK updates
 
-The delivered APK uses the separate `com.netmap.android.dns` package and the same saved debug signing key as version 0.4.1. Keep the **Netmap-Debug-Signing-Backup.zip** delivered with the APK. Restore its `netmap-debug.keystore` into `.signing/`, then run:
+Current CI APKs use **com.netmap.android** and the existing fixed test signing key retained in the `debug-signing-test` release. Local and CI update builds use the same script and pinned public certificate. Restore that existing key locally, then run:
 
 ```bash
-cd Droidmap
-bash build-apk.sh --no-daemon
+NETMAP_DEBUG_KEYSTORE=/absolute/path/to/debug-test.jks bash build-apk.sh --no-daemon
 ```
 
-The script requires the saved key and checks its certificate against the delivered APK and refuses to create a replacement key silently. `NETMAP_DEBUG_KEYSTORE` can point to the saved file elsewhere. Keys are ignored by Git and never committed. Ordinary CI builds use an ephemeral debug key for testing and are not update-compatible with the delivered APK. Release/store distribution still requires a separate release-signing configuration.
+The default local key path is `.signing/netmap-debug.keystore`. The build checks its certificate before Gradle starts, then verifies the final APK's application ID and certificate with Android SDK build-tools 35.0.0 (`ANDROID_HOME` or `ANDROID_SDK_ROOT`). A missing key, wrong package, invalid signature or different certificate fails the build. CI restores the existing key and never generates a replacement. Its current public test key is for testing only; store distribution requires separate release signing.
+
+For the older **com.netmap.android.dns** installation, retain the original **Netmap-Debug-Signing-Backup.zip** and explicitly select its identity:
+
+```bash
+NETMAP_APK_PROFILE=legacy-dns NETMAP_DEBUG_KEYSTORE=/absolute/path/to/netmap-debug.keystore bash build-apk.sh --no-daemon
+```
+
+This preserves the original DNS certificate pin. The two packages and signing identities are independent; neither can update the other. Keys stay outside Git. Android also requires a compatible versionCode; CI keeps its increasing run number.
 
 ## Migration and installed-app compatibility
 

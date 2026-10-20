@@ -53,26 +53,24 @@ jobs:
             echo "Nuclei release not published; cannot create complete APK." >&2
             exit 1
           fi
-      - name: Set up fixed test signing
+      - name: Restore existing update signing key
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG=debug-signing-test
           KEYSTORE="$RUNNER_TEMP/debug-test.jks"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release download "$TAG" --pattern debug-test.jks --dir "$RUNNER_TEMP"
-          else
-            keytool -genkeypair -keystore "$KEYSTORE" -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Droidmap Test,O=Debug,C=BR" -noprompt
-            gh release create "$TAG" "$KEYSTORE#debug-test.jks" --title "PUBLIC TEST signing key" --notes "INSECURE TEST KEY; never use for production." --latest=false
-          fi
-          test -s "$KEYSTORE"
+          gh release download debug-signing-test --pattern debug-test.jks --dir "$RUNNER_TEMP"
+          export NETMAP_DEBUG_KEYSTORE="$KEYSTORE"
+          source tools/apk-identity.sh
+          verify_update_keystore
           echo "NETMAP_DEBUG_KEYSTORE=$KEYSTORE" >> "$GITHUB_ENV"
+      - name: Test APK identity guards
+        run: python3 tests/test-apk-identity.py
       - name: Test scanner
         run: bash tests/run.sh
       - name: Test, build and lint Android app
-        run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug -PsideBySideInstall=false --no-daemon
+        run: bash build-apk.sh --no-daemon
       - name: Verify packaged Nmap runtime data
         run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk
       - name: Verify Nuclei packaged in APK
@@ -80,21 +78,6 @@ jobs:
         run: |
           set -euo pipefail
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libnuclei.so"
-      - name: Verify update-compatible package and signing
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          SDK_BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
-          test -x "$SDK_BUILD_TOOLS/aapt"
-          test -x "$SDK_BUILD_TOOLS/apksigner"
-          PACKAGE_NAME="$("$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
-          test "$PACKAGE_NAME" = "com.netmap.android" || {
-            echo "Unexpected APK package: $PACKAGE_NAME" >&2
-            exit 1
-          }
-          "$SDK_BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
-          echo "Verified package ID com.netmap.android and APK signature"
       - name: Name APK clearly for download
         shell: bash
         run: |
