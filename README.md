@@ -37,7 +37,7 @@ Only one action can run at a time. The screen is cleared whenever a new scan sta
 - Collect mDNS service names/TXT model hints, SSDP/UPnP names/manufacturer/model, HTTP titles/server headers, passive SSH/FTP/Telnet banners and NetBIOS node-status names.
 - Show MAC addresses from NetBIOS, IPv4/IPv6 neighbor observations and Nmap XML when available, preserving each source. Expand a device card to see **MAC addresses**, also included in the full report and JSON. Locally administered addresses are labeled as possibly randomized; no factory identity or vendor is inferred from them.
 - Track completed connections, cancel scans and export full or partial results as JSON.
-- Choose Fast or Complete mode. Complete expands the default port preset, retries timed-out TCP connections once with a doubled timeout and extends identification/discovery budgets. Custom port selections are preserved when switching modes.
+- Choose a scan type in Options: Quick, Detailed, All ports or Custom. Quick uses common ports and shorter discovery; Detailed uses more ports, retries and longer discovery. All ports checks every TCP port with thorough discovery. Custom keeps explicit ports and discovery depth.
 - Verify advertised TCP endpoints, including ports outside the selected list; use HTTP announcements to read nonstandard HTTP ports.
 - Bound scanning to 32 concurrent connections, 256 addresses and 65535 selected TCP ports per address, plus at most 16 announced endpoints per device.
 
@@ -61,7 +61,7 @@ The Android CI workflow can also be run manually on the feature branch. It build
 
 1. Connect your phone to the local Wi-Fi network.
 2. Enter a private IP address or network, or open **Options → Use Wi-Fi network**. To select the entire connected Wi-Fi subnet, choose **Options → Scan all Wi-Fi IPs**, review the address count, then tap the desired tool button.
-3. Open **Options → Scan settings** to choose Fast/Complete mode, TCP ports, timeout and adaptive scanning. The default timeout is **200 ms**; a one-time upgrade changes a saved legacy 500 ms value to 200 ms, preserving other customized values. Later explicit edits, including 500 ms, persist. Tap **Save** to apply; Cancel discards edits. Increase the timeout if your Wi-Fi or devices respond slowly.
+3. Open **Options → TCP discovery** and select **Quick (recommended)**, **Detailed**, **All ports** or **Custom**. Quick checks 19 common TCP ports; Detailed checks 39; All ports checks 1–65535; Custom reveals a port/range input. **Advanced** contains the connection wait (default **200 ms**) and automatic speed adjustment. Custom also offers extra discovery and retries. Previously saved ports, depth, timeout and adaptive choices are retained; mixed/custom configurations appear as Custom. Save applies changes; closing without saving discards edits.
 4. Choose a dedicated scan button. **Cancel running scan** appears during execution; cancellation retains partial results.
 5. Tap a device card to expand or collapse details directly in the list. Details group open ports, identity, identification reasons and evidence by source; values can be selected and copied. Expanded devices stay expanded when rotating a saved result. Open **Options → Full report** for the detailed scan and history comparison.
 6. Use **Options → History**, **Reanalyze a device** or **Export JSON**. Export uses Android's document picker and requires no broad storage permission.
@@ -263,7 +263,7 @@ Version 0.12.6 shows scan status and totals once. **Scan details** contains the 
 
 In **Options → Scan a single IP**, enter a local address such as `192.168.0.1`, choose **Use IP**, then start the scan. Single-IP scans keep discovery and Nmap targets restricted to that IP.
 
-In **Options → Scan settings**, enable **All TCP ports (1–65535)** and save. This checks every TCP port; it does not scan UDP. Disable it to return to the custom port field. All selected IPs can scan all 65535 TCP ports. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports on a network can take hours; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
+In **Options → TCP discovery**, select **All ports** and save. This checks TCP ports 1–65535 with the thorough discovery policy; it does not scan UDP. Choose **Custom** for explicit ports or ranges. All selected IPs can scan all 65535 TCP ports. The scanner keeps at most 32 concurrent connections and does not queue a task for every port. Scanning all ports on a network can take hours; progress and cancellation remain available. Nmap service and vulnerability analysis still runs only on verified-open ports.
 
 Version 0.12.0 preserves the existing package IDs and signing configuration.
 

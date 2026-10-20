@@ -51,7 +51,7 @@ public class RefactoringTest {
     @Test
     public void scanSettingsKeepCustomOptionsAndValidateBounds() {
         ScanSettings settings = new ScanSettings("22,8000-8002", 350, ScanPlan.Mode.FAST, false);
-        assertEquals("Fast • 4 ports • 350 ms • Nmap On", settings.summary());
+        assertEquals("Custom • 4 TCP ports", settings.summary());
         assertTrue(settings.nmap);
         ScanSettings complete = settings.completeDefaults();
         assertEquals(ScanPlan.Mode.COMPLETE, complete.mode);
