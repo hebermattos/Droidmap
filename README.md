@@ -394,3 +394,7 @@ The Bluetooth status shows the fixed local time of the last received BLE adverti
 ### Result layout (v0.15.1)
 
 Bluetooth, Discovery, Nmap and Nuclei results expand to their full content height and share the page’s vertical scrolling. Expand/collapse controls remain available. Device names wrap onto multiple lines instead of being truncated.
+
+### Search ports on a device without open ports
+
+Expand an IP in Discovery. When no TCP ports were found, **Search all TCP ports** starts a new Discovery for that IP only, checking TCP ports 1–65535 with the saved timeout and scan mode. This replaces the current Discovery results with the selected IP; saved scan settings are unchanged. Progress and Stop remain in the Discovery section. Newly verified-open ports offer their individual Nmap actions (and Nuclei where web evidence exists). No service analysis runs when no ports are verified open. An empty result applies to the completed scan, not to every possible service or protocol.

@@ -17,6 +17,7 @@ final class DeviceResultsRenderer {
     private final java.util.function.Consumer<String> openNmapOutput;
     private final java.util.function.BiConsumer<String, Integer> runNmapPort;
     private final java.util.function.BiConsumer<String, Integer> runNucleiPort;
+    private final java.util.function.Consumer<String> searchAllPorts;
     private ReportPresentation.Filter filter=ReportPresentation.Filter.ALL;
     private String lastReport="";
     private List<String> lastDevices=new ArrayList<>();
@@ -24,10 +25,12 @@ final class DeviceResultsRenderer {
     DeviceResultsRenderer(Context context,LinearLayout deviceList,ScrollView resultsScroll,
             Set<String> expandedDevices,java.util.function.Consumer<String> openNmapOutput,
             java.util.function.BiConsumer<String, Integer> runNmapPort,
-            java.util.function.BiConsumer<String, Integer> runNucleiPort) {
+            java.util.function.BiConsumer<String, Integer> runNucleiPort,
+            java.util.function.Consumer<String> searchAllPorts) {
         this.context=context;this.deviceList=deviceList;this.resultsScroll=resultsScroll;
         this.expandedDevices=expandedDevices;this.openNmapOutput=openNmapOutput;
         this.runNmapPort=runNmapPort;this.runNucleiPort=runNucleiPort;
+        this.searchAllPorts=searchAllPorts;
     }
     List<String> render(String report) {
         int scrollPosition=resultsScroll.getScrollY();lastReport=report;
@@ -97,8 +100,12 @@ final class DeviceResultsRenderer {
                 }
             }
             if(device.ports.isEmpty()) {
-                TextView empty=value(details,"No open TCP ports identified");
+                TextView empty=value(details,"No open TCP ports found in the selected scan. Other ports may be open.");
                 empty.setTextColor(Color.LTGRAY);
+                Button search=action(details);
+                search.setText("Search all TCP ports");
+                search.setContentDescription("Search TCP ports 1 to 65535 on "+device.ip);
+                search.setOnClickListener(v->searchAllPorts.accept(device.ip));
             } else {
                 LinearLayout row=null;
                 int column=0;
