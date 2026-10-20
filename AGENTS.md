@@ -77,7 +77,8 @@ bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemo
 ## APK compatibility and signing
 
 - Preserve namespace `com.netmap.android`, base application ID `com.netmap.android` and the `sideBySideInstall` suffix `.dns` unless an explicit migration is requested.
-- User update APKs use `com.netmap.android.dns`. Build them with the saved signing key and `-PsideBySideInstall=true`.
+- Current CI update APKs use `com.netmap.android` and the existing fixed signing key from `debug-signing-test`. Local builds and CI both use `build-apk.sh` and the public certificate pins in `tools/apk-identity.sh`. Never change the package or replace the key for routine updates.
+- The older DNS installation remains supported explicitly through `NETMAP_APK_PROFILE=legacy-dns` and its original saved key; this uses `com.netmap.android.dns`. Do not interchange the two identities.
 - Prefer the existing signing-checking script:
 
 ```bash
@@ -85,7 +86,7 @@ NETMAP_DEBUG_KEYSTORE=/absolute/path/to/netmap-debug.keystore bash build-apk.sh 
 ```
 
 - The script defaults to `.signing/netmap-debug.keystore`. Never generate a replacement key silently. Never commit signing keys, signing backups or generated build output.
-- Verify delivered APK package ID, version and signing certificate. CI uses an ephemeral debug key and its artifact is not an update-compatible replacement for the user APK.
+- Verify delivered APK package ID, version and pinned signing certificate. `build-apk.sh` checks the keystore before building and `tools/verify-update-apk.sh` checks the final APK. CI must fail if the existing key is missing or different; it must never generate a replacement.
 - Increase `versionCode` for delivered app changes and set the matching `versionName`; documentation-only changes do not require a version bump.
 
 ## Documentation and handoff
