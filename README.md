@@ -370,3 +370,7 @@ The Bluetooth panel separates reception/device counts from a live timing panel. 
 The service owns timings across Activity recreation. Timings use Android uptime, matching Handler deadlines; device deep sleep pauses this clock. Exported JSON adds elapsedMs and timings (limitSeconds, elapsedMs, remainingMs, status); unlimited remainingMs is -1. Each inspected device retains its latest per-operation inspectionTimings, with the current row refreshed on export. These are phase budgets, not an estimate of the whole queue's finish time.
 
 Inspect and Export JSON share a compact action row. New scan is visible after results are collected; the main button retains Stop and +/- behavior. The device currently being inspected is highlighted. Settings remain in Options; package IDs and signing configuration are unchanged.
+
+### Bluetooth reception timestamp (v0.14.1)
+
+The Bluetooth status shows the fixed local time of the last received BLE advertisement instead of an ever-increasing “seconds ago” counter. While an operation runs, its timer is labeled Elapsed; after it stops, it is labeled Duration and retains the final value. Inactive phase timers use the operation end time, matching JSON export.
