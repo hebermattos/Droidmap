@@ -384,3 +384,7 @@ Inspect and Export JSON share a compact action row. New scan is visible after re
 ### Bluetooth reception timestamp (v0.14.1)
 
 The Bluetooth status shows the fixed local time of the last received BLE advertisement instead of an ever-increasing “seconds ago” counter. While an operation runs, its timer is labeled Elapsed; after it stops, it is labeled Duration and retains the final value. Inactive phase timers use the operation end time, matching JSON export.
+
+### Result layout (v0.15.1)
+
+Bluetooth, Discovery, Nmap and Nuclei results expand to their full content height and share the page’s vertical scrolling. Expand/collapse controls remain available. Device names wrap onto multiple lines instead of being truncated.

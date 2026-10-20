@@ -313,8 +313,7 @@ final class DeviceResultsRenderer {
         toggle.setTextSize(16);
         if(!device.name.isEmpty()) {
             TextView name=value(card,device.name);
-            name.setSingleLine(true);
-            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setTextIsSelectable(true);
         }
         TextView summary=value(card,"TCP: "+ports(device.ports));
         summary.setTextColor(Color.LTGRAY);
