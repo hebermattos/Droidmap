@@ -5,6 +5,8 @@ classes_dir="$(mktemp -d)"
 trap 'rm -rf "$classes_dir"' EXIT
 python3 "$project_dir/tests/generate-nmap-fixture.py" "$project_dir/app/src/main/assets/nmap-command-templates.json" "$classes_dir/TestNmapTemplates.java"
 sources=(
+  "$project_dir/app/src/main/java/com/netmap/android/MacVendorCatalog.java"
+  "$project_dir/tests/MacVendorTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothTimings.java"
   "$project_dir/tests/BluetoothTimingTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothSettings.java"
@@ -55,6 +57,7 @@ sources=(
   "$project_dir/tests/IdentificationTests.java"
 )
 javac -d "$classes_dir" "${sources[@]}"
+java -cp "$classes_dir" com.netmap.android.MacVendorTests "$project_dir/app/src/main/assets/mac-vendors.tsv"
 java -cp "$classes_dir" com.netmap.android.ScannerTests
 java -Xmx96m -cp "$classes_dir" com.netmap.android.PackedScanTests
 java -cp "$classes_dir" com.netmap.android.IdentificationTests
