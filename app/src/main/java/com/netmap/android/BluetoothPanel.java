@@ -19,7 +19,7 @@ final class BluetoothPanel {
     private static final int PERMISSIONS = 41, ENABLE = 42, EXPORT = 43;
     private final Activity activity;
     private final BooleanSupplier networkBusy;
-    private final Button main, export, inspectAll, rescan;
+    private final Button main, export, rescan;
     private final TextView status, timingStatus;
     private final ProgressBar timeProgress;
     private final LinearLayout devices;
@@ -68,17 +68,13 @@ final class BluetoothPanel {
         timingStatus.setTypeface(android.graphics.Typeface.MONOSPACE); parent.addView(timingStatus);
         timeProgress = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
         timeProgress.setMax(100); parent.addView(timeProgress, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout controls = new LinearLayout(activity);
-        inspectAll = new Button(activity); controls.addView(inspectAll, new LinearLayout.LayoutParams(0, -2, 1));
-        export = new Button(activity); export.setText("Export JSON"); controls.addView(export, new LinearLayout.LayoutParams(0, -2, 1));
+        export = new Button(activity); export.setText("Export JSON");
+        parent.addView(export, new LinearLayout.LayoutParams(-1, -2));
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
             activity.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                     .setType("application/json").putExtra(Intent.EXTRA_TITLE, "droidmap-bluetooth.json"), EXPORT);
         });
-        parent.addView(controls);
-        inspectAll.setContentDescription("Inspect observed connectable BLE devices one at a time, strongest signal first");
-        inspectAll.setOnClickListener(v -> request(true, ""));
         // The page owns vertical scrolling; let results use their full content height.
         parent.addView(devices, new LinearLayout.LayoutParams(-1, -2));
         if ((saved != null && saved.getBoolean("btVisible")) || BluetoothScanService.snapshot().running) devices.setVisibility(View.VISIBLE);
@@ -130,6 +126,11 @@ final class BluetoothPanel {
     }
     @android.annotation.SuppressLint("MissingPermission")
     private void prepare() {
+        if (pendingInspection && pendingAddress.isEmpty()) {
+            pendingStart = false;
+            status.setText("Select a device to inspect its services");
+            return;
+        }
         BluetoothManager manager = activity.getSystemService(BluetoothManager.class);
         BluetoothAdapter adapter = manager == null ? null : manager.getAdapter();
         if (adapter == null) { pendingStart = false; status.setText("Bluetooth is not supported on this device"); return; }
@@ -148,7 +149,7 @@ final class BluetoothPanel {
             pendingStart = false;
             if (networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
             Intent intent = new Intent(activity, BluetoothScanService.class)
-                    .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
+                    .setAction(pendingInspection ? BluetoothScanService.INSPECT : BluetoothScanService.START)
                     .putExtra("address", pendingAddress);
             if (!pendingInspection) { cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); }
             devices.setVisibility(View.VISIBLE);
@@ -188,10 +189,6 @@ final class BluetoothPanel {
         export.setEnabled(!state.devices.isEmpty());
         rescan.setVisibility(!state.running && !state.devices.isEmpty() ? View.VISIBLE : View.GONE);
         rescan.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean());
-        int eligible = BluetoothScanService.eligibleDevices().size();
-        inspectAll.setText(state.running && state.inspectionTotal > 0 ? "Inspecting " + state.inspectionDone + "/" + state.inspectionTotal
-                : "Inspect (" + eligible + ")");
-        inspectAll.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean() && eligible > 0);
     }
     private void refresh() {
         BluetoothScanService.State state = BluetoothScanService.snapshot(); label();
