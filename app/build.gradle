@@ -10,8 +10,8 @@ android {
         manifestPlaceholders = [appLabel: parallelInstall ? 'Netmap Lite DNS' : 'Netmap Lite']
         minSdk 26
         targetSdk 35
-        versionCode Math.max(48, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '48'))
-        versionName '0.15.0'
+        versionCode Math.max(49, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '49'))
+        versionName '0.15.1'
     }
     def stableDebugKey = providers.environmentVariable('NETMAP_DEBUG_KEYSTORE').orNull
     if (stableDebugKey != null) {

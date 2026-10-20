@@ -23,7 +23,6 @@ final class BluetoothPanel {
     private final TextView status, timingStatus;
     private final ProgressBar timeProgress;
     private final LinearLayout devices;
-    private final ScrollView scroll;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, Card> cards = new LinkedHashMap<>();
     private final Set<String> expanded = new HashSet<>();
@@ -49,13 +48,13 @@ final class BluetoothPanel {
             if (technical != null) technicalExpanded.addAll(technical);
         } else if (!BluetoothScanService.snapshot().running) BluetoothScanService.clear();
         devices = new LinearLayout(activity); devices.setOrientation(LinearLayout.VERTICAL);
-        scroll = new ScrollView(activity); scroll.addView(devices); scroll.setVisibility(View.GONE);
+        devices.setVisibility(View.GONE);
         main = new Button(activity);
         main.setText("Scan Bluetooth"); parent.addView(main);
         main.setOnClickListener(v -> {
             BluetoothScanService.State state = BluetoothScanService.snapshot();
             if (state.running) stop();
-            else if (!state.devices.isEmpty()) { scroll.setVisibility(scroll.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); label(); }
+            else if (!state.devices.isEmpty()) { devices.setVisibility(devices.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); label(); }
             else request(false, "");
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
@@ -80,8 +79,9 @@ final class BluetoothPanel {
         parent.addView(controls);
         inspectAll.setContentDescription("Inspect observed connectable BLE devices one at a time, strongest signal first");
         inspectAll.setOnClickListener(v -> request(true, ""));
-        parent.addView(scroll, new LinearLayout.LayoutParams(-1, (int)(260 * activity.getResources().getDisplayMetrics().density)));
-        if ((saved != null && saved.getBoolean("btVisible")) || BluetoothScanService.snapshot().running) scroll.setVisibility(View.VISIBLE);
+        // The page owns vertical scrolling; let results use their full content height.
+        parent.addView(devices, new LinearLayout.LayoutParams(-1, -2));
+        if ((saved != null && saved.getBoolean("btVisible")) || BluetoothScanService.snapshot().running) devices.setVisibility(View.VISIBLE);
         refresh();
     }
     boolean busy() { return BluetoothScanService.snapshot().running || pendingStart; }
@@ -91,9 +91,9 @@ final class BluetoothPanel {
     void save(Bundle out) {
         out.putBoolean("btPending", pendingStart); out.putBoolean("btInspect", pendingInspection);
         out.putString("btAddress", pendingAddress);
-        out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", scroll.getVisibility() == View.VISIBLE);
+        out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", devices.getVisibility() == View.VISIBLE);
     }
-    void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); scroll.setVisibility(View.GONE); refresh(); }
+    void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); devices.setVisibility(View.GONE); refresh(); }
 
     private void request(boolean inspect, String address) {
         if (pendingStart || networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
@@ -151,7 +151,7 @@ final class BluetoothPanel {
                     .setAction(pendingInspection ? (pendingAddress.isEmpty() ? BluetoothScanService.INSPECT_ALL : BluetoothScanService.INSPECT) : BluetoothScanService.START)
                     .putExtra("address", pendingAddress);
             if (!pendingInspection) { cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); }
-            scroll.setVisibility(View.VISIBLE);
+            devices.setVisibility(View.VISIBLE);
             activity.startForegroundService(intent);
             status.setText("Starting Bluetooth…");
             handler.postDelayed(this::refresh, 250);
@@ -182,7 +182,7 @@ final class BluetoothPanel {
     }
     private void label() {
         BluetoothScanService.State state = BluetoothScanService.snapshot();
-        main.setText(state.running ? "Stop Bluetooth" : state.devices.isEmpty() ? "Scan Bluetooth" : (scroll.getVisibility() == View.VISIBLE ? "− " : "+ ") + "Bluetooth");
+        main.setText(state.running ? "Stop Bluetooth" : state.devices.isEmpty() ? "Scan Bluetooth" : (devices.getVisibility() == View.VISIBLE ? "− " : "+ ") + "Bluetooth");
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
         export.setEnabled(!state.devices.isEmpty());

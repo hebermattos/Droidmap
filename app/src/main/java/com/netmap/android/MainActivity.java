@@ -684,10 +684,12 @@ public final class MainActivity extends Activity {
         toolStatuses.put(tool, localStatus);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        ScrollView inlineScroll = new ScrollView(this);
-        inlineScroll.addView(content);
-        inlineScroll.setVisibility(android.view.View.GONE);
-        section.addView(inlineScroll, new LinearLayout.LayoutParams(-1, (int)(280 * getResources().getDisplayMetrics().density)));
+        // Keep a visibility wrapper for the result toggle, without a nested viewport.
+        LinearLayout resultPanel = new LinearLayout(this);
+        resultPanel.setOrientation(LinearLayout.VERTICAL);
+        resultPanel.addView(content, new LinearLayout.LayoutParams(-1, -2));
+        resultPanel.setVisibility(android.view.View.GONE);
+        section.addView(resultPanel, new LinearLayout.LayoutParams(-1, -2));
         toolResults.put(tool, content);
         layout.addView(section);
         toolButtons.add(button);
@@ -697,8 +699,8 @@ public final class MainActivity extends Activity {
             if (scanRunning || startingScan) {
                 if (tool.equals(activeTool)) stopActiveTool();
             } else if (!toolReports.getOrDefault(tool, "").isEmpty()) {
-                boolean shown = inlineScroll.getVisibility() == android.view.View.VISIBLE;
-                inlineScroll.setVisibility(shown ? android.view.View.GONE : android.view.View.VISIBLE);
+                boolean shown = resultPanel.getVisibility() == android.view.View.VISIBLE;
+                resultPanel.setVisibility(shown ? android.view.View.GONE : android.view.View.VISIBLE);
                 updateToolRunButtons(false);
             } else if ("discovery".equals(tool)) begin(tool);
         });
