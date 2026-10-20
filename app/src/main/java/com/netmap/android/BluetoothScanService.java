@@ -144,6 +144,12 @@ public final class BluetoothScanService extends Service {
         super.onCreate();
         BluetoothManager manager = getSystemService(BluetoothManager.class);
         adapter = manager == null ? null : manager.getAdapter();
+        if (!MacVendorCatalog.loaded()) catalogIo.execute(() -> {
+            try {
+                MacVendorCatalog.load(getAssets().open("mac-vendors.tsv"));
+                handler.post(this::touch);
+            } catch (java.io.IOException error) { android.util.Log.w("Droidmap", "MAC registry unavailable", error); }
+        });
         if (!BluetoothCatalog.loaded()) catalogIo.execute(() -> {
             try {
                 BluetoothCatalog.load(getAssets().open("bluetooth-assigned-numbers.tsv"));
@@ -368,6 +374,11 @@ public final class BluetoothScanService extends Service {
         }
         if (source.equals("BLE")) put(row, "ble", true);
         if (source.equals("Classic")) put(row, "classic", true);
+        if (Build.VERSION.SDK_INT >= 35) {
+            int addressType = device.getAddressType();
+            put(row, "addressType", addressType == BluetoothDevice.ADDRESS_TYPE_PUBLIC ? "public"
+                    : addressType == BluetoothDevice.ADDRESS_TYPE_RANDOM ? "random" : "unknown");
+        }
         if (!row.has("name") && device.getName() != null) put(row, "name", device.getName());
         put(row, "type", switch (device.getType()) {
             case BluetoothDevice.DEVICE_TYPE_CLASSIC -> "Classic";

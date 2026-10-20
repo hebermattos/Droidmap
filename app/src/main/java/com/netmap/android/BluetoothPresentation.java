@@ -6,6 +6,11 @@ import java.util.*;
 /** JSON/UI boundary; the decoder and summary formatter are also plain-Java testable. */
 final class BluetoothPresentation {
     static void enrich(JSONObject row) {
+        var mac = macIdentification(row);
+        BluetoothScanService.put(row, "macIdentification", BluetoothScanService.object(
+                "addressType", mac.addressType(), "status", mac.status(), "vendor", mac.vendor(),
+                "prefix", mac.prefix(), "prefixBits", mac.prefix().length() * 4,
+                "source", "IEEE MA-L / MA-M / MA-S (offline)", "note", mac.note()));
         JSONArray decoded = new JSONArray();
         JSONObject manufacturers = row.optJSONObject("manufacturerData");
         if (manufacturers != null) for (Iterator<String> keys=manufacturers.keys(); keys.hasNext();) {
@@ -74,10 +79,15 @@ final class BluetoothPresentation {
             }
         }
         JSONArray attempts=row.optJSONArray("connectionAttempts");
-        return BluetoothDeviceSummary.render(new BluetoothDeviceSummary.Device(row.optString("name"), row.optString("address"), transport(row),
+        String summary = BluetoothDeviceSummary.render(new BluetoothDeviceSummary.Device(row.optString("name"), row.optString("address"), transport(row),
                 row.optInt("observations")>0, row.has("rssi") ? row.optInt("rssi") : null,
                 row.has("connectable") ? row.optBoolean("connectable") : null, companies, protocols, information,
                 services == null ? -1 : services.length(), inspection, attempts == null ? 0 : attempts.length()));
+        return summary + "\n" + macIdentification(row).summary();
+    }
+
+    private static MacVendorCatalog.Identification macIdentification(JSONObject row) {
+        return MacVendorCatalog.identify(row.optString("address"), row.optString("addressType", "unknown"), row.optBoolean("classic"));
     }
 
     static String decodedDetails(JSONObject row) {
