@@ -1,0 +1,22 @@
+id: droidmap-directory-listing
+info:
+  name: HTTP directory listing
+  author: droidmap
+  severity: low
+  description: A directory index is visible. Review whether the listed content is
+    intended to be public.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: dsl
+    dsl:
+    - contains(tolower(body), "<title>index of /") && contains(tolower(body), "parent
+      directory")

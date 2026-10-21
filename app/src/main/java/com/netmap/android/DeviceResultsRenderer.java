@@ -44,6 +44,7 @@ final class DeviceResultsRenderer {
                 resultsScroll.post(() -> resultsScroll.scrollTo(0, scrollPosition));
                 return lastDevices;
             }
+            sessionResults(model);
             overview(model);
             vulnerabilityOverview(model);
             filters();int shown=0;
@@ -123,7 +124,7 @@ final class DeviceResultsRenderer {
                     TextView label=value(entry,"TCP "+port);
                     label.setTypeface(null,android.graphics.Typeface.BOLD);
                     Button nmap=new Button(context);
-                    nmap.setText("Nmap");
+                    nmap.setText(analysisLabel(model.json,"nmap",device.ip,port));
                     nmap.setAllCaps(false);
                     nmap.setTextSize(12);
                     nmap.setMinWidth(0);
@@ -133,7 +134,7 @@ final class DeviceResultsRenderer {
                     entry.addView(nmap,new LinearLayout.LayoutParams(-1,-2));
                     if(hasWebEvidence(device,port)) {
                         Button nuclei=new Button(context);
-                        nuclei.setText("Nuclei");
+                        nuclei.setText(analysisLabel(model.json,"nuclei",device.ip,port));
                         nuclei.setAllCaps(false);
                         nuclei.setTextSize(12);
                         nuclei.setMinWidth(0);
@@ -157,6 +158,44 @@ final class DeviceResultsRenderer {
         }
         if(hosts==0)value(table,"No identified devices found in the selected scan.");
         value(deviceList,hosts+" devices • "+endpoints+" open TCP ports");
+    }
+
+    private static String analysisLabel(JSONObject report,String tool,String ip,int port) {
+        String name=tool.equals("nmap")?"Nmap":"Nuclei";
+        String status=SessionAnalyses.endpointStatus(report,tool,ip,port);
+        return status.isEmpty()?name:name+" · "+status+" · Run again";
+    }
+
+    private void sessionResults(ReportPresentation model) {
+        JSONArray runs=SessionAnalyses.runs(model.json);
+        if(runs.length()==0)return;
+        String tool=model.json.optString("tool");
+        value(deviceList,"Session analyses · latest result per IP and port (limit 128)");
+        for(int i=0;i<runs.length();i++) {
+            JSONObject run=runs.optJSONObject(i);
+            if(run==null || !tool.equals(run.optString("tool")))continue;
+            String endpoint=run.optString("ip")+":"+run.optInt("port");
+            section(deviceList,"attempt:"+tool+":"+endpoint,
+                    endpoint+" · "+run.optString("status"),false,body->{
+                value(body,"Finished: "+android.text.format.DateFormat.format("yyyy-MM-dd HH:mm:ss",run.optLong("finishedAtEpochMs")));
+                JSONObject coverage=run.optJSONObject("coverage");
+                if(coverage!=null) {
+                    value(body,"Coverage: "+coverage.optJSONArray("groups"));
+                    value(body,coverage.optInt("configuredTemplateCount")+" configured templates; individual success count unavailable.");
+                    value(body,"No matches do not prove absence of vulnerabilities.");
+                }
+                JSONArray notices=run.optJSONArray("notices");
+                if(notices!=null)for(int n=0;n<notices.length();n++)value(body,notices.optString(n));
+                if(!run.optString("log").isEmpty())detail(body,"Latest progress log",run.optString("log"));
+                for(DeviceEvidence.Observation item:SessionAnalyses.observations(run.optJSONArray("evidence"))) {
+                    if(item.field.equals("scanStatus"))detail(body,item.source,item.value);
+                    if(item.field.equals("outputFile")) {
+                        Button log=action(body);log.setText("View full log · "+item.source);
+                        log.setOnClickListener(v->openNmapOutput.accept(item.value));
+                    }
+                }
+            });
+        }
     }
 
     /** Reported names remain distinct from inferred manufacturer and device type. */

@@ -1,0 +1,25 @@
+id: droidmap-server-status
+info:
+  name: Apache status information exposed
+  author: droidmap
+  severity: low
+  description: Apache status counters are accessible without authentication. Restrict
+    diagnostic endpoints.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/server-status?auto'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: word
+    part: body
+    words:
+    - 'Total Accesses:'
+    - 'Total kBytes:'
+    - 'BusyWorkers:'
+    condition: and

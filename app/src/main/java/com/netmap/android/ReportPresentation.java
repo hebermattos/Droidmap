@@ -193,6 +193,7 @@ final class ReportPresentation {
         return "Nmap could not complete this analysis. Open the technical log for the exact error.";
     }
     String scanStatus() {
+        if(json.optJSONArray("analysisRuns")!=null)return "Session results — see individual endpoint outcomes";
         if(json.optBoolean("cancelled"))return "Cancelled — partial results";
         if(json.optBoolean("partial"))return "In progress — partial results";
         if(json.optBoolean("networkChanged")||json.optString("identificationStatus").equals("partial")||json.has("identificationComplete")&&!json.optBoolean("identificationComplete")||json.has("tcpScanComplete")&&!json.optBoolean("tcpScanComplete"))return "Completed with partial results";
@@ -230,6 +231,19 @@ final class ReportPresentation {
     String fullText() {
         StringBuilder text=new StringBuilder("SCAN SUMMARY\n").append(summary()).append("\n");
         if(json.has("plannedChecks"))text.append("Selected-port checks: ").append(json.optInt("completedChecks")).append(" / ").append(json.optInt("plannedChecks")).append("\n");
+        JSONArray attempts=SessionAnalyses.runs(json);
+        if(attempts.length()>0)text.append("\nSESSION ANALYSES · latest attempt per tool/IP/port\n");
+        for(int i=0;i<attempts.length();i++) {
+            JSONObject attempt=attempts.optJSONObject(i);if(attempt==null)continue;
+            text.append(attempt.optString("tool")).append(" · ").append(attempt.optString("ip"))
+                    .append(":").append(attempt.optInt("port")).append(" · ").append(attempt.optString("status")).append("\n");
+            JSONObject coverage=attempt.optJSONObject("coverage");
+            if(coverage!=null) text.append("Coverage: ").append(coverage.optJSONArray("groups"))
+                    .append(" · ").append(coverage.optInt("configuredTemplateCount"))
+                    .append(" configured templates; individual successful check count unavailable.\n");
+            for(DeviceEvidence.Observation item:SessionAnalyses.observations(attempt.optJSONArray("evidence")))
+                if(item.field.equals("scanStatus")||item.field.equals("outputFile"))text.append(item.source).append(" · ").append(item.field).append(": ").append(item.value).append("\n");
+        }
         for(Device device:devices) {
             text.append("\nDEVICE · ").append(device.ip).append(device.name.isEmpty()?"":" · "+device.name).append("\n")
                 .append("Probable type: ").append(device.json.optString("probableType","Unknown")).append("\n")

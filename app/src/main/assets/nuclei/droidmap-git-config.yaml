@@ -1,0 +1,24 @@
+id: droidmap-git-config
+info:
+  name: Exposed Git configuration
+  author: droidmap
+  severity: medium
+  description: Git configuration is readable without authentication. Review repository
+    exposure and restrict the .git directory.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/.git/config'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: regex
+    part: body
+    regex:
+    - (?m)^\[core\]\s*$
+    - (?m)^\s*repositoryformatversion\s*=\s*[0-9]+
+    condition: and

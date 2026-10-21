@@ -31,6 +31,7 @@ public final class ScanService extends Service {
     private boolean identificationPartial;
     private boolean nmapEnabled;
     private boolean nucleiEnabled;
+    private int nucleiCoverage=NucleiTemplates.ALL;
     private boolean portsOnly;
     private String tool="discovery";
     private String selectedIp;
@@ -64,6 +65,7 @@ public final class ScanService extends Service {
         try {
             nmapVersionIntensity=NmapCommands.bounded(intent.getIntExtra("nmapVersionIntensity",
                     NmapCommands.DEFAULT_VERSION_INTENSITY),0,9,"Nmap version intensity");
+            nucleiCoverage=NucleiTemplates.validate(intent.getIntExtra("nucleiCoverage",NucleiTemplates.ALL));
             if(target==null) throw new IllegalArgumentException("Missing scan target");
             ScanPlan requested=new ScanPlan(target,intent.getStringExtra("ports"),intent.getIntExtra("timeout",200),
                 intent.getBooleanExtra("complete",false)?ScanPlan.Mode.COMPLETE:ScanPlan.Mode.FAST,intent.getBooleanExtra("adaptive",true));
@@ -110,6 +112,11 @@ public final class ScanService extends Service {
     private void scan(ScanPlan plan,String target,long started,TcpScanner tcp,DeviceIdentifier identity,NsdDiscovery nsd,DeviceEvidence evidence,WifiIpv6Scope wifi) {
         try {
             loadMacCatalog();
+            // A new Discovery starts a fresh analysis session even if it is later cancelled.
+            for(String file:new String[]{"analysis-scan.json","discovery-scan.json"}) {
+                File old=new File(getFilesDir(),file);
+                if(old.exists()&&!old.delete())throw new java.io.IOException("Cannot reset previous Discovery session");
+            }
             // Write the interruption marker before any network checks.
             store.save(latest);
             if(!portsOnly) identity.addNotices(Ipv6NeighborDiscovery.collect(wifi,evidence,tcp::isCancelled));
@@ -171,7 +178,7 @@ public final class ScanService extends Service {
             List<String> enrichmentNotices=new ArrayList<>(nmapNotices);
             if(nucleiEnabled && !tcp.isCancelled()) {
                 main.post(()->{if(!destroyed&&scanner==tcp&&!tcp.isCancelled())publish("Running Nuclei…",results.size(),true);});
-                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,NmapTargets.collect(evidenceChecks,evidence),tcp::isCancelled,
+                enrichmentNotices.addAll(NucleiEnricher.enrich(this,evidence,NmapTargets.collect(evidenceChecks,evidence),nucleiCoverage,tcp::isCancelled,
                         message->main.post(()->{if(!destroyed && scanner==tcp && !tcp.isCancelled())
                             publish(message,results.size(),true);})));
                 preview(target,tcp,evidence,liveChecks,identity.endpointChecks(),false);
@@ -204,6 +211,12 @@ public final class ScanService extends Service {
                     || !target.equals(data.optString("target"))
                     || !networkScope.equals(data.optString("networkScope")))
                 throw new IllegalStateException("Run Discovery again for this target and Wi-Fi network.");
+            ScanSnapshot accumulated=new LatestScanStore(new File(getFilesDir(),"analysis-scan.json")).load();
+            JSONObject session=accumulated.report.isEmpty()?null:new JSONObject(accumulated.report);
+            if(!SessionAnalyses.sameDiscovery(data,session))session=null;
+            if(selectedIp==null || selectedPort<1 || selectedPort>65535)
+                throw new IllegalStateException("Select one verified-open IP and port.");
+            SessionAnalyses.checkCapacity(session,tool,selectedIp,selectedPort);
             List<TcpScanner.Result> open=new ArrayList<>();
             for(String field:new String[]{"checks","advertisedEndpointChecks"}) {
                 org.json.JSONArray items=data.optJSONArray(field);
@@ -244,6 +257,17 @@ public final class ScanService extends Service {
                     evidence.add(host,source,observation.optString("field"),observation.optString("value"));
                 }
             }
+            // A prior Nmap result can establish HTTP on this exact selected endpoint.
+            if("nuclei".equals(tool)) {
+                org.json.JSONArray attempts=SessionAnalyses.runs(session);
+                for(int i=0;i<attempts.length();i++) {
+                    JSONObject attempt=attempts.getJSONObject(i);
+                    if(!SessionAnalyses.matches(attempt,"nmap",selectedIp,selectedPort))continue;
+                    for(DeviceEvidence.Observation item:SessionAnalyses.observations(attempt.optJSONArray("evidence")))
+                        if(item.source.equals("Nmap service "+selectedPort)||item.source.equals("Nmap")&&item.field.equals("openPort"))
+                            evidence.add(selectedIp,item.source,item.field,item.value);
+                }
+            }
             final String[] toolLog={""};
             List<String> notices;
             if("nmap".equals(tool)) {
@@ -254,28 +278,43 @@ public final class ScanService extends Service {
                                 publish(message,0,true);});});
             } else {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nuclei on open web ports…",0,true);});
-                notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,controller::isCancelled,
+                notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,nucleiCoverage,controller::isCancelled,
                         message->{toolLog[0]=message;main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
                             publish(message,0,true);});});
             }
-            org.json.JSONArray updated=new org.json.JSONArray();
-            for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet())
-                updated.put(ScanReport.device(entry.getKey(),entry.getValue()));
-            data.put("devices",updated);
-            org.json.JSONArray messages=data.optJSONArray("identificationNotices");
-            if(messages==null) messages=new org.json.JSONArray();
-            for(String notice:notices) messages.put(notice);
-            data.put("identificationNotices",messages);
-            data.put("toolLog",toolLog[0]);
-            data.put("tool",tool);
-            data.put("discoveryReady",true);
-            data.put("nmapEnabled","nmap".equals(tool));
-            data.put("nucleiEnabled","nuclei".equals(tool));
-            data.put("finishedAtEpochMs",System.currentTimeMillis());
-            data.put("cancelled",controller.isCancelled());
+            List<DeviceEvidence.Observation> observations=evidence.snapshot().getOrDefault(selectedIp,Collections.emptyList());
+            String attemptStatus=SessionAnalyses.status(tool,observations,controller.isCancelled());
+            if(observations.stream().noneMatch(item -> "nmap".equals(tool)
+                    ? item.source.equals("Nmap") && item.field.equals("scanStatus")
+                    : item.source.equals("Nuclei") && item.field.equals("endpoint:"+selectedPort))) {
+                observations=new ArrayList<>(observations);
+                String diagnostic=notices.isEmpty()?"No execution recorded":notices.get(0);
+                observations.add(new DeviceEvidence.Observation("nmap".equals(tool)?"Nmap":"Nuclei",
+                        "nmap".equals(tool)?"scanStatus":"endpoint:"+selectedPort,
+                        "nmap".equals(tool)?(controller.isCancelled()?"Cancelled: ":"Failed: ")+diagnostic
+                                :"http/https • "+attemptStatus+" • "+DeviceEvidence.clean(diagnostic)));
+            }
+            boolean networkChanged=!networkScope.equals(NetworkScope.current(this,plan));
+            if(networkChanged) {
+                attemptStatus="failed";
+                notices.add("Wi-Fi network changed during analysis; run Discovery again.");
+            }
+            JSONObject attempt=new JSONObject().put("tool",tool).put("ip",selectedIp).put("port",selectedPort)
+                    .put("status",attemptStatus).put("startedAtEpochMs",started).put("finishedAtEpochMs",System.currentTimeMillis())
+                    .put("evidence",SessionAnalyses.toolEvidence(tool,observations))
+                    .put("notices",new org.json.JSONArray(notices)).put("log",toolLog[0]);
+            if("nuclei".equals(tool)) attempt.put("coverage",new JSONObject()
+                    .put("groups",new org.json.JSONArray(NucleiTemplates.groups(nucleiCoverage)))
+                    .put("templates",new org.json.JSONArray(NucleiTemplates.files(nucleiCoverage)))
+                    .put("configuredTemplateCount",NucleiTemplates.files(nucleiCoverage).size())
+                    .put("successfulTemplateCount",JSONObject.NULL));
+            else attempt.put("nmapCustomArgs",nmapArgs).put("nmapVersionIntensity",nmapVersionIntensity);
+            JSONObject combined=SessionAnalyses.append(data,session,attempt);
+            combined.put("networkChanged",networkChanged);
             ScanSnapshot finished=new ScanSnapshot(started,false,false,open.size(),open.size(),target,
-                    (controller.isCancelled()?"Analysis cancelled — partial results":tool+" analysis finished")+"\n"+toolLog[0],
-                    data.toString(2),new ReportPresentation(data).fullText());
+                    tool+" · "+selectedIp+":"+selectedPort+" · "+attemptStatus+"\n"+toolLog[0],
+                    combined.toString(2),new ReportPresentation(combined).fullText());
+            new LatestScanStore(new File(getFilesDir(),"analysis-scan.json")).save(finished);
             store.save(finished);
             main.post(()->finish(finished));
         }catch(Exception error){finishError(error);}

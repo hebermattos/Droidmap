@@ -1,0 +1,24 @@
+id: droidmap-prometheus
+info:
+  name: Prometheus metrics exposed
+  author: droidmap
+  severity: info
+  description: Prometheus metric metadata is visible. Review whether monitoring endpoints
+    should be public.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/metrics'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: regex
+    part: body
+    regex:
+    - '(?m)^# HELP [a-zA-Z_:][a-zA-Z0-9_:]* '
+    - (?m)^# TYPE [a-zA-Z_:][a-zA-Z0-9_:]* (counter|gauge|histogram|summary|untyped)
+    condition: and

@@ -1,0 +1,25 @@
+id: droidmap-actuator
+info:
+  name: Spring Actuator discovery interface
+  author: droidmap
+  severity: info
+  description: A Spring Actuator discovery document is visible. Review whether operational
+    interfaces should be public. No authenticated or modifying requests were attempted.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/actuator'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: word
+    part: body
+    words:
+    - '"_links"'
+    - '"self"'
+    - /actuator
+    condition: and
