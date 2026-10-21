@@ -44,7 +44,11 @@ final class DeviceResultsRenderer {
                 resultsScroll.post(() -> resultsScroll.scrollTo(0, scrollPosition));
                 return lastDevices;
             }
-            sessionResults(model);
+            if(AnalysisPresentation.toolPanel(model.json)) {
+                for(ReportPresentation.Device device:model.devices)lastDevices.add(device.ip);
+                sessionResults(model);
+                return lastDevices;
+            }
             overview(model);
             vulnerabilityOverview(model);
             filters();int shown=0;
@@ -58,7 +62,7 @@ final class DeviceResultsRenderer {
             if(notices!=null&&notices.length()>0)section(deviceList,"scan-notices","Scan notices ("+notices.length()+")",false,body->{
                 for(int i=0;i<notices.length();i++)value(body,notices.optString(i));
             });
-        } catch(JSONException error){value(deviceList,"Summary unavailable. Open Full report in Options.");}
+        } catch(JSONException error){value(deviceList,"Summary unavailable. Open Results → Full report.");}
         resultsScroll.post(()->resultsScroll.scrollTo(0,scrollPosition));return lastDevices;
     }
     /** Compact IP/port results with sourced MAC identification inside the expanded IP. */
@@ -124,7 +128,7 @@ final class DeviceResultsRenderer {
                     TextView label=value(entry,"TCP "+port);
                     label.setTypeface(null,android.graphics.Typeface.BOLD);
                     Button nmap=new Button(context);
-                    nmap.setText(analysisLabel(model.json,"nmap",device.ip,port));
+                    nmap.setText("Nmap");
                     nmap.setAllCaps(false);
                     nmap.setTextSize(12);
                     nmap.setMinWidth(0);
@@ -132,9 +136,10 @@ final class DeviceResultsRenderer {
                     nmap.setContentDescription("Run Nmap on "+device.ip+" TCP port "+port);
                     nmap.setOnClickListener(v->runNmapPort.accept(device.ip,port));
                     entry.addView(nmap,new LinearLayout.LayoutParams(-1,-2));
+                    analysisStatus(entry,model.json,"nmap",device.ip,port);
                     if(hasWebEvidence(device,port)) {
                         Button nuclei=new Button(context);
-                        nuclei.setText(analysisLabel(model.json,"nuclei",device.ip,port));
+                        nuclei.setText("Nuclei");
                         nuclei.setAllCaps(false);
                         nuclei.setTextSize(12);
                         nuclei.setMinWidth(0);
@@ -142,6 +147,7 @@ final class DeviceResultsRenderer {
                         nuclei.setContentDescription("Run Nuclei on "+device.ip+" TCP port "+port);
                         nuclei.setOnClickListener(v->runNucleiPort.accept(device.ip,port));
                         entry.addView(nuclei,new LinearLayout.LayoutParams(-1,-2));
+                        analysisStatus(entry,model.json,"nuclei",device.ip,port);
                     }
                     column++;
                     endpoints++;
@@ -160,40 +166,54 @@ final class DeviceResultsRenderer {
         value(deviceList,hosts+" devices • "+endpoints+" open TCP ports");
     }
 
-    private static String analysisLabel(JSONObject report,String tool,String ip,int port) {
-        String name=tool.equals("nmap")?"Nmap":"Nuclei";
+    private void analysisStatus(LinearLayout parent,JSONObject report,String tool,String ip,int port) {
         String status=SessionAnalyses.endpointStatus(report,tool,ip,port);
-        return status.isEmpty()?name:name+" · "+status+" · Run again";
+        if(status.isEmpty())return;
+        TextView label=value(parent,AnalysisPresentation.outcome(status));
+        label.setTextSize(12);
+        label.setTextColor(Color.LTGRAY);
+        label.setContentDescription(tool+" on "+ip+" port "+port+": "+label.getText()+". Tap the tool button to run again.");
     }
 
-    private void sessionResults(ReportPresentation model) {
-        JSONArray runs=SessionAnalyses.runs(model.json);
-        if(runs.length()==0)return;
-        String tool=model.json.optString("tool");
-        value(deviceList,"Session analyses · latest result per IP and port (limit 128)");
-        for(int i=0;i<runs.length();i++) {
-            JSONObject run=runs.optJSONObject(i);
-            if(run==null || !tool.equals(run.optString("tool")))continue;
+    private void sessionResults(ReportPresentation model) throws JSONException {
+        List<JSONObject> runs=AnalysisPresentation.runs(model.json);
+        value(deviceList,runs.size()+" analyzed endpoint"+(runs.size()==1?"":"s"));
+        if(runs.isEmpty())value(deviceList,"No results for this tool yet.");
+        for(JSONObject run:runs) {
+            ReportPresentation.Device device=AnalysisPresentation.device(run);
             String endpoint=run.optString("ip")+":"+run.optInt("port");
-            section(deviceList,"attempt:"+tool+":"+endpoint,
-                    endpoint+" · "+run.optString("status"),false,body->{
-                value(body,"Finished: "+android.text.format.DateFormat.format("yyyy-MM-dd HH:mm:ss",run.optLong("finishedAtEpochMs")));
-                JSONObject coverage=run.optJSONObject("coverage");
-                if(coverage!=null) {
-                    value(body,"Coverage: "+coverage.optJSONArray("groups"));
-                    value(body,coverage.optInt("configuredTemplateCount")+" configured templates; individual success count unavailable.");
-                    value(body,"No matches do not prove absence of vulnerabilities.");
+            String key="attempt:"+run.optString("tool")+":"+endpoint;
+            section(deviceList,key,endpoint+" · "+AnalysisPresentation.outcome(run.optString("status"))
+                    +(device.findings.isEmpty()?"":" · "+device.findings.size()+" findings"),false,body->{
+                if(run.optString("tool").equals("nmap"))value(body,device.portLine(run.optInt("port")));
+                if(device.findings.isEmpty()) value(body,run.optString("status").equals("completed")
+                        ?"No findings reported by these checks. Coverage is limited.":"Analysis incomplete; review details before running again.");
+                int index=0;
+                for(ReportPresentation.Finding finding:device.findings) {
+                    section(body,key+":finding:"+(index++),finding.title+" · "+finding.scope,false,details->{
+                        detail(details,"Assessment",finding.assessment);
+                        detail(details,"Evidence",finding.evidence);
+                        detail(details,"Suggested action",finding.action);
+                    });
                 }
-                JSONArray notices=run.optJSONArray("notices");
-                if(notices!=null)for(int n=0;n<notices.length();n++)value(body,notices.optString(n));
-                if(!run.optString("log").isEmpty())detail(body,"Latest progress log",run.optString("log"));
-                for(DeviceEvidence.Observation item:SessionAnalyses.observations(run.optJSONArray("evidence"))) {
-                    if(item.field.equals("scanStatus"))detail(body,item.source,item.value);
-                    if(item.field.equals("outputFile")) {
-                        Button log=action(body);log.setText("View full log · "+item.source);
-                        log.setOnClickListener(v->openNmapOutput.accept(item.value));
+                section(body,key+":details","Details and logs",false,details->{
+                    value(details,"Finished: "+android.text.format.DateFormat.format("yyyy-MM-dd HH:mm:ss",run.optLong("finishedAtEpochMs")));
+                    JSONObject coverage=run.optJSONObject("coverage");
+                    if(coverage!=null) {
+                        value(details,"Coverage: "+coverage.optJSONArray("groups"));
+                        value(details,coverage.optInt("configuredTemplateCount")+" configured templates; individual success count unavailable.");
                     }
-                }
+                    JSONArray notices=run.optJSONArray("notices");
+                    if(notices!=null)for(int n=0;n<notices.length();n++)value(details,notices.optString(n));
+                    if(!run.optString("log").isEmpty())detail(details,"Latest progress log",run.optString("log"));
+                    for(DeviceEvidence.Observation item:SessionAnalyses.observations(run.optJSONArray("evidence"))) {
+                        if(item.field.equals("scanStatus"))detail(details,item.source,item.value);
+                        if(item.field.equals("outputFile")) {
+                            Button log=action(details);log.setText("View full log · "+item.source);
+                            log.setOnClickListener(v->openNmapOutput.accept(item.value));
+                        }
+                    }
+                });
             });
         }
     }

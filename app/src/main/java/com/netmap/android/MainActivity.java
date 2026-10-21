@@ -25,6 +25,7 @@ public final class MainActivity extends Activity {
     private EditText target;
     private Button start;
     private Button clearAll;
+    private Button newDiscovery, resultsMenu;
     private final List<Button> toolButtons = new ArrayList<>();
     private final Map<String, Button> toolRunButtons = new LinkedHashMap<>();
     private boolean cancellingScan;
@@ -139,6 +140,16 @@ public final class MainActivity extends Activity {
         settingsSummary.setPadding(0, pad / 2, 0, pad / 2);
         wifiPage.addView(settingsSummary);
         updateSettingsSummary();
+        LinearLayout resultActions=new LinearLayout(this);
+        newDiscovery=new Button(this);
+        newDiscovery.setText("New scan");
+        newDiscovery.setOnClickListener(v -> begin("discovery"));
+        resultActions.addView(newDiscovery,new LinearLayout.LayoutParams(0,-2,1));
+        resultsMenu=new Button(this);
+        resultsMenu.setText("Results");
+        resultsMenu.setOnClickListener(this::showResultsMenu);
+        resultActions.addView(resultsMenu,new LinearLayout.LayoutParams(0,-2,1));
+        wifiPage.addView(resultActions);
         start = new Button(this);
         start.setText("Cancel running scan");
         // Cancel is placed inside the active tool section while running.
@@ -305,6 +316,16 @@ public final class MainActivity extends Activity {
     }
 
     private void updateToolRunButtons(boolean cancellable) {
+        boolean busy=scanRunning || startingScan || (bluetoothPanel!=null && bluetoothPanel.busy());
+        boolean hasDiscovery=!toolReports.getOrDefault("discovery", "").isEmpty();
+        if(newDiscovery!=null) {
+            newDiscovery.setVisibility(hasDiscovery?android.view.View.VISIBLE:android.view.View.GONE);
+            newDiscovery.setEnabled(!busy);
+        }
+        if(resultsMenu!=null) {
+            resultsMenu.setVisibility(!report.isEmpty()?android.view.View.VISIBLE:android.view.View.GONE);
+            resultsMenu.setEnabled(!busy);
+        }
         for (Map.Entry<String, Button> entry : toolRunButtons.entrySet()) {
             String tool = entry.getKey();
             Button button = entry.getValue();
@@ -377,7 +398,7 @@ public final class MainActivity extends Activity {
         }
         status.setText(snapshot.message);
         TextView localStatus = toolStatuses.get(activeTool);
-        if (localStatus != null) localStatus.setText(snapshot.message);
+        if (localStatus != null) localStatus.setText(snapshot.running?snapshot.message:snapshot.message.split("\n",2)[0]);
         if (!snapshot.target.isEmpty() && (scanRunning || !snapshot.report.isEmpty())) target.setText(snapshot.target);
         if (!report.equals(snapshot.report) && (!snapshot.report.isEmpty() || "discovery".equals(activeTool))) {
             report = snapshot.report;
@@ -466,23 +487,35 @@ public final class MainActivity extends Activity {
     }
 
     private void showOptions(android.view.View anchor) {
-        OptionsPage.show(this, settings, scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy()), !lastDevices.isEmpty(),
-                !resultText.isEmpty(), !scanRunning && !report.isEmpty(),
-                updated -> {
+        OptionsPage.show(this, settings, scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy()),
+                currentPage, updated -> {
                     settings = updated;
                     settingsStore.save(updated);
                     updateSettingsSummary();
-                },
-                new OptionsPage.Actions() {
-                    @Override public void useWifi(boolean allAddresses) {
-                        showPage("wifi");
-                        selectWifiNetwork(allAddresses);
-                    }
-                    @Override public void openHistory() { showHistory(); }
-                    @Override public void reanalyzeDevice() { chooseDevice(); }
-                    @Override public void openReport() { showReadableReport(); }
-                    @Override public void exportJson() { MainActivity.this.exportJson(); }
+                }, allAddresses -> {
+                    showPage("wifi");
+                    selectWifiNetwork(allAddresses);
                 });
+    }
+
+    private void showResultsMenu(android.view.View anchor) {
+        if(scanRunning || startingScan || bluetoothPanel.busy())return;
+        PopupMenu menu=new PopupMenu(this,anchor);
+        if(!resultText.isEmpty())menu.getMenu().add(0,1,0,"Full report");
+        if(!report.isEmpty())menu.getMenu().add(0,2,1,"Export JSON");
+        if(!lastDevices.isEmpty())menu.getMenu().add(0,3,2,"Discover one device");
+        menu.getMenu().add(0,4,3,"History");
+        menu.setOnMenuItemClickListener(item -> {
+            switch(item.getItemId()) {
+                case 1: showReadableReport(); break;
+                case 2: exportJson(); break;
+                case 3: chooseDevice(); break;
+                case 4: showHistory(); break;
+                default: return false;
+            }
+            return true;
+        });
+        menu.show();
     }
 
     private void showChoiceDialog(String title, String[] labels, boolean[] enabled,
@@ -516,7 +549,7 @@ public final class MainActivity extends Activity {
 
     private void showHistoryOptions() {
         showChoiceDialog("History & reanalysis",
-                new String[] {"History", "Reanalyze a device"},
+                new String[] {"History", "Discover one device"},
                 new boolean[] {!scanRunning, !scanRunning && !lastDevices.isEmpty()},
                 position -> {
                     if (position == 0) showHistory();
@@ -644,17 +677,14 @@ public final class MainActivity extends Activity {
     }
 
     private void chooseDevice() {
-        if (scanRunning || lastDevices.isEmpty()) return;
+        if (scanRunning || startingScan || bluetoothPanel.busy() || lastDevices.isEmpty()) return;
         String[] ips = lastDevices.toArray(new String[0]);
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Reanalyze a device")
+                .setTitle("Discover one device")
                 .setItems(
                         ips,
                         (dialog, index) -> {
                             target.setText(ips[index]);
-                            settings = settings.completeDefaults();
-                            settingsStore.save(settings);
-                            updateSettingsSummary();
                             begin();
                         })
                 .setNegativeButton("Cancel", null)
