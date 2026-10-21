@@ -9,7 +9,7 @@ The home screen offers **Wi-Fi** and **Bluetooth**. Open either area to access i
 3. **Run Nmap** analyzes only verified-open TCP ports, including relevant service and vulnerability scripts. **Run Nuclei** analyzes only confirmed-open HTTP/HTTPS endpoints.
 4. The active action button becomes **Stop** and cancels that action. Analysis panels show the selected IP and port and provide stop/result toggles only; start each analysis from its port row. A cancelled/incomplete TCP discovery cannot authorize subsequent tool runs. To analyze another target or network, run Discovery again.
 
-Only one action can run at a time. The screen is cleared whenever a new scan starts. Discovery results are retained internally for Nmap and Nuclei during the current app session, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
+Only one action can run at a time. The screen is cleared whenever a new Discovery starts. Tool analyses retain earlier endpoint results in the current session. Discovery results are retained internally for Nmap and Nuclei, without repeating discovery. Reopening the app clears saved scan results, Discovery baseline, and scan history; run Discovery again before using either analysis tool. An actively running foreground scan is preserved across Activity recreation. An open port does not prove a vulnerability.
 
 ## Code ownership
 
@@ -409,3 +409,17 @@ Expand an IP in Discovery. When no TCP ports were found, **Search all TCP ports*
 ### Live Nmap and Nuclei logs
 
 The active tool section shows the target, current phase, elapsed time and up to eight recent timestamped messages. Updates are limited to once per second; the final status is kept with the result. Nmap emits verbose stage updates and process statistics every five seconds, reports service and vulnerability detection separately and keeps its full text output in the existing output viewer. Nuclei shows endpoint completion, diagnostic errors and template matches requiring verification. Elapsed time is not an estimate of time remaining. Cancellation retains partial results.
+
+### Selectable Nuclei coverage and session analyses (v0.16.0)
+
+Options → **Nuclei coverage** selects one or more offline HTTP groups; all are enabled by default. Save settings applies the selection to the next run. Each group has three templates:
+
+- **File exposures**: Git HEAD, environment configuration and Git configuration.
+- **HTTP configuration**: missing security headers, directory listing and Apache status counters.
+- **Diagnostic interfaces**: OpenAPI descriptions, Spring Actuator discovery and Prometheus metrics.
+
+These templates only send GET requests, do not follow redirects and run only on the selected, verified-open HTTP/HTTPS endpoint. The explicit template allowlist excludes old installed templates from unselected groups. Diagnostics and missing headers are informational; other matches require review and verification. This is a bounded set of checks, not the entire Nuclei template collection or a complete CVE assessment. The per-endpoint result and JSON record the selected groups, exact template filenames and configured count. The number of individually successful template checks is unavailable (`successfulTemplateCount: null`); process completion or zero matches must not be presented as proof that an endpoint is secure.
+
+Nmap and Nuclei results now accumulate in the current Discovery session. Port-row buttons show the latest outcome and allow reruns. Each tool section lists IP/port outcomes with timestamps, coverage, diagnostics and retained Nmap output references. A rerun replaces only that tool/IP/port result, removing its stale findings while preserving other ports, devices and tools. Nmap's identification of HTTP on the same endpoint can make its Nuclei button available without another Discovery. Cancellation/failure stays attached to its individual endpoint; it does not turn the completed Discovery baseline into a cancelled scan.
+
+Full report and JSON include the combined evidence and `analysisRuns` (latest attempt per tool/IP/port). The session is capped at **128 tool/IP/port entries**; further new entries are rejected without evicting results, while existing entries can still be rerun. Export and start a new Discovery to reset it. Raw Nmap logs retain the existing bounded 64 MiB/eight-run cache and may be removed before report evidence. Activity recreation restores the session panels. Starting a new Discovery, Clear All or opening a fresh app screen clears the session, preserving the clean-start behavior. Old reports remain readable; package IDs and signing configuration are unchanged.

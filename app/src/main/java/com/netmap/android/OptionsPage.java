@@ -64,6 +64,21 @@ final class OptionsPage {
         intensity.setEnabled(!scanning);
         args.setEnabled(!scanning);
 
+        heading(activity, form, "Nuclei coverage");
+        NucleiSettingsStore nucleiStore = new NucleiSettingsStore(activity);
+        int coverageMask = nucleiStore.load();
+        CheckBox[] coverage = new CheckBox[NucleiTemplates.LABELS.length];
+        for (int i=0;i<coverage.length;i++) {
+            coverage[i] = new CheckBox(activity);
+            coverage[i].setText(NucleiTemplates.LABELS[i] + " · 3 templates");
+            coverage[i].setChecked((coverageMask & (1 << i)) != 0);
+            coverage[i].setEnabled(!scanning);
+            form.addView(coverage[i]);
+        }
+        TextView coverageHelp = new TextView(activity);
+        coverageHelp.setText("Read-only HTTP checks on the selected verified web port. Select at least one group. Diagnostic interfaces are informational; no matches do not mean the endpoint is secure.");
+        form.addView(coverageHelp);
+
         heading(activity, form, "Bluetooth");
         BluetoothSettingsStore bluetoothStore = new BluetoothSettingsStore(activity);
         BluetoothSettings bluetooth = bluetoothStore.load();
@@ -105,6 +120,13 @@ final class OptionsPage {
                         BluetoothSettings.SECONDS[bluetoothSdp.getSelectedItemPosition()],
                         BluetoothSettings.SECONDS[bluetoothGatt.getSelectedItemPosition()],
                         BluetoothSettings.SECONDS[bluetoothRead.getSelectedItemPosition()]);
+                int selectedCoverage = 0;
+                for (int i=0;i<coverage.length;i++) if (coverage[i].isChecked()) selectedCoverage |= 1 << i;
+                if (selectedCoverage == 0) {
+                    Toast.makeText(activity, "Select at least one Nuclei coverage group", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                nucleiStore.save(selectedCoverage);
                 bluetoothStore.save(updatedBluetooth);
                 onSave.accept(updated);
                 dialog.dismiss();

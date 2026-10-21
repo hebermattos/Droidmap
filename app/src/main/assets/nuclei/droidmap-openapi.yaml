@@ -1,0 +1,23 @@
+id: droidmap-openapi
+info:
+  name: OpenAPI description exposed
+  author: droidmap
+  severity: info
+  description: An API description is available. This can be intentional and does not
+    establish a vulnerability; review published API documentation.
+  tags: http,misconfig,disclosure
+http:
+- method: GET
+  path:
+  - '{{BaseURL}}/openapi.json'
+  - '{{BaseURL}}/swagger/v1/swagger.json'
+  - '{{BaseURL}}/v3/api-docs'
+  redirects: false
+  matchers-condition: and
+  matchers:
+  - type: status
+    status:
+    - 200
+  - type: dsl
+    dsl:
+    - regex("\"(openapi|swagger)\"\\s*:", body) && regex("\"paths\"\\s*:", body)

@@ -21,6 +21,7 @@ public final class MainActivity extends Activity {
     private Button backToHome;
     private String currentPage = "home";
     private final Map<String, String> toolEndpoints = new HashMap<>();
+    private final Map<String, Integer> toolEndpointCounts = new HashMap<>();
     private EditText target;
     private Button start;
     private Button clearAll;
@@ -42,6 +43,7 @@ public final class MainActivity extends Activity {
     private TextView status;
     private ProgressBar progress;
     private boolean scanRunning, startingScan;
+    private long resultGeneration;
     private ScanSnapshot launchPrevious;
     private Intent pendingScan;
     private ScanSnapshot displayedSnapshot;
@@ -201,11 +203,14 @@ public final class MainActivity extends Activity {
         ScanSnapshot live = ScanService.snapshot();
         if (live != null && live.running) {
             applySnapshot(live);
+        } else if (state != null) {
+            if (live != null) applySnapshot(live);
         } else {
             ignoredPreviousSnapshot = live;
             clearPreviousScanFiles();
             status.setText("Ready — run Discovery to start");
         }
+        if (state != null) restoreSessionReports();
     }
 
     private void showPage(String page) {
@@ -234,6 +239,7 @@ public final class MainActivity extends Activity {
 
     private void clearAllResults() {
         if (scanRunning || startingScan || (bluetoothPanel != null && bluetoothPanel.busy())) return;
+        resultGeneration++;
         if (bluetoothPanel != null) bluetoothPanel.clear();
         ignoredPreviousSnapshot = ScanService.snapshot();
         displayedSnapshot = null;
@@ -247,6 +253,7 @@ public final class MainActivity extends Activity {
         deviceList.removeAllViews();
         toolReports.clear();
         toolEndpoints.clear();
+        toolEndpointCounts.clear();
         for (LinearLayout content : toolResults.values()) {
             content.removeAllViews();
             ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE);
@@ -275,7 +282,7 @@ public final class MainActivity extends Activity {
 
     private void clearPreviousScanFiles() {
         for (String name : new String[] {
-                "latest-scan.json", "discovery-scan.json", "scan-history.json"
+                "latest-scan.json", "discovery-scan.json", "analysis-scan.json", "scan-history.json"
         }) {
             java.io.File file = new java.io.File(getFilesDir(), name);
             if (file.exists() && !file.delete())
@@ -305,7 +312,11 @@ public final class MainActivity extends Activity {
             String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "Nuclei";
             boolean discovery = "discovery".equals(tool);
             String endpoint = toolEndpoints.getOrDefault(tool, "");
-            if (!endpoint.isEmpty()) name += " · " + endpoint;
+            if (active && !endpoint.isEmpty()) name += " · " + endpoint;
+            else if (!discovery) {
+                int count=toolEndpointCounts.getOrDefault(tool,0);
+                if(count>0)name += " · " + count + " endpoint" + (count==1?"":"s");
+            }
             boolean visible = discovery || active || toolReports.containsKey(tool) || !endpoint.isEmpty();
             button.setVisibility(visible ? android.view.View.VISIBLE : android.view.View.GONE);
             android.view.View section = (android.view.View) toolStatuses.get(tool).getParent();
@@ -367,25 +378,75 @@ public final class MainActivity extends Activity {
         status.setText(snapshot.message);
         TextView localStatus = toolStatuses.get(activeTool);
         if (localStatus != null) localStatus.setText(snapshot.message);
-        if (scanRunning) target.setText(snapshot.target);
-        if (!report.equals(snapshot.report)) {
+        if (!snapshot.target.isEmpty() && (scanRunning || !snapshot.report.isEmpty())) target.setText(snapshot.target);
+        if (!report.equals(snapshot.report) && (!snapshot.report.isEmpty() || "discovery".equals(activeTool))) {
             report = snapshot.report;
             resultText = snapshot.text;
-            toolReports.put(activeTool, report);
-            LinearLayout content = toolResults.get(activeTool);
-            if (content != null) {
-                content.removeAllViews();
-                DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, new ScrollView(this),
-                        expandedDevices, this::showNmapOutput,
-                        (ip, port) -> runSelectedPort("nmap", ip, port),
-                        (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
-                inline.render(report);
-                ((android.view.View) content.getParent()).setVisibility(report.isEmpty()
-                        ? android.view.View.GONE : android.view.View.VISIBLE);
-                updateToolRunButtons(snapshot.cancellable);
-            }
+            renderToolReport(activeTool, report);
+            if (!snapshot.running) syncSessionReports(report);
             lastDevices = resultsRenderer.render(report);
-        } else resultText = snapshot.text;
+        } else if (!snapshot.text.isEmpty()) resultText = snapshot.text;
+    }
+
+    private void renderToolReport(String tool, String payload) {
+        boolean hadReport=toolReports.containsKey(tool);
+        toolReports.put(tool, payload);
+        try {
+            int count=0;
+            org.json.JSONArray runs=SessionAnalyses.runs(new org.json.JSONObject(payload));
+            for(int i=0;i<runs.length();i++)if(tool.equals(runs.getJSONObject(i).optString("tool")))count++;
+            toolEndpointCounts.put(tool,count);
+        } catch(org.json.JSONException ignored) {toolEndpointCounts.remove(tool);}
+        LinearLayout content = toolResults.get(tool);
+        if (content == null) return;
+        boolean keepCollapsed=hadReport && !tool.equals(activeTool)
+                && ((android.view.View)content.getParent()).getVisibility()!=android.view.View.VISIBLE;
+        content.removeAllViews();
+        DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, new ScrollView(this),
+                expandedDevices, this::showNmapOutput,
+                (ip, port) -> runSelectedPort("nmap", ip, port),
+                (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
+        inline.render(payload);
+        ((android.view.View) content.getParent()).setVisibility(payload.isEmpty() || keepCollapsed
+                ? android.view.View.GONE : android.view.View.VISIBLE);
+        updateToolRunButtons(ScanService.snapshot() != null && ScanService.snapshot().cancellable);
+    }
+
+    private void syncSessionReports(String payload) {
+        try {
+            org.json.JSONObject data = new org.json.JSONObject(payload);
+            if (data.optJSONArray("analysisRuns") == null) return;
+            renderToolReport("discovery",new org.json.JSONObject(payload).put("tool","discovery").toString());
+            for (String tool:new String[]{"nmap","nuclei"}) {
+                org.json.JSONArray runs=SessionAnalyses.runs(data);
+                for(int i=0;i<runs.length();i++) if(tool.equals(runs.getJSONObject(i).optString("tool"))) {
+                    renderToolReport(tool,new org.json.JSONObject(payload).put("tool",tool).toString());
+                    break;
+                }
+            }
+        } catch(org.json.JSONException ignored) { }
+    }
+
+    private void restoreSessionReports() {
+        long generation=resultGeneration;
+        background.execute(() -> {
+            try {
+                ScanSnapshot baseline=new LatestScanStore(new java.io.File(getFilesDir(),"discovery-scan.json")).load();
+                ScanSnapshot session=new LatestScanStore(new java.io.File(getFilesDir(),"analysis-scan.json")).load();
+                runOnUiThread(() -> {
+                    if(destroyed || startingScan || generation!=resultGeneration) return;
+                    if(!toolReports.containsKey("discovery") && !baseline.report.isEmpty())renderToolReport("discovery",baseline.report);
+                    if(!session.report.isEmpty())syncSessionReports(session.report);
+                    if(report.isEmpty() && !scanRunning) {
+                        ScanSnapshot restored=session.report.isEmpty()?baseline:session;
+                        report=restored.report;
+                        resultText=restored.text;
+                        lastDevices=resultsRenderer.render(report);
+                        if(!restored.target.isEmpty())target.setText(restored.target);
+                    }
+                });
+            } catch(java.io.IOException ignored) { }
+        });
     }
 
     private void updateSettingsSummary() {
@@ -823,6 +884,7 @@ public final class MainActivity extends Activity {
                         .putExtra("nmap", "nmap".equals(tool))
                         .putExtra("portsOnly", false)
                         .putExtra("nuclei", "nuclei".equals(tool))
+                        .putExtra("nucleiCoverage", new NucleiSettingsStore(this).load())
                         .putExtra("nmapArgs", "nmap".equals(tool) ? settings.nmapArgs : "")
                         .putExtra("nmapVersionIntensity", settings.nmapVersionIntensity);
         if (android.os.Build.VERSION.SDK_INT >= 33
@@ -862,6 +924,7 @@ public final class MainActivity extends Activity {
         if (keyboard != null) keyboard.hideSoftInputFromWindow(target.getWindowToken(), 0);
         target.clearFocus();
         try {
+            resultGeneration++;
             activeTool = request.getStringExtra("tool");
             showPage("wifi");
             if (!"discovery".equals(activeTool)) {
@@ -870,6 +933,7 @@ public final class MainActivity extends Activity {
             } else {
                 for (String tool : new String[] {"nmap", "nuclei"}) {
                     toolEndpoints.remove(tool);
+                    toolEndpointCounts.remove(tool);
                     toolReports.remove(tool);
                     toolResults.get(tool).removeAllViews();
                     toolStatuses.get(tool).setText("Not run");
@@ -882,14 +946,16 @@ public final class MainActivity extends Activity {
             startForegroundService(request);
             scanRunning = true;
             expandedDevices.clear();
-            report = "";
-            resultText = "";
-            deviceList.removeAllViews();
+            if ("discovery".equals(activeTool)) {
+                report = "";
+                resultText = "";
+                lastDevices.clear();
+                deviceList.removeAllViews();
+            }
             LinearLayout content = toolResults.get(activeTool);
-            if (content != null) { content.removeAllViews();
+            if (content != null && "discovery".equals(activeTool)) { content.removeAllViews();
                 ((android.view.View) content.getParent()).setVisibility(android.view.View.GONE); }
-            toolReports.remove(activeTool);
-            lastDevices.clear();
+            if ("discovery".equals(activeTool)) toolReports.remove(activeTool);
             moveRunControls(activeTool);
             start.setVisibility(android.view.View.GONE);
             progress.setVisibility(android.view.View.VISIBLE);

@@ -10,7 +10,7 @@ import java.util.function.BooleanSupplier;
 final class NucleiEnricher {
     private NucleiEnricher() {}
 
-    static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, BooleanSupplier cancelled,
+    static List<String> enrich(Context context, DeviceEvidence evidence, Map<String, LinkedHashSet<Integer>> verifiedPorts, int coverageMask, BooleanSupplier cancelled,
             java.util.function.Consumer<String> progress) {
         List<String> notices=new ArrayList<>();
         ToolProgress log=new ToolProgress("Nuclei",progress);
@@ -22,7 +22,8 @@ final class NucleiEnricher {
             return notices;
         }
         File templates=new File(context.getFilesDir(),"nuclei-templates");
-        String[] templateNames={"droidmap-git-head.yaml","droidmap-env-exposure.yaml","droidmap-security-headers.yaml"};
+        List<String> templateNames=NucleiTemplates.files(coverageMask);
+        log.event("Coverage: "+NucleiTemplates.summary(coverageMask));
         try {
             if(!templates.isDirectory()&&!templates.mkdirs())throw new IOException("Cannot create template directory");
             for(String name:templateNames) {
@@ -46,6 +47,8 @@ final class NucleiEnricher {
             log.event(notices.get(notices.size()-1));log.flush();
             return notices;
         }
+        StringJoiner templatePaths=new StringJoiner(",");
+        for(String name:templateNames)templatePaths.add(new File(templates,name).getAbsolutePath());
         int checked=0,found=0,completed=0,failed=0;
         for(Map.Entry<String,List<DeviceEvidence.Observation>> entry:evidence.snapshot().entrySet()) {
             if(cancelled.getAsBoolean())break;
@@ -86,7 +89,7 @@ final class NucleiEnricher {
                 String url=(https?"https":"http")+"://"+address+":"+port+"/";
                 Process process=null;
                 try {
-                    ProcessBuilder command=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templates.getAbsolutePath(),
+                    ProcessBuilder command=new ProcessBuilder(binary.getAbsolutePath(),"-u",url,"-t",templatePaths.toString(),
                             "-jsonl","-silent","-rate-limit","5","-disable-update-check")
                             .directory(runtimeHome)
                             .redirectErrorStream(true);
@@ -96,7 +99,7 @@ final class NucleiEnricher {
                     command.environment().put("TMPDIR",context.getCacheDir().getAbsolutePath());
                     process=command.start();
                     checked++;
-                    log.event("Endpoint "+checked+" • "+url+" • "+templateNames.length+" configured templates");
+                    log.event("Endpoint "+checked+" • "+url+" • "+templateNames.size()+" configured templates");
                     String endpointStatus="incomplete";
                     StringBuilder errors=new StringBuilder();
                     // Read until Nuclei exits or the user cancels; no global execution deadline.
@@ -104,8 +107,8 @@ final class NucleiEnricher {
                     while(!cancelled.getAsBoolean()) {
                         log.tick();
                         if(!reader.ready()) {
-                            if(!process.isAlive())break;
-                            Thread.sleep(50);continue;
+                            if(process.isAlive()) { Thread.sleep(50);continue; }
+                            // Drain remaining buffered output after process exit.
                         }
                         String line=reader.readLine();
                         if(line==null)break;
@@ -120,7 +123,7 @@ final class NucleiEnricher {
                             String finding=title+" ["+severity+"]";
                             String description=info.optString("description",result.optString("matched-at",url));
                             evidence.add(host,"Nuclei","finding:"+port+":"+DeviceEvidence.clean(finding),
-                                    "VULNERABLE — "+DeviceEvidence.clean(description));
+                                    NucleiTemplates.findingEvidence(severity,description));
                             found++;
                             log.event("Match • "+severity+" • "+title+" • verification required");
                         } catch(org.json.JSONException ignored) {
@@ -136,7 +139,7 @@ final class NucleiEnricher {
                         String detail=errors.length()==0?"no diagnostic output":ToolProgress.clean(errors.toString());
                         notices.add("Nuclei failed for "+url+" (exit "+process.exitValue()+"): "+detail);
                     } else {completed++;endpointStatus="completed";}
-                    evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.length+" configured templates");
+                    evidence.add(host,"Nuclei","endpoint:"+port,service.getValue()+" • "+endpointStatus+" • "+templateNames.size()+" configured templates");
                     log.event(url+" • "+endpointStatus+" • "+found+" total matches");
                     if(endpointStatus.equals("failed"))log.event("Exit "+process.exitValue()+": "+errors);
                 } catch(Exception error) {
@@ -147,7 +150,8 @@ final class NucleiEnricher {
                 } finally {if(process!=null)process.destroyForcibly();}
             }
         }
-        notices.add("Nuclei: "+checked+" web endpoints attempted; "+completed+" completed; "+failed+" failed/incomplete; "+found+" findings; "+templateNames.length+" bundled templates (verification required).");
+        notices.add("Nuclei coverage: "+NucleiTemplates.summary(coverageMask)+". Configured templates are not a count of successful checks; no matches do not prove absence of vulnerabilities.");
+        notices.add("Nuclei: "+checked+" web endpoints attempted; "+completed+" completed; "+failed+" failed/incomplete; "+found+" findings; "+templateNames.size()+" bundled templates (verification required).");
         if(checked==0)notices.add("Nuclei skipped: no HTTP/HTTPS endpoints confirmed by HTTP probes or Nmap.");
         log.event((cancelled.getAsBoolean()?"Cancelled":"Finished")+" • "+completed+" completed • "+failed+" failed/incomplete • "+found+" matches");
         if(checked==0)log.event("No confirmed HTTP/HTTPS endpoints to check");
