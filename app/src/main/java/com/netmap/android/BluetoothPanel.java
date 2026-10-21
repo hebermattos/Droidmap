@@ -20,7 +20,9 @@ final class BluetoothPanel {
     private final Activity activity;
     private final BooleanSupplier networkBusy;
     private final Button main, export, rescan;
-    private final TextView status, timingStatus;
+    private final TextView status, timingStatus, receptionStatus;
+    private final Button receptionToggle;
+    private boolean receptionExpanded;
     private final ProgressBar timeProgress;
     private final LinearLayout devices;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -47,6 +49,7 @@ final class BluetoothPanel {
             ArrayList<String> technical = saved.getStringArrayList("btTechnical");
             if (technical != null) technicalExpanded.addAll(technical);
         } else if (!BluetoothScanService.snapshot().running) BluetoothScanService.clear();
+        receptionExpanded=saved!=null && saved.getBoolean("btReceptionExpanded");
         devices = new LinearLayout(activity); devices.setOrientation(LinearLayout.VERTICAL);
         devices.setVisibility(View.GONE);
         main = new Button(activity);
@@ -58,8 +61,11 @@ final class BluetoothPanel {
             else request(false, "");
         });
         main.setOnLongClickListener(v -> { if (!BluetoothScanService.snapshot().running) request(false, ""); return true; });
+        LinearLayout actions=new LinearLayout(activity);
+        parent.addView(actions,new LinearLayout.LayoutParams(-1,-2));
         rescan = new Button(activity); rescan.setText("New scan");
-        rescan.setOnClickListener(v -> request(false, "")); parent.addView(rescan);
+        rescan.setOnClickListener(v -> request(false, ""));
+        actions.addView(rescan,new LinearLayout.LayoutParams(0,-2,1));
         status = new TextView(activity); status.setTextSize(13);
         status.setPadding(8, 8, 8, 8); status.setBackgroundColor(0xff202020);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); parent.addView(status);
@@ -69,7 +75,16 @@ final class BluetoothPanel {
         timeProgress = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
         timeProgress.setMax(100); parent.addView(timeProgress, new LinearLayout.LayoutParams(-1, -2));
         export = new Button(activity); export.setText("Export JSON");
-        parent.addView(export, new LinearLayout.LayoutParams(-1, -2));
+        actions.addView(export,new LinearLayout.LayoutParams(0,-2,1));
+        receptionToggle=new Button(activity);
+        receptionToggle.setAllCaps(false);
+        parent.addView(receptionToggle,new LinearLayout.LayoutParams(-1,-2));
+        receptionStatus=new TextView(activity);
+        receptionStatus.setTextIsSelectable(true);
+        receptionStatus.setTextSize(12);
+        receptionStatus.setPadding(8,8,8,8);
+        parent.addView(receptionStatus,new LinearLayout.LayoutParams(-1,-2));
+        receptionToggle.setOnClickListener(v -> {receptionExpanded=!receptionExpanded; refresh();});
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
             activity.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
@@ -85,11 +100,12 @@ final class BluetoothPanel {
     void onStop() { handler.removeCallbacks(poll); }
     void close() { onStop(); io.shutdown(); }
     void save(Bundle out) {
+        out.putBoolean("btReceptionExpanded",receptionExpanded);
         out.putBoolean("btPending", pendingStart); out.putBoolean("btInspect", pendingInspection);
         out.putString("btAddress", pendingAddress);
         out.putStringArrayList("btExpanded", new ArrayList<>(expanded)); out.putStringArrayList("btTechnical", new ArrayList<>(technicalExpanded)); out.putBoolean("btVisible", devices.getVisibility() == View.VISIBLE);
     }
-    void clear() { BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); devices.setVisibility(View.GONE); refresh(); }
+    void clear() { receptionExpanded=false; BluetoothScanService.clear(); cards.clear(); expanded.clear(); technicalExpanded.clear(); devices.removeAllViews(); devices.setVisibility(View.GONE); refresh(); }
 
     private void request(boolean inspect, String address) {
         if (pendingStart || networkBusy.getAsBoolean() || BluetoothScanService.snapshot().running) { toast("Stop the running scan first"); return; }
@@ -187,20 +203,29 @@ final class BluetoothPanel {
         main.setContentDescription(state.running ? "Stop Bluetooth scan or inspection" : "Scan Bluetooth, or expand results. Long press to scan again");
         main.setEnabled(state.running || !networkBusy.getAsBoolean());
         export.setEnabled(!state.devices.isEmpty());
+        export.setVisibility(state.devices.isEmpty()?View.GONE:View.VISIBLE);
         rescan.setVisibility(!state.running && !state.devices.isEmpty() ? View.VISIBLE : View.GONE);
         rescan.setEnabled(!state.running && !pendingStart && !networkBusy.getAsBoolean());
     }
     private void refresh() {
         BluetoothScanService.State state = BluetoothScanService.snapshot(); label();
         refreshTimings(state);
-        status.setText((state.message.equals("Not run") ? "Bluetooth • Configure mode and timeouts in Options" : state.message)
+        status.setText((state.message.equals("Not run") ? "Ready — choose Scan Bluetooth" : state.message)
                 + "\n" + state.devices.size() + " devices • " + BluetoothScanService.eligibleDevices().size() + " ready to inspect"
-                + (state.started > 0 ? "\nBLE: " + state.bleStatus + " • " + state.bleObservations + " advertisements"
-                    + (state.lastBleAt > 0 ? " • last received at " + android.text.format.DateFormat.format("HH:mm:ss", state.lastBleAt) : "")
-                    + "\nClassic: " + state.classicStatus + " • " + state.classicObservations + " observations" : "")
-                + (state.omitted > 0 ? " • Capacity reached (512); " + state.omitted + " observations omitted" : "")
+                + (state.omitted > 0 ? " • Capacity reached; see reception details" : "")
                 + (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 && state.running ? " • Notifications disabled; use Stop here" : ""));
+        receptionToggle.setVisibility(state.started>0?View.VISIBLE:View.GONE);
+        receptionToggle.setText((receptionExpanded?"− ":"+ ")+"Reception and timing details");
+        receptionToggle.setContentDescription((receptionExpanded?"Collapse ":"Expand ")+"Bluetooth reception and timing details");
+        receptionStatus.setVisibility(state.started>0 && receptionExpanded?View.VISIBLE:View.GONE);
+        StringBuilder reception=new StringBuilder("BLE: ").append(state.bleStatus).append(" • ").append(state.bleObservations).append(" advertisements")
+                .append(state.lastBleAt>0?" • last received at "+android.text.format.DateFormat.format("HH:mm:ss",state.lastBleAt):"")
+                .append("\nClassic: ").append(state.classicStatus).append(" • ").append(state.classicObservations).append(" observations");
+        for(BluetoothTimings.Snapshot timer:state.timings.snapshots(state.running?SystemClock.uptimeMillis():Math.max(0,state.operationEnded)))
+            reception.append('\n').append(BluetoothTimings.describe(timer));
+        if(state.omitted>0)reception.append("\nCapacity reached (512); ").append(state.omitted).append(" observations omitted");
+        receptionStatus.setText(reception);
         if (rendered == state && revision == state.revision) return;
         if (rendered != state) { cards.clear(); devices.removeAllViews(); }
         rendered = state; revision = state.revision;
@@ -216,24 +241,14 @@ final class BluetoothPanel {
         if (state.operationStarted < 0) return;
         StringBuilder text = new StringBuilder(state.running ? "Elapsed: " : "Duration: ")
                 .append(BluetoothTimings.clock(BluetoothScanService.operationElapsed() / 1000));
-        if (!state.inspecting.isEmpty()) {
-            JSONObject device = state.devices.get(state.inspecting);
-            text.append("\nDevice ").append(state.inspectionDone + 1).append('/').append(state.inspectionTotal)
-                    .append(": ").append(device == null ? state.inspecting : device.optString("name", state.inspecting));
-        }
-        BluetoothTimings.Snapshot progress = null;
-        for (BluetoothTimings.Snapshot timer : state.timings.snapshots(state.running ? SystemClock.uptimeMillis() : Math.max(0, state.operationEnded))) {
-            text.append('\n').append(BluetoothTimings.describe(timer));
-            if (timer.running() && timer.limitSeconds() > 0
-                    && (progress == null || timer.remainingMs() < progress.remainingMs())) progress = timer;
-        }
-        if (state.running && state.inspectionTotal > 0 && state.inspecting.isEmpty()) text.append("\nPreparing next device…");
-        if (state.running && state.inspectionTotal > 0) text.append("\nTimers apply to the current device; queue finish time varies.");
+        List<BluetoothTimings.Snapshot> timers=state.timings.snapshots(state.running?SystemClock.uptimeMillis():Math.max(0,state.operationEnded));
+        BluetoothTimings.Snapshot current=BluetoothTimingSummary.current(timers);
+        if(current!=null)text.append('\n').append(BluetoothTimings.describe(current));
         timingStatus.setText(text);
-        timeProgress.setIndeterminate(progress == null);
-        if (progress != null) {
-            timeProgress.setProgress(progress.percent());
-            timeProgress.setContentDescription(BluetoothTimings.describe(progress));
+        timeProgress.setIndeterminate(current == null || current.limitSeconds()==0);
+        if (current != null && current.limitSeconds()>0) {
+            timeProgress.setProgress(current.percent());
+            timeProgress.setContentDescription(BluetoothTimings.describe(current));
         } else timeProgress.setContentDescription("Bluetooth operation in progress");
     }
     private final class Card {
