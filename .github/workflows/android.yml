@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -53,6 +53,14 @@ jobs:
             echo "Nuclei release not published; cannot create complete APK." >&2
             exit 1
           fi
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - name: Install NDK for HTTPX
+        run: sdkmanager 'ndk;27.2.12479018'
+      - name: Build and test pinned HTTPX for Android
+        run: bash native-tools/build-httpx-android.sh
       - name: Restore existing update signing key
         shell: bash
         env:
@@ -78,6 +86,8 @@ jobs:
         run: |
           set -euo pipefail
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libnuclei.so"
+      - name: Verify HTTPX packaged in APK
+        run: unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -F "lib/arm64-v8a/libhttpx.so"
       - name: Name APK clearly for download
         shell: bash
         run: |

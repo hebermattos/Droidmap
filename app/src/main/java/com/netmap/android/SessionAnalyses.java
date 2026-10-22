@@ -40,7 +40,10 @@ final class SessionAnalyses {
         if (cancelled) return "cancelled";
         boolean complete = false, failed = false;
         for (DeviceEvidence.Observation item:observations) {
-            if (tool.equals("nuclei") && item.source.equals("Nuclei") && item.field.startsWith("endpoint:")) {
+            if(tool.equals("httpx") && item.source.startsWith("HTTPX tcp/") && item.field.equals("scanStatus")) {
+                complete |= item.value.equals("completed");
+                failed |= !item.value.equals("completed");
+            } else if (tool.equals("nuclei") && item.source.equals("Nuclei") && item.field.startsWith("endpoint:")) {
                 String[] parts=item.value.split(" • ");
                 String status=parts.length>1?parts[1]:"";
                 complete |= status.equals("completed");
@@ -105,6 +108,7 @@ final class SessionAnalyses {
         result.put("finishedAtEpochMs",run.getLong("finishedAtEpochMs"));
         // Cancellation belongs to the endpoint attempt, never to the Discovery baseline.
         result.put("lastAnalysisCancelled",run.optString("status").equals("cancelled"));
+        result.put("httpxEnabled",hasTool(updated,"httpx"));
         result.put("nmapEnabled",hasTool(updated,"nmap")).put("nucleiEnabled",hasTool(updated,"nuclei"));
         return result;
     }
@@ -131,7 +135,8 @@ final class SessionAnalyses {
     static JSONArray toolEvidence(String tool,List<DeviceEvidence.Observation> observations) throws JSONException {
         JSONArray result=new JSONArray();
         for(DeviceEvidence.Observation item:observations)
-            if(tool.equals("nmap")?item.source.startsWith("Nmap"):item.source.equals("Nuclei"))
+            if(tool.equals("nmap")?item.source.startsWith("Nmap")
+                    :tool.equals("httpx")?item.source.startsWith("HTTPX tcp/"):item.source.equals("Nuclei"))
                 result.put(new JSONObject().put("source",item.source).put("field",item.field).put("value",item.value));
         return result;
     }
