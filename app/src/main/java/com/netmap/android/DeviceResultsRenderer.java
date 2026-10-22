@@ -17,6 +17,7 @@ final class DeviceResultsRenderer {
     private final java.util.function.Consumer<String> openNmapOutput;
     private final java.util.function.BiConsumer<String, Integer> runNmapPort;
     private final java.util.function.BiConsumer<String, Integer> runNucleiPort;
+    private final java.util.function.BiConsumer<String, Integer> runHttpxPort;
     private final java.util.function.Consumer<String> searchAllPorts;
     private ReportPresentation.Filter filter=ReportPresentation.Filter.ALL;
     private String lastReport="";
@@ -26,11 +27,12 @@ final class DeviceResultsRenderer {
             Set<String> expandedDevices,java.util.function.Consumer<String> openNmapOutput,
             java.util.function.BiConsumer<String, Integer> runNmapPort,
             java.util.function.BiConsumer<String, Integer> runNucleiPort,
+            java.util.function.BiConsumer<String, Integer> runHttpxPort,
             java.util.function.Consumer<String> searchAllPorts) {
         this.context=context;this.deviceList=deviceList;this.resultsScroll=resultsScroll;
         this.expandedDevices=expandedDevices;this.openNmapOutput=openNmapOutput;
         this.runNmapPort=runNmapPort;this.runNucleiPort=runNucleiPort;
-        this.searchAllPorts=searchAllPorts;
+        this.searchAllPorts=searchAllPorts;this.runHttpxPort=runHttpxPort;
     }
     List<String> render(String report) {
         int scrollPosition=resultsScroll.getScrollY();lastReport=report;
@@ -138,6 +140,12 @@ final class DeviceResultsRenderer {
                     entry.addView(nmap,new LinearLayout.LayoutParams(-1,-2));
                     analysisStatus(entry,model.json,"nmap",device.ip,port);
                     if(hasWebEvidence(device,port)) {
+                        Button web=action(entry);
+                        web.setText("Analyze Web");web.setTextSize(12);
+                        web.setMinWidth(0);web.setMinimumWidth(0);
+                        web.setContentDescription("Analyze Web with HTTPX on "+device.ip+" TCP port "+port);
+                        web.setOnClickListener(v->runHttpxPort.accept(device.ip,port));
+                        analysisStatus(entry,model.json,"httpx",device.ip,port);
                         Button nuclei=new Button(context);
                         nuclei.setText("Nuclei");
                         nuclei.setAllCaps(false);
@@ -186,7 +194,12 @@ final class DeviceResultsRenderer {
             section(deviceList,key,endpoint+" · "+AnalysisPresentation.outcome(run.optString("status"))
                     +(device.findings.isEmpty()?"":" · "+device.findings.size()+" findings"),false,body->{
                 if(run.optString("tool").equals("nmap"))value(body,device.portLine(run.optInt("port")));
-                if(device.findings.isEmpty()) value(body,run.optString("status").equals("completed")
+                if(run.optString("tool").equals("httpx")) {
+                    for(DeviceEvidence.Observation item:SessionAnalyses.observations(run.optJSONArray("evidence")))
+                        if(item.source.startsWith("HTTPX tcp/") && !item.field.equals("scanStatus"))
+                            detail(body,ReportPresentation.label(item.field),item.value);
+                    value(body,"Web metadata only; detected technologies are estimates, not verified hardware or vulnerabilities.");
+                } else if(device.findings.isEmpty()) value(body,run.optString("status").equals("completed")
                         ?"No findings reported by these checks. Coverage is limited.":"Analysis incomplete; review details before running again.");
                 int index=0;
                 for(ReportPresentation.Finding finding:device.findings) {
@@ -249,16 +262,7 @@ final class DeviceResultsRenderer {
 
     /** Nuclei currently bundles HTTP templates, so TCP openness alone is insufficient. */
     private boolean hasWebEvidence(ReportPresentation.Device device, int port) {
-        String http="HTTP tcp/"+port;
-        String https="HTTPS tcp/"+port;
-        for (JSONObject item:device.evidence) {
-            String source=item.optString("source");
-            String field=item.optString("field");
-            if ((source.equals(http)||source.equals(https))
-                    && (field.equals("webUrl")||field.equals("server")||field.equals("httpTitle")))
-                return true;
-        }
-        return false;
+        return !WebEndpoints.scheme(SessionAnalyses.observations(new JSONArray(device.evidence)),port).isEmpty();
     }
 
     private String allPorts(SortedSet<Integer> ports) {

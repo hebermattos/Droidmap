@@ -8,7 +8,7 @@ final class AnalysisPresentation {
     private AnalysisPresentation() {}
     static boolean toolPanel(JSONObject report) {
         String tool=report.optString("tool");
-        return (tool.equals("nmap")||tool.equals("nuclei")) && report.optJSONArray("analysisRuns")!=null;
+        return (tool.equals("nmap")||tool.equals("nuclei")||tool.equals("httpx")) && report.optJSONArray("analysisRuns")!=null;
     }
     static List<JSONObject> runs(JSONObject report) {
         List<JSONObject> result=new ArrayList<>();

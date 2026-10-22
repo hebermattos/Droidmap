@@ -435,3 +435,15 @@ The initial page still offers only Wi-Fi and Bluetooth; Clear All stays beside O
 - **Bluetooth** keeps device counts, current status, overall duration and the nearest active countdown in the compact summary. **Reception and timing details** expands BLE/Classic observation counts, last reception time and all phase timers; its expansion state survives rotation. Unlimited timers show elapsed time, and stopped timers stay frozen. New scan and Export JSON share an action row after results are available.
 
 This changes presentation only: scan permissions, cancellation, endpoint authorization, session bounds, package IDs, certificate pins and signing configuration are unchanged.
+
+### Web analysis with HTTPX (v0.17.0)
+
+After a completed Discovery, expand an IP and tap **Analyze Web** beside a verified-open TCP port with HTTP/HTTPS evidence. Nmap can establish web evidence on that same endpoint. HTTPX runs once for the selected endpoint without repeating Discovery. The **Web analysis** panel shows HTTP status (including 401/403), title, server, content type, estimated technologies, redirect Location and available TLS version/certificate metadata. Technology fingerprints are estimates and do not establish device identity or vulnerabilities.
+
+The service owns execution, progress and Stop; rotation/backgrounding retain the operation. Latest HTTPX attempts accumulate alongside Nmap/Nuclei in the same bounded session and appear in JSON/full report. Rerunning replaces only that tool/IP/port attempt. New Discovery, Clear All and a fresh app screen clear session results.
+
+HTTPX sends GET requests only to the selected literal IP/port using its confirmed scheme. Redirect destinations are displayed without being followed. Protocol fallback, CDN lookup, updates, cloud upload and additional discovery probes are disabled. IPv6 URLs preserve the Wi-Fi interface zone. TLS trust and name validation remain enabled in the patched runtime: self-signed/untrusted or IP-name-mismatched certificates can prevent HTTPS metadata collection and are reported as failed/incomplete, never as secure. Android system certificate availability must be validated on-device.
+
+Response reads are capped at 256 KiB; process output at 512 KiB; each request has a ten-second timeout with no retries and the process a 45-second budget. Stop forcibly terminates the process. Export retains bounded metadata, not raw response bodies. The Android ARM64 runtime is compiled in Android CI from pinned ProjectDiscovery HTTPX source with a strict TLS dialer; a host smoke test checks HTTP metadata, redirects and certificate rejection before cross-compilation. Other Android ABIs report the runtime as unavailable. Physical-device runtime and UI validation remain necessary.
+
+Local builds additionally require Go 1.26 and NDK 27.2.12479018, then `bash native-tools/build-httpx-android.sh` before the existing signed `build-apk.sh` workflow. Package IDs, signing configuration and certificate pins remain unchanged; never create a replacement signing key.
