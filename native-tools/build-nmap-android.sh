@@ -1,33 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORK="${RUNNER_TEMP:-/tmp}/droidmap-nmap"
-ARCHIVE="$WORK/nmap.tar.bz2"
-URL="https://github.com/kost/nmap-android/releases/download/v7.31/nmap-7.31-android-aarch64-bin.tar.bz2"
-SHA256="eb454cab7eff6296e9b0b3f60806ec732f85cdfc1634c731afeb9674e136cc00"
-
-rm -rf "$WORK"
-mkdir -p "$WORK"
-curl --fail --location --retry 3 --output "$ARCHIVE" "$URL"
-echo "$SHA256  $ARCHIVE" | sha256sum --check -
-tar --no-same-owner -xjf "$ARCHIVE" -C "$WORK"
-
-SOURCE="$WORK/nmap-7.31"
-test -x "$SOURCE/bin/nmap"
-JNI="$ROOT/app/src/main/jniLibs/arm64-v8a"
-DATA="$ROOT/app/src/main/assets/nmap-data"
-mkdir -p "$JNI" "$DATA"
-cp "$SOURCE/bin/nmap" "$JNI/libnmap.so"
-for f in nse_main.lua nmap-service-probes nmap-services nmap-protocols nmap-rpc nmap-mac-prefixes nmap-os-db nmap-payloads; do
-  test -s "$SOURCE/share/nmap/$f"
-  cp "$SOURCE/share/nmap/$f" "$DATA/$f"
-done
-rm -rf "$DATA/scripts" "$DATA/nselib"
-cp -R "$SOURCE/share/nmap/scripts" "$DATA/scripts"
-cp -R "$SOURCE/share/nmap/nselib" "$DATA/nselib"
-(cd "$DATA" && find nse_main.lua nmap-* scripts nselib -type f -print | LC_ALL=C sort > nse-files.txt)
-test -s "$DATA/scripts/script.db"
-test -s "$DATA/nse-files.txt"
-
-python3 "$ROOT/tests/verify-nmap-data.py" --assets "$DATA"
+# Package the source-built release, including matching NSE libraries and data.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK="$(mktemp -d "${RUNNER_TEMP:-/tmp}/droidmap-nmap-package.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+: "${GITHUB_REPOSITORY:=hebermattos/Droidmap}"
+gh release download nmap-android-arm64 --repo "$GITHUB_REPOSITORY" --dir "$WORK" \
+  --pattern nmap-arm64.tar.gz --pattern nmap-arm64.tar.gz.sha256
+# Accept one exact SHA-256 record for the expected archive, never arbitrary paths.
+EXPECTED="$(python3 - "$WORK/nmap-arm64.tar.gz.sha256" <<'PY'
+from pathlib import Path
+import re,sys
+record=Path(sys.argv[1]).read_text().strip()
+match=re.fullmatch(r'([0-9a-fA-F]{64})\s+\*?nmap-arm64\.tar\.gz',record)
+if not match: raise SystemExit('Invalid Nmap archive checksum record')
+print(match.group(1))
+PY
+)"
+python3 "$ROOT/native-tools/install-nmap-runtime.py" "$WORK/nmap-arm64.tar.gz" --sha256 "$EXPECTED"
+python3 "$ROOT/tests/verify-nmap-data.py" --assets "$ROOT/app/src/main/assets/nmap-data" --nmap-version 7.992

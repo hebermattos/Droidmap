@@ -28,12 +28,22 @@ The `nmap-android-arm64` artifact and the GitHub release with the same tag conta
 - `nmap-arm64.tar.gz.sha256`: complete runtime archive checksum.
 - `build-info.txt`: pinned versions and source hashes.
 
-Always keep the binary and data from the same archive together. The action
-publishes an independent runtime; the APK workflow's existing pinned Nmap 7.31
-packaging remains unchanged. Switching the APK to a new release is a separate
-integration step, including refreshing any previously installed private Nmap
-script cache and testing NSE behavior on a physical Android device. This action
-does not build an APK or change package IDs, app versions or signing keys.
+Always keep the binary and data from the same archive together. **Droidmap Android**
+downloads `nmap-arm64.tar.gz` and its checksum from the published release, checks
+archive integrity, Android ELF compatibility, version and data manifest, then
+packages the binary and matching files into the APK. Missing releases, mismatched
+checksums and invalid bundles fail the build; no older Nmap fallback is used.
+The final APK check verifies that the packaged binary hash matches its runtime
+metadata, alongside the existing package/signing identity checks.
+
+After publishing a new Nmap runtime, run **Droidmap Android** (or push the app
+changes to main) to produce the updated APK. Source compilation and APK packaging
+remain separate actions. The app's private NSE cache is identified by the runtime
+archive hash: a new runtime stages a complete new directory, activates it only
+after copying all files, then removes legacy/previous caches. A failed copy keeps
+the previous cache and reports the failure. No manual app-data clearing is needed.
+Package IDs and signing keys are preserved. Physical-device validation of NSE
+behavior is still required.
 
 For a local Linux x86-64 cross-build, install `build-essential`, `perl`,
 `pkg-config`, `flex`, `bison` and the pinned NDK, then run:
