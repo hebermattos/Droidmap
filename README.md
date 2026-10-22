@@ -208,7 +208,7 @@ SMB uses only unauthenticated SMB2 NEGOTIATE on port 445 or announced SMB TCP en
 
 ## Nmap enrichment (ARM64)
 
-The separate Nmap setting defaults to enabled in Fast mode. CI packages the checksum-pinned ARM64 Android Nmap archive and its databases/NSE files. Enrichment uses TCP connect scanning (`-sT`) without root. IPv6 commands include `-6`; link-local targets select the Wi-Fi interface with `-e`. Nmap DNS is disabled (`-n`) so PTR lookup stays in Droidmap's Wi-Fi-bound local DNS path. Service detection targets only verified-open TCP ports from the native scan and advertised endpoint checks, up to 65535 ports per host, with compact ranges in command arguments. Both Fast and Complete attempt every found device with at least one verified-open TCP port. Each Nmap service scan targets only that device’s open ports from initial TCP checks and verified advertised endpoints. Silent/closed checks and unverified announcements are excluded. There is no Nmap host-count cap; duplicate hosts/ports are removed and targets run sequentially. Cancellation can stop remaining targets. Safe vulnerability checks retain their separate evidence section and operate only on Nmap-confirmed open ports. Cancelling stops the active process. Missing ARM64 support or data records a notice and preserves native scan results.
+The separate Nmap setting defaults to enabled in Fast mode. CI downloads the published Nmap 7.992 Android ARM64 runtime, verifies its checksum and packages its matching databases/NSE files. Enrichment uses TCP connect scanning (`-sT`) without root. IPv6 commands include `-6`; link-local targets select the Wi-Fi interface with `-e`. Nmap DNS is disabled (`-n`) so PTR lookup stays in Droidmap's Wi-Fi-bound local DNS path. Service detection targets only verified-open TCP ports from the native scan and advertised endpoint checks, up to 65535 ports per host, with compact ranges in command arguments. Both Fast and Complete attempt every found device with at least one verified-open TCP port. Each Nmap service scan targets only that device’s open ports from initial TCP checks and verified advertised endpoints. Silent/closed checks and unverified announcements are excluded. There is no Nmap host-count cap; duplicate hosts/ports are removed and targets run sequentially. Cancellation can stop remaining targets. Safe vulnerability checks retain their separate evidence section and operate only on Nmap-confirmed open ports. Cancelling stops the active process. Missing ARM64 support or data records a notice and preserves native scan results.
 
 Service detection also runs `--script safe,default`, selecting scripts in either category (union, not intersection) on verified-open TCP ports in Fast and Complete modes, for IPv4 and IPv6. Nmap applies each script's host/port rules. Results are available in the service detection **View full technical log**. The separate safe vulnerability profile remains enabled. The broader script selection can increase scan duration; cancellation remains available.
 
@@ -454,5 +454,9 @@ The manual **Build Nmap for Android ARM64** action compiles pinned Nmap and
 OpenSSL sources with the Android NDK, validates the executable and complete NSE
 data, and publishes the `nmap-android-arm64` artifact and release. See
 [`native-tools/NMAP.md`](native-tools/NMAP.md) for versions, downloads and local
-build instructions. The action builds an independent runtime; the existing APK
-packaging and signing remain unchanged.
+build instructions. **Droidmap Android** downloads this release and integrates the
+binary and matching NSE files into the update APK, failing if integrity or runtime
+checks fail. The final APK verifies the binary against its bundled identity.
+Private Nmap data is staged by archive hash on first use, so an app update replaces
+legacy/stale scripts without clearing scan history or app settings. Package IDs,
+signing configuration and certificate pins remain unchanged.

@@ -28,7 +28,13 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Package pinned ARM64 Nmap
+      - name: Test Nmap runtime integration
+        run: |
+          python3 tests/test-nmap-data.py
+          python3 tests/test-install-nmap-runtime.py
+      - name: Integrate published Nmap Android runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bash native-tools/build-nmap-android.sh
       - name: Fetch optional Nuclei Android runtime
         env:
@@ -80,7 +86,7 @@ jobs:
       - name: Test, build and lint Android app
         run: bash build-apk.sh --no-daemon
       - name: Verify packaged Nmap runtime data
-        run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk
+        run: python3 tests/verify-nmap-data.py --apk app/build/outputs/apk/debug/app-debug.apk --nmap-version 7.992
       - name: Verify Nuclei packaged in APK
         shell: bash
         run: |

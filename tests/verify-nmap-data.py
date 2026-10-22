@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Check Nmap's installed-file manifest in extracted assets and in the final APK."""
 import argparse
+import hashlib
+import re
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -52,6 +54,14 @@ def main():
             files = {info.filename[len(prefix):]: info.file_size for info in apk.infolist()
                      if info.filename.startswith(prefix) and not info.is_dir()}
             verify(files, apk.read(prefix + 'nse-files.txt').decode('utf-8'), args.nmap_version)
+            if args.nmap_version == '7.992':
+                runtime_id = apk.read(prefix+'runtime-id.txt').decode('ascii').strip()
+                expected = apk.read(prefix+'runtime-binary.sha256').decode('ascii').strip()
+                if not re.fullmatch('[0-9a-f]{64}', runtime_id) or not re.fullmatch('[0-9a-f]{64}', expected):
+                    raise ValueError('Missing or invalid packaged Nmap identity')
+                actual = hashlib.sha256(apk.read('lib/arm64-v8a/libnmap.so')).hexdigest()
+                if actual != expected:
+                    raise ValueError('Packaged Nmap binary does not match installed runtime metadata')
             if apk.getinfo('lib/arm64-v8a/libnmap.so').file_size <= 0:
                 raise ValueError('Missing packaged ARM64 Nmap executable')
 

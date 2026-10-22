@@ -82,18 +82,6 @@ final class NmapEnricher {
     }
 
     private static File installData(Context context) throws IOException {
-        File dir=new File(context.getFilesDir(),"nmap-data");
-        if(!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create data directory");
-        List<String> names=new ArrayList<>(Arrays.asList("nse_main.lua","nmap-service-probes","nmap-services","nmap-protocols","nmap-rpc","scripts/script.db"));
-        try(BufferedReader manifest=new BufferedReader(new InputStreamReader(context.getAssets().open("nmap-data/nse-files.txt")))) { String line; while((line=manifest.readLine())!=null) if(!line.trim().isEmpty()&&!names.contains(line)) names.add(line); }
-        for(String name:names) {
-            File target=new File(dir,name);
-            if(target.isFile() && target.length()>0) continue;
-            File parent=target.getParentFile(); if(parent!=null&&!parent.isDirectory()&&!parent.mkdirs()) throw new IOException("cannot create Nmap data subdirectory");
-            try(InputStream in=context.getAssets().open("nmap-data/"+name); OutputStream out=new FileOutputStream(target)) {
-                byte[] buffer=new byte[8192]; int read; while((read=in.read(buffer))!=-1) out.write(buffer,0,read);
-            }
-        }
-        return dir;
+        return NmapDataFiles.install(context.getFilesDir(),name->context.getAssets().open("nmap-data/"+name));
     }
 }
