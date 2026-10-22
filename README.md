@@ -435,3 +435,12 @@ The initial page still offers only Wi-Fi and Bluetooth; Clear All stays beside O
 - **Bluetooth** keeps device counts, current status, overall duration and the nearest active countdown in the compact summary. **Reception and timing details** expands BLE/Classic observation counts, last reception time and all phase timers; its expansion state survives rotation. Unlimited timers show elapsed time, and stopped timers stay frozen. New scan and Export JSON share an action row after results are available.
 
 This changes presentation only: scan permissions, cancellation, endpoint authorization, session bounds, package IDs, certificate pins and signing configuration are unchanged.
+
+### Build the Nmap Android runtime
+
+The manual **Build Nmap for Android ARM64** action compiles pinned Nmap and
+OpenSSL sources with the Android NDK, validates the executable and complete NSE
+data, and publishes the `nmap-android-arm64` artifact and release. See
+[`native-tools/NMAP.md`](native-tools/NMAP.md) for versions, downloads and local
+build instructions. The action builds an independent runtime; the existing APK
+packaging and signing remain unchanged.
