@@ -88,7 +88,7 @@ public final class ScanService extends Service {
             if(Build.VERSION.SDK_INT>=29) startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
             else startForeground(NOTIFICATION,notification);
             scanner=new TcpScanner();
-            if ("nmap".equals(tool) || "nuclei".equals(tool)) {
+            if ("nmap".equals(tool) || "nuclei".equals(tool) || "httpx".equals(tool)) {
                 TcpScanner controller=scanner;
                 worker.execute(() -> analyzeDiscovery(plan,target,runId,controller));
                 return START_NOT_STICKY;
@@ -258,7 +258,7 @@ public final class ScanService extends Service {
                 }
             }
             // A prior Nmap result can establish HTTP on this exact selected endpoint.
-            if("nuclei".equals(tool)) {
+            if("nuclei".equals(tool)||"httpx".equals(tool)) {
                 org.json.JSONArray attempts=SessionAnalyses.runs(session);
                 for(int i=0;i<attempts.length();i++) {
                     JSONObject attempt=attempts.getJSONObject(i);
@@ -268,6 +268,13 @@ public final class ScanService extends Service {
                             evidence.add(selectedIp,item.source,item.field,item.value);
                 }
             }
+            if("httpx".equals(tool)) {
+                String scheme=WebEndpoints.scheme(evidence.snapshot().getOrDefault(selectedIp,Collections.emptyList()),selectedPort);
+                // Keep HTTPX's bounded observation budget independent of Discovery evidence.
+                evidence=new DeviceEvidence(Collections.singletonList(selectedIp));
+                if(!scheme.isEmpty()) evidence.add(selectedIp,(scheme.equals("https")?"HTTPS":"HTTP")+" tcp/"+selectedPort,
+                        "webUrl",WebEndpoints.url(scheme,selectedIp,selectedPort));
+            }
             final String[] toolLog={""};
             List<String> notices;
             if("nmap".equals(tool)) {
@@ -276,6 +283,10 @@ public final class ScanService extends Service {
                         controller::isCancelled,message->{toolLog[0]=message;
                             main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
                                 publish(message,0,true);});});
+            } else if("httpx".equals(tool)) {
+                notices=HttpxEnricher.enrich(this,evidence,selectedIp,selectedPort,controller::isCancelled,
+                        message->{toolLog[0]=message;main.post(()->{if(!destroyed && scanner==controller && !controller.isCancelled())
+                            publish(message,0,true);});});
             } else {
                 main.post(()->{if(!destroyed&&scanner==controller)publish("Running Nuclei on open web ports…",0,true);});
                 notices=NucleiEnricher.enrich(this,evidence,verifiedPorts,nucleiCoverage,controller::isCancelled,
@@ -286,13 +297,14 @@ public final class ScanService extends Service {
             String attemptStatus=SessionAnalyses.status(tool,observations,controller.isCancelled());
             if(observations.stream().noneMatch(item -> "nmap".equals(tool)
                     ? item.source.equals("Nmap") && item.field.equals("scanStatus")
+                    : "httpx".equals(tool) ? item.source.equals("HTTPX tcp/"+selectedPort) && item.field.equals("scanStatus")
                     : item.source.equals("Nuclei") && item.field.equals("endpoint:"+selectedPort))) {
                 observations=new ArrayList<>(observations);
                 String diagnostic=notices.isEmpty()?"No execution recorded":notices.get(0);
-                observations.add(new DeviceEvidence.Observation("nmap".equals(tool)?"Nmap":"Nuclei",
-                        "nmap".equals(tool)?"scanStatus":"endpoint:"+selectedPort,
+                observations.add(new DeviceEvidence.Observation("nmap".equals(tool)?"Nmap":"httpx".equals(tool)?"HTTPX tcp/"+selectedPort:"Nuclei",
+                        !"nuclei".equals(tool)?"scanStatus":"endpoint:"+selectedPort,
                         "nmap".equals(tool)?(controller.isCancelled()?"Cancelled: ":"Failed: ")+diagnostic
-                                :"http/https • "+attemptStatus+" • "+DeviceEvidence.clean(diagnostic)));
+                                :"httpx".equals(tool)?attemptStatus:"http/https • "+attemptStatus+" • "+DeviceEvidence.clean(diagnostic)));
             }
             boolean networkChanged=!networkScope.equals(NetworkScope.current(this,plan));
             if(networkChanged) {
@@ -308,7 +320,7 @@ public final class ScanService extends Service {
                     .put("templates",new org.json.JSONArray(NucleiTemplates.files(nucleiCoverage)))
                     .put("configuredTemplateCount",NucleiTemplates.files(nucleiCoverage).size())
                     .put("successfulTemplateCount",JSONObject.NULL));
-            else attempt.put("nmapCustomArgs",nmapArgs).put("nmapVersionIntensity",nmapVersionIntensity);
+            else if("nmap".equals(tool)) attempt.put("nmapCustomArgs",nmapArgs).put("nmapVersionIntensity",nmapVersionIntensity);
             JSONObject combined=SessionAnalyses.append(data,session,attempt);
             combined.put("networkChanged",networkChanged);
             ScanSnapshot finished=new ScanSnapshot(started,false,false,open.size(),open.size(),target,

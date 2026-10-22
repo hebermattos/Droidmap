@@ -179,9 +179,10 @@ public final class MainActivity extends Activity {
         // Analysis panels only provide progress, stop and result toggles for a selected endpoint.
         addToolButton(wifiPage, "Nmap results", "Selected IP and port Nmap results", "nmap");
         addToolButton(wifiPage, "Nuclei results", "Selected IP and port Nuclei results", "nuclei");
+        addToolButton(wifiPage, "Web analysis results", "Selected IP and port HTTPX results", "httpx");
         bluetoothPanel = new BluetoothPanel(this, bluetoothPage, () -> scanRunning || startingScan, state);
         activeTool = state == null ? "discovery" : state.getString("activeTool", "discovery");
-        for (String tool : new String[] {"nmap", "nuclei"}) {
+        for (String tool : new String[] {"nmap", "nuclei", "httpx"}) {
             String endpoint = state == null ? "" : state.getString(tool + "Endpoint", "");
             if (!endpoint.isEmpty()) toolEndpoints.put(tool, endpoint);
         }
@@ -201,7 +202,8 @@ public final class MainActivity extends Activity {
         setContentView(page);
         resultsRenderer = new DeviceResultsRenderer(this, deviceList, scroll, expandedDevices, this::showNmapOutput,
                 (ip, port) -> runSelectedPort("nmap", ip, port),
-                (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
+                (ip, port) -> runSelectedPort("nuclei", ip, port),
+                (ip, port) -> runSelectedPort("httpx", ip, port), this::searchAllPorts);
         if (state != null) {
             pendingScan = state.getParcelable("pendingScan");
             exporter.restore(state);
@@ -330,7 +332,7 @@ public final class MainActivity extends Activity {
             String tool = entry.getKey();
             Button button = entry.getValue();
             boolean active = (scanRunning || startingScan) && tool.equals(activeTool);
-            String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "Nuclei";
+            String name = "discovery".equals(tool) ? "Discovery" : "nmap".equals(tool) ? "Nmap" : "httpx".equals(tool) ? "Web analysis" : "Nuclei";
             boolean discovery = "discovery".equals(tool);
             String endpoint = toolEndpoints.getOrDefault(tool, "");
             if (active && !endpoint.isEmpty()) name += " · " + endpoint;
@@ -426,7 +428,8 @@ public final class MainActivity extends Activity {
         DeviceResultsRenderer inline = new DeviceResultsRenderer(this, content, new ScrollView(this),
                 expandedDevices, this::showNmapOutput,
                 (ip, port) -> runSelectedPort("nmap", ip, port),
-                (ip, port) -> runSelectedPort("nuclei", ip, port), this::searchAllPorts);
+                (ip, port) -> runSelectedPort("nuclei", ip, port),
+                (ip, port) -> runSelectedPort("httpx", ip, port), this::searchAllPorts);
         inline.render(payload);
         ((android.view.View) content.getParent()).setVisibility(payload.isEmpty() || keepCollapsed
                 ? android.view.View.GONE : android.view.View.VISIBLE);
@@ -438,7 +441,7 @@ public final class MainActivity extends Activity {
             org.json.JSONObject data = new org.json.JSONObject(payload);
             if (data.optJSONArray("analysisRuns") == null) return;
             renderToolReport("discovery",new org.json.JSONObject(payload).put("tool","discovery").toString());
-            for (String tool:new String[]{"nmap","nuclei"}) {
+            for (String tool:new String[]{"nmap","nuclei","httpx"}) {
                 org.json.JSONArray runs=SessionAnalyses.runs(data);
                 for(int i=0;i<runs.length();i++) if(tool.equals(runs.getJSONObject(i).optString("tool"))) {
                     renderToolReport(tool,new org.json.JSONObject(payload).put("tool",tool).toString());
@@ -878,7 +881,7 @@ public final class MainActivity extends Activity {
             Toast.makeText(this, "Choose an open IP and port from Discovery.", Toast.LENGTH_LONG).show();
             return;
         }
-        if (("nmap".equals(tool) || "nuclei".equals(tool)) && !hasDiscoveryResults()) {
+        if (("nmap".equals(tool) || "nuclei".equals(tool) || "httpx".equals(tool)) && !hasDiscoveryResults()) {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("Discovery required")
                     .setMessage("Run Discover devices first. Tools analyze verified-open TCP ports from that discovery.")
@@ -961,7 +964,7 @@ public final class MainActivity extends Activity {
                 toolEndpoints.put(activeTool, request.getStringExtra("selectedIp") + ":"
                         + request.getIntExtra("selectedPort", 0));
             } else {
-                for (String tool : new String[] {"nmap", "nuclei"}) {
+                for (String tool : new String[] {"nmap", "nuclei", "httpx"}) {
                     toolEndpoints.remove(tool);
                     toolEndpointCounts.remove(tool);
                     toolReports.remove(tool);
