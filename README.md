@@ -447,3 +447,12 @@ HTTPX sends GET requests only to the selected literal IP/port using its confirme
 Response reads are capped at 256 KiB; process output at 512 KiB; each request has a ten-second timeout with no retries and the process a 45-second budget. Stop forcibly terminates the process. Export retains bounded metadata, not raw response bodies. The Android ARM64 runtime is compiled in Android CI from pinned ProjectDiscovery HTTPX source with a strict TLS dialer; a host smoke test checks HTTP metadata, redirects and certificate rejection before cross-compilation. Other Android ABIs report the runtime as unavailable. Physical-device runtime and UI validation remain necessary.
 
 Local builds additionally require Go 1.26 and NDK 27.2.12479018, then `bash native-tools/build-httpx-android.sh` before the existing signed `build-apk.sh` workflow. Package IDs, signing configuration and certificate pins remain unchanged; never create a replacement signing key.
+
+### Build the Nmap Android runtime
+
+The manual **Build Nmap for Android ARM64** action compiles pinned Nmap and
+OpenSSL sources with the Android NDK, validates the executable and complete NSE
+data, and publishes the `nmap-android-arm64` artifact and release. See
+[`native-tools/NMAP.md`](native-tools/NMAP.md) for versions, downloads and local
+build instructions. The action builds an independent runtime; the existing APK
+packaging and signing remain unchanged.

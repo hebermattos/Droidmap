@@ -1,0 +1,73 @@
+name: Build Nmap for Android ARM64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-nmap-android-arm64
+  cancel-in-progress: false
+
+jobs:
+  build-nmap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Droidmap
+        uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential perl pkg-config flex bison
+      - name: Install Android NDK using runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?GitHub Ubuntu runner Android SDK is missing}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | sort -V | tail -1)"
+          fi
+          [[ -x "$SDKMANAGER" ]] || { echo "sdkmanager not available" >&2; exit 1; }
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'ndk;27.2.12479018'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Test runtime data validation
+        run: python3 tests/test-nmap-data.py
+      - name: Cross-compile pinned Nmap and OpenSSL for Android ARM64
+        run: bash native-tools/compile-nmap-android.sh
+      - name: Verify published archive contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist/nmap-android-arm64
+          sha256sum --check libnmap.so.sha256
+          sha256sum --check nmap-arm64.tar.gz.sha256
+          mkdir "$RUNNER_TEMP/nmap-runtime-check"
+          tar -xzf nmap-arm64.tar.gz -C "$RUNNER_TEMP/nmap-runtime-check"
+          cmp libnmap.so "$RUNNER_TEMP/nmap-runtime-check/libnmap.so"
+          python3 "$GITHUB_WORKSPACE/tests/verify-nmap-elf.py" "$RUNNER_TEMP/nmap-runtime-check/libnmap.so"
+          python3 "$GITHUB_WORKSPACE/tests/verify-nmap-data.py" --assets "$RUNNER_TEMP/nmap-runtime-check/nmap-data" --nmap-version 7.992
+      - name: Save compiled binary and complete runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmap-android-arm64
+          path: |
+            dist/nmap-android-arm64/libnmap.so
+            dist/nmap-android-arm64/libnmap.so.sha256
+            dist/nmap-android-arm64/nmap-arm64.tar.gz
+            dist/nmap-android-arm64/nmap-arm64.tar.gz.sha256
+            dist/nmap-android-arm64/build-info.txt
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish release for Droidmap Android builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=nmap-android-arm64
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Nmap Android ARM64 runtime" --notes "Nmap 7.992 with static OpenSSL 3.5.9, built for Android API 26 ARM64. Archive includes matching NSE scripts and data. Verify runtime behavior on-device before replacing the APK runtime." --latest=false
+          fi
+          gh release upload "$TAG" dist/nmap-android-arm64/* --clobber
