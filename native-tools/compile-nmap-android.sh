@@ -81,6 +81,7 @@ Nmap source SHA-256: $NMAP_SHA256
 OpenSSL $OPENSSL_VERSION (static)
 OpenSSL source SHA-256: $OPENSSL_SHA256
 Local patch: libdnet IPv6 gateway copied into struct in6_addr for Android IN6_* compatibility.
+Upstream patch: 29cb897062d0b803e5d00fb6419b131c6fad3123 (NSE version_intensity registry, GH#3557).
 Android NDK 27.2.12479018; API 26; ARM64; PIE; 16 KiB maximum page alignment
 NSE/Lua, PCRE2, libpcap, libdnet and libssh2 enabled; Ncat/Nping/Ndiff excluded.
 Host ELF/data verification does not establish runtime compatibility on a physical device.

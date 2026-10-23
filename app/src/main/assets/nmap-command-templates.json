@@ -72,7 +72,7 @@
   },
   "profiles": {
     "serviceDetection": {
-      "description": "TCP connect scanning with configurable service/version detection and the union of safe and default NSE scripts.",
+      "description": "TCP connect scanning with configurable service/version detection and safe/default NSE scripts excluding broadcast, external queries and target expansion.",
       "argv": [
         "--datadir",
         "{dataDir}",
@@ -86,7 +86,7 @@
         "--version-intensity",
         "{versionIntensity}",
         "--script",
-        "safe,default",
+        "(default or safe) and not broadcast and not external and not targets-*",
         "--max-retries",
         "1",
         "-p",
@@ -106,7 +106,7 @@
       ]
     },
     "vulnerabilityDetection": {
-      "description": "Detect services on confirmed-open TCP ports, then let NSE port/service rules choose applicable safe-category vulnerability scripts, including services on nonstandard ports.",
+      "description": "Detect services on confirmed-open TCP ports, then let NSE port/service rules choose applicable safe-category vulnerability scripts, including services on nonstandard ports; exclude broadcast, external queries and target expansion.",
       "requires": "Successful preceding service detection with at least one Nmap-confirmed open port.",
       "skipWhen": "openPorts is empty",
       "argv": [
@@ -122,7 +122,7 @@
         "{versionIntensity}",
         "-Pn",
         "--script",
-        "(vuln and safe) and not brute and not dos and not intrusive and not exploit",
+        "(vuln and safe) and not brute and not dos and not intrusive and not exploit and not broadcast and not external and not targets-*",
         "--max-retries",
         "1",
         "-p",

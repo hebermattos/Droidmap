@@ -14,6 +14,20 @@ A small checked source patch converts libdnet's IPv6 gateway to the correct
 `struct in6_addr` type before using Android's `IN6_*` macros. It does not change
 the gateway address or route semantics.
 
+The patch script also backports upstream commit
+[`29cb897062d0b803e5d00fb6419b131c6fad3123`](https://github.com/nmap/nmap/commit/29cb897062d0b803e5d00fb6419b131c6fad3123)
+for [Nmap issue #3557](https://github.com/nmap/nmap/issues/3557). Nmap 7.992's
+lazy loading removed the global Lua `nmap` table, but `version_intensity()` still
+read it. Capturing `nmap.registry` as a closure upvalue restores version-script
+rules, including `rpcinfo`, `rpc-grind`, `skypev2-version` and `vmware-version`.
+The patch fails on unexpected source contents instead of silently skipping a fix.
+Both patches are recorded in the runtime's `build-info.txt`.
+
+**After this source patch, rebuild and publish the Nmap runtime first, then run
+Droidmap Android again.** A push to main alone still downloads the previously
+published runtime. Replacing NSE data without rebuilding the native executable
+does not fix this regression.
+
 The workflow checks the ELF architecture, Android linker, PIE format, 16 KiB
 segment alignment and shared-library dependencies. It also verifies the complete
 NSE data manifest before packaging and again after extracting the archive.
@@ -57,3 +71,16 @@ Output defaults to `dist/nmap-android-arm64`. `NMAP_OUTPUT_DIR` can override it;
 `NMAP_BUILD_JOBS` controls build parallelism. Temporary sources are isolated in a
 unique directory and removed when the script exits. Do not commit generated
 binaries or archives.
+
+For a host-native Nmap 7.992 build made from the same patched source, the NSE
+regression check runs a synthetic pre-scan script on loopback with discovery
+and port scanning disabled, then validates both packaged selection expressions:
+
+```bash
+python3 tests/test-nmap-nse.py --binary /path/to/host/nmap --data-dir /path/to/nmap-7.992
+```
+
+The test selects the synthetic script by category: selecting it by explicit name
+would bypass the affected registry lookup and hide the regression. It checks both
+`--version-intensity` and the `script-intensity` override. This host check cannot
+execute the Android ARM64 binary or replace physical-device validation.

@@ -21,7 +21,7 @@ public final class NmapCommandTests {
         check(command.get(command.indexOf("-oN")+1).equals("-"),"Normal text is explicitly sent to stdout");
         check(command.get(command.indexOf("-oX")+1).equals("/data/temporary scan.xml"),"XML file is separate from readable stdout and remains one argv token");
         check(Collections.frequency(command,"--script")==1, "Service scan selects NSE scripts once");
-        check(command.get(command.indexOf("--script")+1).equals("safe,default"), "Run the union of safe and default categories as one argv token");
+        check(command.get(command.indexOf("--script")+1).equals("(default or safe) and not broadcast and not external and not targets-*"), "Keep the local safe/default expression as one argv token");
         check(command.get(0).equals("/data/lib/libnmap.so"), "Select runtime binary");
         check(command.contains("80,443") && !command.contains("200ms"), "Bind ports without imposing scanner timeout");
         check(!command.contains("-6") && !command.contains("-e"), "IPv4 omits IPv6 flags");
@@ -30,12 +30,12 @@ public final class NmapCommandTests {
         values = bindings(template,"nmap", "data", "fe80::10%wlan0", List.of(443), 99);
         command = template.command(template.services, "fe80::10%wlan0", values);
         check(command.contains("-6") && command.contains("-e") && command.contains("wlan0"), "Apply IPv6 conditional argument groups");
-        check(command.get(command.indexOf("--script")+1).equals("safe,default"), "IPv6 uses the same safe/default script selection");
+        check(command.get(command.indexOf("--script")+1).equals("(default or safe) and not broadcast and not external and not targets-*"), "IPv6 uses the same local safe/default script selection");
         check(command.get(command.size()-1).equals("fe80::10"), "Strip zone from literal target");
         check(values.get("timeoutMs").equals("100"), "Retain optional timeout binding for custom templates");
         check(bindings(template,"nmap","data","fd00::10",List.of(80),4000).get("timeoutMs").equals("3000"), "Clamp optional custom timeout binding");
         List<String> vuln = template.command(template.vulnerabilities, "192.168.0.109", bindings(template,"nmap","data","192.168.0.109",List.of(443),200));
-        check(vuln.get(vuln.indexOf("--script")+1).equals("(vuln and safe) and not brute and not dos and not intrusive and not exploit"), "Keep NSE expression as one argv token");
+        check(vuln.get(vuln.indexOf("--script")+1).equals("(vuln and safe) and not brute and not dos and not intrusive and not exploit and not broadcast and not external and not targets-*"), "Keep NSE expression as one argv token");
         check(vuln.get(vuln.indexOf("--datadir")+1).equals("data"), "Vulnerability scan explicitly selects installed NSE data");
         check(vuln.contains("443"), "Bind confirmed open ports");
         check(vuln.contains("-sV") && vuln.get(vuln.indexOf("--version-intensity")+1).equals("2"), "Detect actual services before vulnerability script rules, including nonstandard ports");
