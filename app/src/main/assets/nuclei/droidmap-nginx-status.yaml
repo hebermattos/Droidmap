@@ -1,0 +1,17 @@
+id: droidmap-nginx-status
+info:
+  name: "Nginx connection counters exposed"
+  author: droidmap
+  severity: info
+  description: "Nginx stub-status counters are visible. Review whether operational metrics should be accessible on this network; this is an informational exposure, not proof of exploitation."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/nginx_status"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"body","regex":["(?m)^Active connections:\\s*\\d+\\s*$","(?m)^server accepts handled requests\\s*$","(?m)^Reading:\\s*\\d+\\s+Writing:\\s*\\d+\\s+Waiting:\\s*\\d+\\s*$"],"condition":"and"}
+

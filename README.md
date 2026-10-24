@@ -2,7 +2,7 @@
 
 Droidmap is a standalone Android app for discovering devices on a local Wi-Fi network and nearby Bluetooth devices. It combines TCP connect scanning, protocol evidence, optional ARM64 Nmap/Nuclei analysis and ProjectDiscovery HTTPX web metadata collection.
 
-The app uses native Android UI and Java 17, requires Android 8.0+ (API 26), and does not require root. The current app version is **0.17.2**. The home screen has two areas: **Wi-Fi** and **Bluetooth**.
+The app uses native Android UI and Java 17, requires Android 8.0+ (API 26), and does not require root. The current app version is **0.17.3**. The home screen has two areas: **Wi-Fi** and **Bluetooth**.
 
 ## Contents
 
@@ -107,15 +107,17 @@ The source-built Nmap runtime pins Nmap **7.992**, OpenSSL **3.5.9** and NDK **2
 
 ### Nuclei
 
-**Options → Nuclei** selects offline HTTP coverage groups. All three are enabled by default; each group contains three bundled templates:
+**Options → Nuclei** selects offline HTTP coverage groups. All three are enabled by default; each group contains seven bundled templates. Saved group selections keep their existing meaning and include the additional checks in those groups:
 
 | Group | Checks |
 | --- | --- |
-| File exposures | Git HEAD, environment configuration, Git configuration |
-| HTTP configuration | Missing security headers, directory listing, Apache status counters |
-| Diagnostic interfaces | OpenAPI, Spring Actuator discovery, Prometheus metrics |
+| File exposures | Git HEAD/configuration, environment configuration, Subversion entries, Mercurial configuration, npm credentials, WordPress configuration backup |
+| HTTP configuration | Missing security headers, directory listing, Apache status counters, credentialed CORS trusting the probe origin, Docker container listing, Kubernetes namespaces, CouchDB database names |
+| Diagnostic interfaces | OpenAPI, Spring Actuator discovery/environment, Prometheus metrics, PHP information, Nginx counters, Jolokia version |
 
-The explicit allowlist uses only the selected template files. Bundled templates send GET requests and do not follow redirects. This is a bounded set of nine checks, not the complete upstream template collection or a complete CVE assessment. Diagnostic interfaces and missing headers are informational; other matches need verification.
+The explicit allowlist uses only the selected template files. Bundled templates send GET requests to fixed paths on the selected endpoint and do not follow redirects. The CORS check sends a synthetic Origin header; it does not contact that origin. This is a bounded set of 21 templates, not the complete upstream template collection or a complete CVE assessment. API listings are checked without supplied credentials; they do not establish write access. Empty listings or nonstandard endpoint paths can remain undetected.
+
+OpenAPI, Actuator discovery, Prometheus/Nginx counters, Jolokia version and missing headers are informational. PHP configuration, Actuator environment metadata and credential/configuration exposures are review findings with descriptions explaining their limits and suggested remediation. Sanitized Actuator values are not assumed to contain secrets, and CORS headers alone do not establish data theft. No secret values are extracted into findings. New checks require HTTP 200 plus endpoint-specific response signatures; generic login pages, protected responses and redirects are not positive matches. Each result still requires review in its deployment context.
 
 Exports record selected groups, template filenames and configured counts. `successfulTemplateCount` is unavailable (`null`); configured coverage and process completion are not counts of successful checks. Nuclei has no app-wide execution deadline; use Stop to cancel.
 

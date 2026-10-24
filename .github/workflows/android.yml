@@ -32,6 +32,21 @@ jobs:
         run: |
           python3 tests/test-nmap-data.py
           python3 tests/test-install-nmap-runtime.py
+      - name: Test bundled Nuclei templates with the pinned host engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST_DIR="$RUNNER_TEMP/nuclei-host"
+          mkdir -p "$HOST_DIR"
+          # Match the source version in build-nuclei-android.yml; never run an unpinned engine.
+          gh release download v3.11.1 --repo projectdiscovery/nuclei \
+            --pattern nuclei_3.11.1_linux_amd64.zip --dir "$HOST_DIR"
+          echo "ea63d4ae232808cd7c6bc00d0142428e231fab59dae01042246097d195835ab6  $HOST_DIR/nuclei_3.11.1_linux_amd64.zip" | sha256sum --check
+          unzip -j "$HOST_DIR/nuclei_3.11.1_linux_amd64.zip" nuclei -d "$HOST_DIR"
+          chmod +x "$HOST_DIR/nuclei"
+          python3 tests/test-nuclei-templates.py "$HOST_DIR/nuclei"
       - name: Integrate published Nmap Android runtime
         env:
           GH_TOKEN: ${{ github.token }}

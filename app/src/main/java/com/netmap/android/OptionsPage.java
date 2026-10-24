@@ -67,7 +67,8 @@ final class OptionsPage {
         CheckBox[] coverage = new CheckBox[NucleiTemplates.LABELS.length];
         for (int i=0;i<coverage.length;i++) {
             coverage[i] = new CheckBox(activity);
-            coverage[i].setText(NucleiTemplates.LABELS[i] + " · 3 templates");
+            coverage[i].setText(NucleiTemplates.LABELS[i] + " · "
+                    + NucleiTemplates.files(1 << i).size() + " templates");
             coverage[i].setChecked((coverageMask & (1 << i)) != 0);
             coverage[i].setEnabled(!scanning);
             nucleiForm.addView(coverage[i]);

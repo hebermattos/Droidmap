@@ -1,0 +1,18 @@
+id: droidmap-jolokia-version
+info:
+  name: "Jolokia management agent version exposed"
+  author: droidmap
+  severity: info
+  description: "A Jolokia version response is accessible. Review management endpoint authentication and network exposure. This check does not execute JMX operations or establish privileged access."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/jolokia/version"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"header","regex":["(?im)^content-type\\s*:\\s*application/(?:[a-z0-9.+-]*\\+)?json\\b"]}
+      - {"type":"regex","part":"body","regex":["\"agent\"\\s*:\\s*\"[^\"]+\"","\"protocol\"\\s*:\\s*\"[^\"]+\"","\"type\"\\s*:\\s*\"version\"","\"status\"\\s*:\\s*200"],"condition":"and"}
+

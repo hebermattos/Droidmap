@@ -1,0 +1,18 @@
+id: droidmap-couchdb-databases
+info:
+  name: "CouchDB database names accessible without supplied credentials"
+  author: droidmap
+  severity: medium
+  description: "A CouchDB-style database listing including system database names is accessible without supplied credentials. Review anonymous access and firewall rules. Document access and write permissions were not tested."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/_all_dbs"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"header","regex":["(?im)^content-type\\s*:\\s*application/(?:[a-z0-9.+-]*\\+)?json\\b"]}
+      - {"type":"regex","part":"body","regex":["(?s)^\\s*\\[\\s*\"[^\"]+\"(?:\\s*,\\s*\"[^\"]+\")*\\s*\\]\\s*$","\"_(?:users|replicator)\""],"condition":"and"}
+

@@ -1,0 +1,18 @@
+id: droidmap-docker-containers
+info:
+  name: "Docker container listing accessible without supplied credentials"
+  author: droidmap
+  severity: high
+  description: "The Docker API returned container inventory without credentials from this scanner. Restrict the management API to trusted authenticated clients. This read-only check does not attempt container control."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/containers/json"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"header","regex":["(?im)^content-type\\s*:\\s*application/(?:[a-z0-9.+-]*\\+)?json\\b"]}
+      - {"type":"regex","part":"body","regex":["(?s)^\\s*\\[\\s*\\{","\"Id\"\\s*:\\s*\"[a-fA-F0-9]{12,64}\"","\"Image\"\\s*:\\s*\"[^\"]+\"","\"State\"\\s*:\\s*\"[^\"]+\""],"condition":"and"}
+
