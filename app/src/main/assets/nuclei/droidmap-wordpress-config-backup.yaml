@@ -1,0 +1,18 @@
+id: droidmap-wordpress-config-backup
+info:
+  name: "Exposed WordPress configuration backup"
+  author: droidmap
+  severity: high
+  description: "A backup contains WordPress PHP database configuration. Remove it from the web root, block backup files and review or rotate exposed database credentials. Secret values are not extracted."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-config.php.bak"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"word","part":"body","words":["<?php","DB_NAME","DB_PASSWORD"],"condition":"and"}
+      - {"type":"regex","part":"body","regex":["define\\s*\\(\\s*[\\x22\\x27]DB_PASSWORD[\\x22\\x27]\\s*,"]}
+

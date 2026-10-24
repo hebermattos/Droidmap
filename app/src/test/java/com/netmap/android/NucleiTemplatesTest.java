@@ -8,7 +8,8 @@ public class NucleiTemplatesTest {
     @Test public void eachSelectionHasOnlyItsOwnBundledTemplates() throws Exception {
         Set<String> all=new HashSet<>();
         for(int mask=1;mask<=NucleiTemplates.ALL;mask++) {
-            assertEquals(Integer.bitCount(mask)*3,NucleiTemplates.files(mask).size());
+            assertEquals(Integer.bitCount(mask)*7,NucleiTemplates.files(mask).size());
+            assertEquals(NucleiTemplates.files(mask).size(),new HashSet<>(NucleiTemplates.files(mask)).size());
             assertEquals(Integer.bitCount(mask),NucleiTemplates.groups(mask).size());
             for(String name:NucleiTemplates.files(mask)) {
                 try(var input=getClass().getClassLoader().getResourceAsStream("nuclei/"+name)) {
@@ -19,9 +20,14 @@ public class NucleiTemplatesTest {
                 all.add(name);
             }
         }
-        assertEquals(9,all.size());
+        assertEquals(21,all.size());
         assertFalse(NucleiTemplates.files(1).contains("droidmap-security-headers.yaml"));
         assertFalse(NucleiTemplates.files(4).contains("droidmap-env-exposure.yaml"));
+        assertTrue(NucleiTemplates.files(1).contains("droidmap-npmrc.yaml"));
+        assertFalse(NucleiTemplates.files(2).contains("droidmap-npmrc.yaml"));
+        assertTrue(NucleiTemplates.files(2).contains("droidmap-cors-credentials.yaml"));
+        assertTrue(NucleiTemplates.files(4).contains("droidmap-actuator-env.yaml"));
+        assertTrue(NucleiTemplates.summary(7).contains("21 configured templates"));
         for(int mask:new int[]{0,-1,8,15})try {NucleiTemplates.validate(mask);fail("Invalid mask "+mask);}
         catch(IllegalArgumentException expected) { }
     }

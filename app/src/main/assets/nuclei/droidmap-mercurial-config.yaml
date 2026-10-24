@@ -1,0 +1,17 @@
+id: droidmap-mercurial-config
+info:
+  name: "Exposed Mercurial repository configuration"
+  author: droidmap
+  severity: medium
+  description: "Mercurial repository configuration is readable and can disclose repository locations. Remove repository metadata from the web root."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.hg/hgrc"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"body","regex":["(?m)^\\s*\\[paths\\]\\s*$","(?m)^\\s*default\\s*=\\s*\\S+"],"condition":"and"}
+

@@ -1,0 +1,17 @@
+id: droidmap-svn-entries
+info:
+  name: "Exposed Subversion working copy metadata"
+  author: droidmap
+  severity: medium
+  description: "Subversion working-copy entries are readable. Remove version-control directories from the web root and deny access to hidden files."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.svn/entries"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"body","regex":["(?s)<wc-entries\\b[^>]*>.*<entry\\b","(?m)^\\d+\\r?\\n\\r?\\ndir\\r?$"],"condition":"or"}
+

@@ -1,0 +1,17 @@
+id: droidmap-npmrc
+info:
+  name: "Exposed npm authentication configuration"
+  author: droidmap
+  severity: high
+  description: "An npm configuration file contains an authentication setting. Block access, remove the file from the web root and review or rotate any exposed credentials. Secret values are not extracted."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.npmrc"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"body","regex":["(?m)^\\s*(?://[^\\s]+/:)?(?:_authToken|_auth|_password)\\s*=\\s*[^\\s$][^\\r\\n]*"]}
+

@@ -8,9 +8,15 @@ final class NucleiTemplates {
     static final String[] LABELS = {"File exposures", "HTTP configuration", "Diagnostic interfaces"};
     static final String[] IDS = {"exposures", "configuration", "diagnostics"};
     private static final String[][] FILES = {
-        {"droidmap-git-head.yaml", "droidmap-env-exposure.yaml", "droidmap-git-config.yaml"},
-        {"droidmap-security-headers.yaml", "droidmap-directory-listing.yaml", "droidmap-server-status.yaml"},
-        {"droidmap-openapi.yaml", "droidmap-actuator.yaml", "droidmap-prometheus.yaml"}
+        {"droidmap-git-head.yaml", "droidmap-env-exposure.yaml", "droidmap-git-config.yaml",
+            "droidmap-svn-entries.yaml", "droidmap-mercurial-config.yaml", "droidmap-npmrc.yaml",
+            "droidmap-wordpress-config-backup.yaml"},
+        {"droidmap-security-headers.yaml", "droidmap-directory-listing.yaml", "droidmap-server-status.yaml",
+            "droidmap-cors-credentials.yaml", "droidmap-docker-containers.yaml",
+            "droidmap-kubernetes-namespaces.yaml", "droidmap-couchdb-databases.yaml"},
+        {"droidmap-openapi.yaml", "droidmap-actuator.yaml", "droidmap-prometheus.yaml",
+            "droidmap-phpinfo.yaml", "droidmap-nginx-status.yaml", "droidmap-actuator-env.yaml",
+            "droidmap-jolokia-version.yaml"}
     };
     static int validate(int mask) {
         if (mask < 1 || (mask & ~ALL) != 0) throw new IllegalArgumentException("Select at least one Nuclei coverage group.");

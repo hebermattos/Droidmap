@@ -1,0 +1,18 @@
+id: droidmap-kubernetes-namespaces
+info:
+  name: "Kubernetes namespaces accessible without supplied credentials"
+  author: droidmap
+  severity: medium
+  description: "The Kubernetes API returned a NamespaceList without credentials from this scanner. Review anonymous permissions and restrict API network access. This does not establish write access."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/namespaces"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"header","regex":["(?im)^content-type\\s*:\\s*application/(?:[a-z0-9.+-]*\\+)?json\\b"]}
+      - {"type":"regex","part":"body","regex":["\"kind\"\\s*:\\s*\"NamespaceList\"","\"apiVersion\"\\s*:\\s*\"v1\"","\"items\"\\s*:\\s*\\["],"condition":"and"}
+

@@ -1,0 +1,17 @@
+id: droidmap-phpinfo
+info:
+  name: "PHP information page exposed"
+  author: droidmap
+  severity: medium
+  description: "A phpinfo page discloses runtime configuration and can include environment details. Remove diagnostic pages or restrict them to trusted administrators."
+  tags: http,misconfig,exposure
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpinfo.php"
+    redirects: false
+    matchers-condition: and
+    matchers:
+      - {"type":"status","status":[200]}
+      - {"type":"regex","part":"body","regex":["(?i)<title>phpinfo\\(\\)</title>","(?i)PHP Version\\s+[0-9]+\\."],"condition":"and"}
+
