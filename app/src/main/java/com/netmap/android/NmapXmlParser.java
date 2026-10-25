@@ -15,7 +15,19 @@ final class NmapXmlParser {
                 String mac=MacAddresses.normalize(address.getAttribute("addr"));
                 if(!mac.isEmpty()) evidence.add(ip,"Nmap","macAddress",mac);
             }
-            NodeList ports=host.getElementsByTagName("port");for(int j=0;j<ports.getLength();j++){Element port=(Element)ports.item(j);NodeList states=port.getElementsByTagName("state");if(states.getLength()==0||!"open".equals(((Element)states.item(0)).getAttribute("state")))continue;String number=port.getAttribute("portid");evidence.add(ip,"Nmap","openPort",number+"/"+port.getAttribute("protocol"));NodeList services=port.getElementsByTagName("service");if(services.getLength()==0)continue;Element service=(Element)services.item(0);String name=service.getAttribute("name"),product=service.getAttribute("product"),version=service.getAttribute("version");if("http".equals(name)&&"ssl".equals(service.getAttribute("tunnel")))name="https";if(!name.isEmpty())evidence.add(ip,"Nmap service "+number,"serviceName",name);if("tcpwrapped".equals(name))evidence.add(ip,"Nmap service "+number,"identification","Unidentified service: TCP accepted then closed; protocol not confirmed");String banner=(product+" "+version).trim();if(!banner.isEmpty())evidence.add(ip,"Nmap service "+number,"banner",banner);}
+            NodeList ports=host.getElementsByTagName("port");int filteredCount=0;StringJoiner filteredDetails=new StringJoiner(", ");
+            for(int j=0;j<ports.getLength();j++){Element port=(Element)ports.item(j);NodeList states=port.getElementsByTagName("state");if(states.getLength()==0)continue;
+            Element state=(Element)states.item(0);
+            if("filtered".equals(state.getAttribute("state")) && "tcp".equals(port.getAttribute("protocol"))) {
+                filteredCount++;
+                if(filteredCount<=12) {
+                    String reason=state.getAttribute("reason");
+                    filteredDetails.add(port.getAttribute("portid")+"/tcp"+(reason.isEmpty()?"":" ("+reason+")"));
+                }
+                continue;
+            }
+            if(!"open".equals(state.getAttribute("state")))continue;String number=port.getAttribute("portid");evidence.add(ip,"Nmap","openPort",number+"/"+port.getAttribute("protocol"));NodeList services=port.getElementsByTagName("service");if(services.getLength()==0)continue;Element service=(Element)services.item(0);String name=service.getAttribute("name"),product=service.getAttribute("product"),version=service.getAttribute("version");if("http".equals(name)&&"ssl".equals(service.getAttribute("tunnel")))name="https";if(!name.isEmpty())evidence.add(ip,"Nmap service "+number,"serviceName",name);if("tcpwrapped".equals(name))evidence.add(ip,"Nmap service "+number,"identification","Unidentified service: TCP accepted then closed; protocol not confirmed");String banner=(product+" "+version).trim();if(!banner.isEmpty())evidence.add(ip,"Nmap service "+number,"banner",banner);}
+            if(filteredCount>0) evidence.add(ip,"Nmap","filteredPorts",filteredCount+" TCP filtered: "+filteredDetails.toString()+(filteredCount>12?", ...":"")+". No confirmed-open service; reason may indicate firewall or no response.");
         }
     }
     static void parseVulnerabilities(String xml,DeviceEvidence evidence,java.util.Collection<Integer> targetPorts)throws Exception{
