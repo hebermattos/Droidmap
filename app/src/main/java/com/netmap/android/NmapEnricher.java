@@ -34,7 +34,9 @@ final class NmapEnricher {
             String host=target.getKey();
             if(cancelled.getAsBoolean()) break;
             attempted++;
+            final java.util.concurrent.atomic.AtomicReference<NmapRunner.Execution> lastExecution=new java.util.concurrent.atomic.AtomicReference<>();
             NmapRunner runner=new NmapRunner(templates,null,cancelled,result->{
+                lastExecution.set(result);
                 String source=result.profile.equals("Service detection")?"Nmap":"Nmap vulnerabilities";
                 try {evidence.nmapOutput(host,source,outputStore.save(result));}
                 catch(IOException storageError) {
@@ -62,10 +64,17 @@ final class NmapEnricher {
                     evidence.add(host,"Nmap vulnerabilities","targetPorts",targetPorts.toString());
                     evidence.add(host,"Nmap vulnerabilities","selectionRule","NSE selects applicable scripts by port and detected service; host-level results are labeled separately.");
                     evidence.nmapStatus(host,"Nmap vulnerabilities","Running vulnerability detection");progress.accept("Nmap • "+host+" • Starting vulnerability detection");
+                    String selection=NmapScriptPlanner.select(templates.vulnerabilities.argv,openPorts,evidence.observations(host));
+                    runner.selectVulnerabilityScripts(selection);
+                    progress.accept("Nmap • "+host+" • Safe script selection: "+NmapScriptPlanner.specializations(openPorts,evidence.observations(host)));
                     String vulnXml=runner.vulnerabilityScan(binary.getAbsolutePath(),data.getAbsolutePath(),host,openPorts,plan.timeoutMs);
                     try {NmapXmlParser.parseVulnerabilities(vulnXml,evidence,openPorts);}
                     catch(Exception parseError) {throw new IOException("Nmap process finished, but vulnerability XML processing failed: "+parseError.getMessage(),parseError);}
-                    evidence.nmapStatus(host,"Nmap vulnerabilities","Command finished on "+openPorts.size()+" target port(s); see script results. Missing findings do not prove absence of vulnerabilities.");
+                    List<String> failures=lastExecution.get()==null?Collections.emptyList():NmapScriptPlanner.failures(lastExecution.get().stdout,lastExecution.get().stderr);
+                    String status=failures.isEmpty()?"Command finished on "+openPorts.size()+" target port(s); see script results. Missing findings do not prove absence of vulnerabilities.":
+                        "Partial: "+failures.size()+" NSE script failure(s): "+DeviceEvidence.clean(String.join(", ",failures));
+                    evidence.nmapStatus(host,"Nmap vulnerabilities",status);
+                    if(!failures.isEmpty())progress.accept("Nmap • "+host+" • "+status);
                 } catch(Exception vulnerabilityError) {
                     evidence.nmapStatus(host,"Nmap vulnerabilities","Failed: "+DeviceEvidence.clean(vulnerabilityError.getMessage()==null?vulnerabilityError.getClass().getSimpleName():vulnerabilityError.getMessage()));
                 }

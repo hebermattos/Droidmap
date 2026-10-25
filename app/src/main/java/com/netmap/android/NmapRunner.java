@@ -11,6 +11,7 @@ final class NmapRunner {
     private final List<String> customArgs;
     private final int versionIntensity;
     private final java.util.function.Consumer<String> progress;
+    private String selectedScripts;
     static final class Execution {
         final List<String> command;
         final String profile, stdout, stderr, error;
@@ -21,8 +22,10 @@ final class NmapRunner {
             this.stdout=stdout;this.stderr=stderr;this.error=error;this.exitCode=exitCode;this.durationMs=durationMs;
         }
         String text() {
+            List<String> failures=NmapScriptPlanner.failures(stdout,stderr);
             return "Profile: "+profile+"\nExit code: "+(exitCode==null?"unavailable":exitCode)
-                +"\nDuration: "+durationMs+" ms\nStatus: "+(error.isEmpty()?"Process completed":error)
+                +"\nDuration: "+durationMs+" ms\nStatus: "+(!error.isEmpty()?error:failures.isEmpty()?"Process completed":"Process completed with "+failures.size()+" NSE script failure(s)")
+                +"\nNSE SCRIPT FAILURES\n"+(failures.isEmpty()?"None detected.":String.join("\n",failures))
                 +"\n\nNMAP OUTPUT (TEXT)\n"+(stdout.isEmpty()?"No output captured.":stdout)
                 +"\n\nERRORS / WARNINGS\n"+(stderr.isEmpty()?"None reported.":stderr)
                 +"\n\nCOMMAND ARGUMENTS\n"+String.join("\n",command);
@@ -86,13 +89,21 @@ final class NmapRunner {
         if(ports.isEmpty())return "";
         return run(templates.vulnerabilities,binary,dataDir,host,ports,timeoutMs);
     }
+    void selectVulnerabilityScripts(String expression) { selectedScripts=expression; }
     private String run(NmapCommands.Profile profile,String binary,String dataDir,String host,Collection<Integer> ports,int timeoutMs)throws Exception{
         Map<String,String> values=templates.bindings(binary,dataDir,host,ports,timeoutMs);
         values.put("versionIntensity",Integer.toString(versionIntensity));
         File xmlOutput=File.createTempFile("nmap-", ".xml",new File(dataDir));
         values.put("xmlOutput",xmlOutput.getAbsolutePath());
         final List<String> command;
-        try {command=templates.command(profile,host,values,customArgs);}
+        try {
+            List<String> argv=new ArrayList<>(templates.command(profile,host,values,customArgs));
+            if(profile==templates.vulnerabilities && selectedScripts!=null) {
+                int index=argv.indexOf("--script");
+                if(index>=0 && index+1<argv.size()) argv.set(index+1,selectedScripts);
+            }
+            command=Collections.unmodifiableList(argv);
+        }
         catch(RuntimeException invalidCommand) {xmlOutput.delete();throw invalidCommand;}
         ToolProgress log=new ToolProgress("Nmap • "+host+" • TCP "+ports+" • "+(profile==templates.services?"Services":"Vulnerabilities"),progress);
         log.event(host+" • TCP "+ports+" • "+(profile==templates.services?"Service detection":"Vulnerability detection"));
