@@ -54,6 +54,8 @@ sources=(
   "$project_dir/app/src/main/java/com/netmap/android/NmapScriptPlanner.java"
   "$project_dir/tests/NmapScriptPlannerTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapRunner.java"
+  "$project_dir/app/src/main/java/com/netmap/android/Socks5Inspector.java"
+  "$project_dir/tests/Socks5InspectorTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapXmlParser.java"
   "$project_dir/app/src/main/java/com/netmap/android/MacAddresses.java"
   "$project_dir/app/src/main/java/com/netmap/android/Ipv4MacDiscovery.java"
@@ -81,6 +83,8 @@ java -cp "$classes_dir" com.netmap.android.VulnerabilityScriptTests
 java -cp "$classes_dir" com.netmap.android.NmapTargetTests
 
 java -cp "$classes_dir" com.netmap.android.NmapScriptPlannerTests
+
+java -cp "$classes_dir" com.netmap.android.Socks5InspectorTests
 
 java -cp "$classes_dir" com.netmap.android.NmapExecutionTests
 
