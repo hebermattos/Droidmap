@@ -51,6 +51,8 @@ sources=(
   "$project_dir/app/src/main/java/com/netmap/android/ProbeContext.java"
   "$project_dir/app/src/main/java/com/netmap/android/IdentificationStatus.java"
   "$project_dir/app/src/main/java/com/netmap/android/"*Probe.java
+  "$project_dir/app/src/main/java/com/netmap/android/NmapScriptPlanner.java"
+  "$project_dir/tests/NmapScriptPlannerTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapRunner.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapXmlParser.java"
   "$project_dir/app/src/main/java/com/netmap/android/MacAddresses.java"
@@ -77,6 +79,8 @@ java -cp "$classes_dir" com.netmap.android.NmapCommandTests
 java -cp "$classes_dir" com.netmap.android.VulnerabilityScriptTests
 
 java -cp "$classes_dir" com.netmap.android.NmapTargetTests
+
+java -cp "$classes_dir" com.netmap.android.NmapScriptPlannerTests
 
 java -cp "$classes_dir" com.netmap.android.NmapExecutionTests
 
