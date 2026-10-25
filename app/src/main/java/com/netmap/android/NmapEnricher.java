@@ -58,6 +58,15 @@ final class NmapEnricher {
                         if(selected.contains(port)) openPorts.add(port);
                     } catch(NumberFormatException ignored) { }
                 }
+                if(!cancelled.getAsBoolean()&&openPorts.contains(1080)) {
+                    try {
+                        String socks=Socks5Inspector.inspect(host,1080,plan.timeoutMs,cancelled);
+                        evidence.add(host,"Nmap service 1080","socksAuth",socks);
+                        progress.accept("Nmap • "+host+" • SOCKS5: "+socks);
+                    } catch(Exception socksError) {
+                        evidence.add(host,"Nmap service 1080","socksAuth","SOCKS5 validation inconclusive: "+DeviceEvidence.clean(socksError.getMessage()==null?"I/O error":socksError.getMessage()));
+                    }
+                }
                 if(!cancelled.getAsBoolean()&&!openPorts.isEmpty()) try {
                     StringJoiner targetPorts=new StringJoiner(",");
                     for(int port:openPorts) targetPorts.add(port+"/tcp");
