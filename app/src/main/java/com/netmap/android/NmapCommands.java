@@ -106,9 +106,23 @@ final class NmapCommands {
         List<String> command = new ArrayList<>(); command.add(values.get("binary"));
         if (ScanPlan.isIpv6(host)) for (String arg : ipv6Args) command.add(expand(arg, values));
         if (!IpAddresses.zoneSuffix(host).isEmpty()) for (String arg : interfaceArgs) command.add(expand(arg, values));
-        command.addAll(customArgs);
+        command.addAll(checkedCustomArgs(customArgs));
         for (String arg : profile.argv) command.add(expand(arg, values));
         return command;
+    }
+    /** User options are intentionally limited to diagnostics that cannot change targets, scripts or scan scope. */
+    static List<String> checkedCustomArgs(List<String> args) {
+        if (args == null) throw new IllegalArgumentException("Missing Nmap arguments");
+        if (args.size() > 16) throw new IllegalArgumentException("Too many additional Nmap arguments");
+        Set<String> allowed = new HashSet<>(Arrays.asList("--reason", "-v", "-vv", "-vvv"));
+        List<String> checked = new ArrayList<>();
+        for (String arg : args) {
+            if (!allowed.contains(arg))
+                throw new IllegalArgumentException("Unsupported additional Nmap option: " + arg
+                        + ". Only --reason, -v, -vv and -vvv are permitted.");
+            checked.add(arg);
+        }
+        return Collections.unmodifiableList(checked);
     }
     Map<String, String> environment(Map<String, String> values) {
         Map<String, String> result = new LinkedHashMap<>();
