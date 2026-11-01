@@ -1,6 +1,6 @@
 package com.netmap.android;
 
-import java.io.*;import javax.xml.parsers.*;import org.w3c.dom.*;
+import java.io.*;import java.util.StringJoiner;import javax.xml.parsers.*;import org.w3c.dom.*;
 
 /** Parses bounded Nmap XML into Droidmap evidence without trusting external entity content. */
 final class NmapXmlParser {
