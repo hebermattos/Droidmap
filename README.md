@@ -95,7 +95,7 @@ Vulnerabilities:
 (vuln and safe) and not brute and not dos and not intrusive and not exploit and not broadcast and not external and not targets-*
 ```
 
-**Options → Nmap** exposes service/version intensity **0–9** (default **2**, Light) and additional Nmap arguments. Arguments are split into argv and passed directly to `ProcessBuilder`; no shell is invoked. Additional arguments are not validated against an option allowlist and can change Nmap behavior, so the packaged defaults describe runs without such overrides.
+**Options → Nmap** exposes service/version intensity **0–9** (default **2**, Light) and additional Nmap arguments. Arguments are split into argv and passed directly to `ProcessBuilder`; no shell is invoked. Additional arguments are restricted to diagnostic-only options (`--reason`, `-v`, `-vv`, `-vvv`). Target, port, script, scan mode, timing, and output overrides are rejected before execution to preserve the safe packaged profiles.
 
 The runtime configuration is [nmap-command-templates.json](app/src/main/assets/nmap-command-templates.json), parsed by `NmapCommandsJson` and executed by `NmapRunner`. Editing it requires rebuilding the APK; there is no runtime file-import editor. Descriptive fields such as `requires` and `skipWhen` document behavior enforced in Java.
 
