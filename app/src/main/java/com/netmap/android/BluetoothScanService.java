@@ -350,6 +350,12 @@ public final class BluetoothScanService extends Service {
                 JSONArray fields = new JSONArray();
                 for (BluetoothAdvertisement.Field field : parsed.fields()) fields.put(object("type", field.type(), "hex", field.hex()));
                 put(row, "adStructures", fields);
+                JSONArray generic = new JSONArray();
+                for (BluetoothAdAnalysis.Entry entry : BluetoothAdAnalysis.inspect(record.getBytes()))
+                    generic.put(object("type", entry.type(), "label", entry.label(),
+                            "hex", entry.hex(), "detail", entry.detail(), "warning", entry.warning()));
+                put(row, "genericAdAnalysis", generic);
+
                 put(row, "truncatedAdvertisement", parsed.truncated());
             }
             BluetoothPresentation.enrich(row);

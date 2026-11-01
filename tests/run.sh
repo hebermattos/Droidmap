@@ -27,6 +27,8 @@ sources=(
   "$project_dir/tests/BluetoothInspectionTests.java"
   "$project_dir/app/src/main/java/com/netmap/android/BluetoothAdvertisement.java"
   "$project_dir/tests/BluetoothAdvertisementTests.java"
+  "$project_dir/app/src/main/java/com/netmap/android/BluetoothAdAnalysis.java"
+  "$project_dir/tests/BluetoothAdAnalysisTests.java"
   "$classes_dir/TestNmapTemplates.java"
   "$project_dir/app/src/main/java/com/netmap/android/NmapCommands.java"
   "$project_dir/tests/NmapCommandTests.java"
@@ -89,6 +91,7 @@ java -cp "$classes_dir" com.netmap.android.Socks5InspectorTests
 java -cp "$classes_dir" com.netmap.android.NmapExecutionTests
 
 java -cp "$classes_dir" com.netmap.android.BluetoothAdvertisementTests
+java -cp "$classes_dir" com.netmap.android.BluetoothAdAnalysisTests
 
 java -cp "$classes_dir" com.netmap.android.BluetoothInspectionTests "$project_dir/app/src/main/assets/bluetooth-assigned-numbers.tsv"
 
