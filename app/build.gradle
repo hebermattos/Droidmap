@@ -10,7 +10,7 @@ android {
         resValue 'string', 'app_name', parallelInstall ? 'Snifkit DNS' : 'Snifkit'
         minSdk 26
         targetSdk 35
-        versionCode Math.max(61, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '61'))
+        versionCode Math.max(132, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '132'))
         versionName '0.17.4'
     }
     def stableDebugKey = providers.environmentVariable('NETMAP_DEBUG_KEYSTORE').orNull
