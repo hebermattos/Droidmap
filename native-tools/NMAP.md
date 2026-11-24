@@ -24,7 +24,7 @@ The patch fails on unexpected source contents instead of silently skipping a fix
 Both patches are recorded in the runtime's `build-info.txt`.
 
 **After this source patch, rebuild and publish the Nmap runtime first, then run
-Droidmap Android again.** A push to main alone still downloads the previously
+Snifkit Android again.** A push to main alone still downloads the previously
 published runtime. Replacing NSE data without rebuilding the native executable
 does not fix this regression.
 
@@ -42,7 +42,7 @@ The `nmap-android-arm64` artifact and the GitHub release with the same tag conta
 - `nmap-arm64.tar.gz.sha256`: complete runtime archive checksum.
 - `build-info.txt`: pinned versions and source hashes.
 
-Always keep the binary and data from the same archive together. **Droidmap Android**
+Always keep the binary and data from the same archive together. **Snifkit Android**
 downloads `nmap-arm64.tar.gz` and its checksum from the published release, checks
 archive integrity, Android ELF compatibility, version and data manifest, then
 packages the binary and matching files into the APK. Missing releases, mismatched
@@ -50,7 +50,7 @@ checksums and invalid bundles fail the build; no older Nmap fallback is used.
 The final APK check verifies that the packaged binary hash matches its runtime
 metadata, alongside the existing package/signing identity checks.
 
-After publishing a new Nmap runtime, run **Droidmap Android** (or push the app
+After publishing a new Nmap runtime, run **Snifkit Android** (or push the app
 changes to main) to produce the updated APK. Source compilation and APK packaging
 remain separate actions. The app's private NSE cache is identified by the runtime
 archive hash: a new runtime stages a complete new directory, activates it only

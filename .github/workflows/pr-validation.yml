@@ -1,4 +1,4 @@
-name: Droidmap PR validation
+name: Snifkit PR validation
 
 on:
   pull_request:

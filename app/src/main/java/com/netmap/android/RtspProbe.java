@@ -25,7 +25,7 @@ final class RtspProbe implements DeviceProbe {
                 context.read(
                         host,
                         port,
-                        "OPTIONS * RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: Droidmap\r\n\r\n",
+                        "OPTIONS * RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: Snifkit\r\n\r\n",
                         8192);
         Map<String, String> fields = DeviceEvidence.headers(reply);
         if (!reply.matches("(?s)RTSP/1\\.0 [1-5][0-9]{2}\\b.*")

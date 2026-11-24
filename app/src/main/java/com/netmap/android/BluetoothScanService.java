@@ -148,7 +148,7 @@ public final class BluetoothScanService extends Service {
             try {
                 MacVendorCatalog.load(getAssets().open("mac-vendors.tsv"));
                 handler.post(this::touch);
-            } catch (java.io.IOException error) { android.util.Log.w("Droidmap", "MAC registry unavailable", error); }
+            } catch (java.io.IOException error) { android.util.Log.w("Snifkit", "MAC registry unavailable", error); }
         });
         if (!BluetoothCatalog.loaded()) catalogIo.execute(() -> {
             try {
@@ -165,7 +165,7 @@ public final class BluetoothScanService extends Service {
                     }
                     touch();
                 });
-            } catch (java.io.IOException error) { android.util.Log.w("Droidmap", "Bluetooth catalog unavailable", error); }
+            } catch (java.io.IOException error) { android.util.Log.w("Snifkit", "Bluetooth catalog unavailable", error); }
         });
         getSystemService(NotificationManager.class).createNotificationChannel(
                 new NotificationChannel("bluetooth", "Bluetooth scan", NotificationManager.IMPORTANCE_LOW));
@@ -262,7 +262,7 @@ public final class BluetoothScanService extends Service {
         PendingIntent stop = PendingIntent.getService(this, 2402, cancel, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent open = PendingIntent.getActivity(this, 2403, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "bluetooth").setSmallIcon(R.drawable.ic_scan_notification)
-                .setContentTitle("Droidmap Bluetooth").setContentText(state.message).setContentIntent(open)
+                .setContentTitle(getString(R.string.app_name) + " Bluetooth").setContentText(state.message).setContentIntent(open)
                 .setOngoing(true).addAction(new Notification.Action.Builder(null, "Stop", stop).build()).build();
     }
 

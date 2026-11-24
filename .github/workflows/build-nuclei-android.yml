@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Checkout Droidmap
+      - name: Checkout Snifkit
         uses: actions/checkout@v4
       - name: Checkout pinned Nuclei source
         uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
             dist/nuclei-arm64.tar.gz
           retention-days: 30
           if-no-files-found: error
-      - name: Publish release for Droidmap Android build
+      - name: Publish release for Snifkit Android build
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

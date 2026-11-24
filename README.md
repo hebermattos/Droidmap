@@ -1,8 +1,8 @@
-# Droidmap
+# Snifkit
 
-Droidmap is a standalone Android app for discovering devices on a local Wi-Fi network and nearby Bluetooth devices. It combines TCP connect scanning, protocol evidence, optional ARM64 Nmap/Nuclei analysis and ProjectDiscovery HTTPX web metadata collection.
+Snifkit is a standalone Android app for discovering devices on a local Wi-Fi network and nearby Bluetooth devices. It combines TCP connect scanning, protocol evidence, optional ARM64 Nmap/Nuclei analysis and ProjectDiscovery HTTPX web metadata collection.
 
-The app uses native Android UI and Java 17, requires Android 8.0+ (API 26), and does not require root. The current app version is **0.17.3**. The home screen has two areas: **Wi-Fi** and **Bluetooth**.
+The app uses native Android UI and Java 17, requires Android 8.0+ (API 26), and does not require root. The current app version is **0.17.4**. Snifkit was previously displayed as Netmap Lite on the Android launcher and Droidmap in the app. Existing installs can update in place using the original signing key for their package. The home screen has two areas: **Wi-Fi** and **Bluetooth**.
 
 ## Contents
 
@@ -243,7 +243,7 @@ On Windows, use `gradlew.bat` for Gradle tasks. Without an explicitly configured
 
 ### Complete ARM64 runtime preparation
 
-The [Droidmap Android workflow](.github/workflows/android.yml) is the reference for the complete APK build. For a local Linux environment with the required tools:
+The [Snifkit Android workflow](.github/workflows/android.yml) is the reference for the complete APK build. For a local Linux environment with the required tools:
 
 1. Integrate the published Nmap runtime:
    `bash native-tools/build-nmap-android.sh`. This uses GitHub CLI to obtain the `nmap-android-arm64` release and verifies the archive, executable and matching NSE data.
@@ -254,9 +254,9 @@ The [Droidmap Android workflow](.github/workflows/android.yml) is the reference 
    `bash native-tools/build-httpx-android.sh`.
 4. Build with the existing update signing key as shown below.
 
-The Nmap source build is a separate manual **Build Nmap for Android ARM64** workflow. Publish a new runtime first, then run **Droidmap Android**. Native executable names such as `libnmap.so` are used for APK extraction; these tools run as processes rather than JNI libraries.
+The Nmap source build is a separate manual **Build Nmap for Android ARM64** workflow. Publish a new runtime first, then run **Snifkit Android**. Native executable names such as `libnmap.so` are used for APK extraction; these tools run as processes rather than JNI libraries.
 
-CI runs on pushes to `main` and via `workflow_dispatch`; pull requests do not automatically trigger this workflow. It integrates all three runtimes, checks the fixed signing identity, runs scanner checks and Gradle tests/build/lint, validates packaging, and uploads **Droidmap-update-APK** containing **Droidmap-update.apk**. Missing runtime releases or the original signing key fail the build.
+CI runs on pushes to `main` and via `workflow_dispatch`; pull requests do not automatically trigger this workflow. It integrates all three runtimes, checks the fixed signing identity, runs scanner checks and Gradle tests/build/lint, validates packaging, and uploads **Snifkit-update-APK** containing **Snifkit-update.apk**. Missing runtime releases or the original signing key fail the build.
 
 ### Preserve installed-app updates
 

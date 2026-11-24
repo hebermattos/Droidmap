@@ -336,7 +336,7 @@ public final class ScanService extends Service {
     private void loadMacCatalog() {
         if (MacVendorCatalog.loaded()) return;
         try { MacVendorCatalog.load(getAssets().open("mac-vendors.tsv")); }
-        catch (java.io.IOException error) { android.util.Log.w("Droidmap", "MAC registry unavailable", error); }
+        catch (java.io.IOException error) { android.util.Log.w("Snifkit", "MAC registry unavailable", error); }
     }
 
     private void saveReport(ScanPlan plan,String target,long started,List<TcpScanner.Result> results,List<TcpScanner.Result> extra,
@@ -415,7 +415,7 @@ public final class ScanService extends Service {
     private Notification notification(ScanSnapshot state) {
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder=new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_scan_notification)
-            .setContentTitle("Droidmap • "+state.target).setContentText(state.message.split("\\n",2)[0]).setContentIntent(open)
+            .setContentTitle(getString(R.string.app_name) + " • " + state.target).setContentText(state.message.split("\\n",2)[0]).setContentIntent(open)
             .setOnlyAlertOnce(true).setOngoing(state.running).setAutoCancel(!state.running).setCategory(Notification.CATEGORY_PROGRESS);
         if(state.running) builder.setProgress(state.total,state.done,state.done==0);
         if(state.running && state.cancellable) {
