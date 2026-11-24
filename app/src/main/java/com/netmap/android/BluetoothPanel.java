@@ -88,7 +88,7 @@ final class BluetoothPanel {
         export.setOnClickListener(v -> {
             exportData = BluetoothScanService.exportJson();
             activity.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                    .setType("application/json").putExtra(Intent.EXTRA_TITLE, "droidmap-bluetooth.json"), EXPORT);
+                    .setType("application/json").putExtra(Intent.EXTRA_TITLE, "snifkit-bluetooth.json"), EXPORT);
         });
         // The page owns vertical scrolling; let results use their full content height.
         parent.addView(devices, new LinearLayout.LayoutParams(-1, -2));

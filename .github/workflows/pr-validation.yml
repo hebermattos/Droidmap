@@ -1,4 +1,4 @@
-name: Droidmap PR validation
+name: Snifkit PR validation
 
 on:
   pull_request:
@@ -25,8 +25,8 @@ jobs:
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Run scanner tests
         run: bash tests/run.sh
-      - name: Run Android unit tests and lint
-        run: bash gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon
+      - name: Run Android unit tests, build and lint
+        run: bash gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon
       - name: Verify APK identity guards
         run: python3 tests/test-apk-identity.py
 

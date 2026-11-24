@@ -1,10 +1,10 @@
-# Droidmap contributor and agent guide
+# Snifkit contributor and agent guide
 
 This file applies to the entire repository. Read the current checkout before changing behavior; README descriptions and feature branches can differ. User instructions take precedence over this guide.
 
 ## Project scope
 
-- Droidmap is a standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scanning and evidence-based device identification.
+- Snifkit is a standalone Android app for private IPv4 and observed Wi-Fi IPv6 discovery, TCP connect scanning and evidence-based device identification.
 - The Android project lives at the repository root. It is independent of the Netmap .NET pipeline; do not recreate an `android/` subproject or copy backend dependencies into it.
 - Keep code, UI text, documentation and GitHub descriptions in English. Communicate with the user in their requested language.
 - Prefer focused Java/native Android changes and the existing Gradle wrapper. Do not add frameworks or dependencies without a concrete need.

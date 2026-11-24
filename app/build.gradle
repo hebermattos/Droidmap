@@ -7,11 +7,11 @@ android {
         applicationId 'com.netmap.android'
         def parallelInstall = providers.gradleProperty('sideBySideInstall').map { it.toBoolean() }.getOrElse(false)
         if (parallelInstall) applicationIdSuffix '.dns'
-        manifestPlaceholders = [appLabel: parallelInstall ? 'Netmap Lite DNS' : 'Netmap Lite']
+        resValue 'string', 'app_name', parallelInstall ? 'Snifkit DNS' : 'Snifkit'
         minSdk 26
         targetSdk 35
-        versionCode Math.max(60, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '60'))
-        versionName '0.17.3'
+        versionCode Math.max(132, Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '132'))
+        versionName '0.17.4'
     }
     def stableDebugKey = providers.environmentVariable('NETMAP_DEBUG_KEYSTORE').orNull
     if (stableDebugKey != null) {

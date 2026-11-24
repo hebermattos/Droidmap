@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Checkout Droidmap
+      - name: Checkout Snifkit
         uses: actions/checkout@v4
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential perl pkg-config flex bison
@@ -60,7 +60,7 @@ jobs:
             dist/nmap-android-arm64/build-info.txt
           retention-days: 30
           if-no-files-found: error
-      - name: Publish release for Droidmap Android builds
+      - name: Publish release for Snifkit Android builds
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply Droidmap's strict TLS dialer to the pinned HTTPX source (fail on drift)."""
+"""Apply Snifkit's strict TLS dialer to the pinned HTTPX source (fail on drift)."""
 from pathlib import Path
 import sys
 p = Path(sys.argv[1]) / 'common/httpx/httpx.go'

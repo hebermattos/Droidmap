@@ -2,7 +2,7 @@ package com.netmap.android;
 
 import java.io.*;import java.util.StringJoiner;import javax.xml.parsers.*;import org.w3c.dom.*;
 
-/** Parses bounded Nmap XML into Droidmap evidence without trusting external entity content. */
+/** Parses bounded Nmap XML into Snifkit evidence without trusting external entity content. */
 final class NmapXmlParser {
     static void parse(String xml,DeviceEvidence evidence)throws Exception{
         Document doc=parseDocument(xml);NodeList hosts=doc.getElementsByTagName("host");

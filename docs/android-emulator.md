@@ -1,4 +1,4 @@
-# Run Droidmap in the Android Emulator
+# Run Snifkit in the Android Emulator
 
 ## Android Studio
 
@@ -25,6 +25,6 @@ On Windows, use Android Studio and its Windows SDK directly.
 
 ## Network and native tools
 
-The emulator has a virtual network; it does not reproduce the phone's physical Wi-Fi link. Droidmap binds discovery to its observed Wi-Fi network, so automatic subnet selection, multicast/mDNS, IPv6 neighbors and MAC discovery can differ or be unavailable. A private LAN IP may be reachable through the host, but this does not establish equivalent discovery coverage. Use a physical Android device on your Wi-Fi to validate real LAN discovery.
+The emulator has a virtual network; it does not reproduce the phone's physical Wi-Fi link. Snifkit binds discovery to its observed Wi-Fi network, so automatic subnet selection, multicast/mDNS, IPv6 neighbors and MAC discovery can differ or be unavailable. A private LAN IP may be reachable through the host, but this does not establish equivalent discovery coverage. Use a physical Android device on your Wi-Fi to validate real LAN discovery.
 
 The packaged Nmap binary is ARM64. An x86_64 emulator can exercise the UI and Java code, but Nmap requires a compatible ARM64 runtime; do not assume native translation is available. Nuclei similarly requires a packaged binary compatible with the AVD ABI. Missing native binaries produce tool notices. Local builds do not automatically download CI-packaged native assets.

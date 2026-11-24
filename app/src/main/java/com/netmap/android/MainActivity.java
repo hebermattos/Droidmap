@@ -96,7 +96,7 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView title = new TextView(this);
-        title.setText("Droidmap v" + BuildConfig.VERSION_NAME);
+        title.setText(getString(R.string.app_name) + " v" + BuildConfig.VERSION_NAME);
         title.setTextSize(22);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         Button options = new Button(this);
@@ -299,7 +299,7 @@ public final class MainActivity extends Activity {
         }) {
             java.io.File file = new java.io.File(getFilesDir(), name);
             if (file.exists() && !file.delete())
-                android.util.Log.w("Droidmap", "Unable to clear old scan data: " + name);
+                android.util.Log.w("Snifkit", "Unable to clear old scan data: " + name);
         }
     }
 
@@ -575,7 +575,7 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
                 .setType("application/json")
                 .addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_TITLE, "droidmap-scan.json");
+        intent.putExtra(Intent.EXTRA_TITLE, "snifkit-scan.json");
         startActivityForResult(intent, 10);
     }
 

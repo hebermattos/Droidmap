@@ -52,6 +52,6 @@ jobs:
           set -euo pipefail
           TAG="nuclei-android-arm64"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Nuclei Android ARM64 runtime" --notes "Android ARM64 executable for Droidmap. Runtime validation on device is still required." --latest=false
+            gh release create "$TAG" --title "Nuclei Android ARM64 runtime" --notes "Android ARM64 executable for Snifkit. Runtime validation on device is still required." --latest=false
           fi
           gh release upload "$TAG" /tmp/libnuclei.so /tmp/libnuclei.so.sha256 --clobber
